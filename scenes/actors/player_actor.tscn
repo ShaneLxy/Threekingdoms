@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/player_actor.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/components/health_component.gd" id="2_health"]
+
+[node name="PlayerActor" type="Node2D"]
+script = ExtResource("1_player")
+
+[node name="BattleCamera" type="Camera2D" parent="."]
+zoom = Vector2(1.55, 1.55)
+position_smoothing_enabled = true
+position_smoothing_speed = 7.0
+
+[node name="HealthComponent" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_health")

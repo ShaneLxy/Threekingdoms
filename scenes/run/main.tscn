@@ -1,0 +1,51 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/run/run_scene.gd" id="1_run"]
+[ext_resource type="Script" path="res://scripts/presentation/battle_renderer.gd" id="2_renderer"]
+[ext_resource type="PackedScene" path="res://scenes/actors/player_actor.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://scenes/actors/boss_actor.tscn" id="4_boss"]
+[ext_resource type="Script" path="res://scripts/systems/enemy_simulation.gd" id="5_enemy"]
+[ext_resource type="Script" path="res://scripts/systems/combat_system.gd" id="6_combat"]
+[ext_resource type="Script" path="res://scripts/systems/upgrade_system.gd" id="7_upgrade"]
+[ext_resource type="Script" path="res://scripts/systems/run_director.gd" id="8_director"]
+[ext_resource type="Script" path="res://scripts/ui/battle_hud.gd" id="9_hud"]
+[ext_resource type="Script" path="res://scripts/run/input_router.gd" id="10_input"]
+[ext_resource type="Script" path="res://scripts/systems/loot_system.gd" id="11_loot"]
+
+[node name="RunScene" type="Node2D"]
+script = ExtResource("1_run")
+
+[node name="BattleRenderer" type="Node2D" parent="."]
+script = ExtResource("2_renderer")
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+
+[node name="Boss" parent="." instance=ExtResource("4_boss")]
+
+[node name="EnemySimulation" type="Node" parent="."]
+script = ExtResource("5_enemy")
+
+[node name="CombatSystem" type="Node" parent="."]
+script = ExtResource("6_combat")
+
+[node name="UpgradeSystem" type="Node" parent="."]
+script = ExtResource("7_upgrade")
+
+[node name="RunDirector" type="Node" parent="."]
+script = ExtResource("8_director")
+
+[node name="LootSystem" type="Node" parent="."]
+script = ExtResource("11_loot")
+
+[node name="InputRouter" type="Node" parent="."]
+script = ExtResource("10_input")
+
+[node name="HudLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="BattleHud" type="Control" parent="HudLayer"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 2
+script = ExtResource("9_hud")
