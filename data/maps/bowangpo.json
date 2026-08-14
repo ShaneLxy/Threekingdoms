@@ -1,0 +1,18 @@
+{
+  "map_id": "bowangpo",
+  "objects": [
+    {"id": "rock_platform", "position": {"x": 178.0, "y": 124.0}, "scale": 0.92, "obstacle": true},
+    {"id": "rock_platform", "position": {"x": 830.0, "y": 458.0}, "scale": 0.86, "obstacle": true},
+    {"id": "fire_path", "position": {"x": 504.0, "y": 280.0}, "scale": 1.14, "obstacle": false},
+    {"id": "dead_tree", "position": {"x": 160.0, "y": 372.0}, "scale": 0.78, "obstacle": true},
+    {"id": "burnt_log", "position": {"x": 814.0, "y": 236.0}, "scale": 0.76, "obstacle": true},
+    {"id": "dead_log", "position": {"x": 312.0, "y": 474.0}, "scale": 0.78, "obstacle": true}
+  ],
+  "collision_zones": [
+    {"x": 112.0, "y": 76.0, "w": 134.0, "h": 100.0},
+    {"x": 768.0, "y": 404.0, "w": 142.0, "h": 86.0},
+    {"x": 106.0, "y": 326.0, "w": 108.0, "h": 94.0},
+    {"x": 740.0, "y": 188.0, "w": 142.0, "h": 76.0},
+    {"x": 240.0, "y": 438.0, "w": 148.0, "h": 62.0}
+  ]
+}

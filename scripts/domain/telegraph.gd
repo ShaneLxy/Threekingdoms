@@ -2,6 +2,8 @@ class_name Telegraph
 extends RefCounted
 
 enum Shape { LINE, FAN, CIRCLE }
+enum ClashKind { NONE, BASIC, ACTIVE }
+enum ThreatKind { BASIC, ACTIVE, UNBLOCKABLE }
 
 var shape: Shape = Shape.CIRCLE
 var origin := Vector2.ZERO
@@ -9,10 +11,15 @@ var direction := Vector2.UP
 var range := 0.0
 var width := 0.0
 var half_angle := 0.0
+var duration := 0.0
 var remaining := 0.0
 var damage := 0.0
 var source := "enemy"
 var source_enemy_id := -1
+var visual_kind := ""
+var clashable := false
+var clash_kind: ClashKind = ClashKind.NONE
+var threat_kind: ThreatKind = ThreatKind.BASIC
 
 static func line(at: Vector2, toward: Vector2, length: float, line_width: float, duration: float, value: float, owner: String) -> Telegraph:
 	var telegraph := Telegraph.new()
@@ -21,6 +28,7 @@ static func line(at: Vector2, toward: Vector2, length: float, line_width: float,
 	telegraph.direction = toward.normalized()
 	telegraph.range = length
 	telegraph.width = line_width
+	telegraph.duration = duration
 	telegraph.remaining = duration
 	telegraph.damage = value
 	telegraph.source = owner
@@ -33,6 +41,7 @@ static func fan(at: Vector2, toward: Vector2, radius: float, angle: float, durat
 	telegraph.direction = toward.normalized()
 	telegraph.range = radius
 	telegraph.half_angle = angle * 0.5
+	telegraph.duration = duration
 	telegraph.remaining = duration
 	telegraph.damage = value
 	telegraph.source = owner
@@ -43,6 +52,7 @@ static func circle(at: Vector2, radius: float, duration: float, value: float, ow
 	telegraph.shape = Shape.CIRCLE
 	telegraph.origin = at
 	telegraph.range = radius
+	telegraph.duration = duration
 	telegraph.remaining = duration
 	telegraph.damage = value
 	telegraph.source = owner

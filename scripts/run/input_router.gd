@@ -2,11 +2,14 @@ class_name InputRouter
 extends Node
 
 signal basic_requested(direction: Vector2)
+signal basic_hold_started(direction: Vector2)
+signal basic_hold_released(direction: Vector2)
 signal active_requested(direction: Vector2)
 signal ultimate_requested(direction: Vector2)
+signal weapon_stance_requested()
 signal pause_requested()
 
-var player: PlayerActor
+var player: HeroActor
 var hud: BattleHud
 var enabled := true
 var touch_move_index := -1
@@ -18,7 +21,7 @@ var touch_attack_start := Vector2.ZERO
 const MOVE_MAX_DISTANCE := 110.0
 const MOVE_DEAD_ZONE := 10.0
 
-func configure(player_actor: PlayerActor, battle_hud: BattleHud) -> void:
+func configure(player_actor: HeroActor, battle_hud: BattleHud) -> void:
 	player = player_actor
 	hud = battle_hud
 
@@ -62,15 +65,23 @@ func _unhandled_input(event: InputEvent) -> void:
 			pause_requested.emit()
 		elif event.keycode == KEY_Q:
 			active_requested.emit(movement_direction())
+		elif event.keycode == KEY_R:
+			weapon_stance_requested.emit()
 		elif event.keycode == KEY_E or event.keycode == KEY_SPACE:
 			ultimate_requested.emit(Vector2.ZERO)
-	elif event is InputEventMouseButton and event.pressed:
+	elif event is InputEventMouseButton:
+		if not event.pressed:
+			if event.button_index == MOUSE_BUTTON_LEFT and player.supports_basic_hold():
+				basic_hold_released.emit(movement_direction())
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT and hud.is_pause_hit(event.position):
 			pause_requested.emit()
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			active_requested.emit(movement_direction())
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
 			ultimate_requested.emit(Vector2.ZERO)
+		elif hud.is_weapon_stance_hit(event.position):
+			weapon_stance_requested.emit()
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.position.distance_to(hud.move_center()) <= hud.move_capture_radius():
 				return
@@ -79,7 +90,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.position.distance_to(hud.ultimate_center()) < 65.0:
 				ultimate_requested.emit(Vector2.ZERO)
 			else:
-				basic_requested.emit(Vector2.ZERO)
+				if player.supports_basic_hold():
+					basic_hold_started.emit(Vector2.ZERO)
+				else:
+					basic_requested.emit(Vector2.ZERO)
 	elif event is InputEventScreenTouch:
 		_handle_touch(event)
 	elif event is InputEventScreenDrag:
@@ -101,16 +115,23 @@ func _handle_touch(event: InputEventScreenTouch) -> void:
 			active_requested.emit(movement_direction())
 		elif event.position.distance_to(hud.ultimate_center()) < 70.0:
 			ultimate_requested.emit(Vector2.ZERO)
+		elif hud.is_weapon_stance_hit(event.position):
+			weapon_stance_requested.emit()
 		else:
 			touch_attack_index = event.index
 			touch_attack_start = event.position
-			basic_requested.emit(Vector2.ZERO)
+			if player.supports_basic_hold():
+				basic_hold_started.emit(Vector2.ZERO)
+			else:
+				basic_requested.emit(Vector2.ZERO)
 	else:
 		if event.index == touch_move_index:
 			touch_move_index = -1
 			hud.clear_move_stick_offset()
 		if event.index == touch_attack_index:
 			touch_attack_index = -1
+			if player.supports_basic_hold():
+				basic_hold_released.emit(movement_direction())
 
 func _handle_drag(event: InputEventScreenDrag) -> void:
 	if event.index == touch_move_index:

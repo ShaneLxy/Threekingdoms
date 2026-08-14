@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/prototype_hero_actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://scripts/components/health_component.gd" id="2_health"]
+
+[node name="MaChaoActor" type="Node2D"]
+script = ExtResource("1_actor")
+prototype_hero_id = "ma_chao"
+
+[node name="BattleCamera" type="Camera2D" parent="."]
+zoom = Vector2(1.55, 1.55)
+position_smoothing_enabled = true
+position_smoothing_speed = 7.0
+
+[node name="HealthComponent" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_health")

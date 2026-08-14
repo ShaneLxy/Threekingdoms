@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Three Kingdoms: Break the Formation"
+config/name="三国 破阵无双"
 run/main_scene="res://scenes/home/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 

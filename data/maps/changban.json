@@ -1,0 +1,14 @@
+{
+  "map_id": "changban",
+  "objects": [
+    {"id": "trampled_patch_01", "position": {"x": 274.0, "y": 412.0}, "scale": 0.82, "obstacle": false},
+    {"id": "trampled_patch_02", "position": {"x": 580.0, "y": 348.0}, "scale": 0.74, "obstacle": false},
+    {"id": "trampled_patch_01", "position": {"x": 830.0, "y": 420.0}, "scale": 0.70, "obstacle": false},
+    {"id": "slope", "position": {"x": 84.0, "y": 114.0}, "scale": 0.88, "obstacle": true},
+    {"id": "slope", "position": {"x": 916.0, "y": 446.0}, "scale": 0.88, "obstacle": true}
+  ],
+  "collision_zones": [
+    {"x": 0.0, "y": 54.0, "w": 180.0, "h": 124.0},
+    {"x": 820.0, "y": 382.0, "w": 180.0, "h": 124.0}
+  ]
+}

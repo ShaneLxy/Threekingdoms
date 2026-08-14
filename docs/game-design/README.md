@@ -22,11 +22,14 @@
 - [移动端 UI/UX 规范](04-mobile-ui-ux.md)：HUD、触控、升级、教学与安全区规则。
 - [模式设计](modes.md)：剧情模式与无尽模式。
 - [英雄：赵云](heroes/zhao-yun.md)：首位可玩武将的战斗原型与强化池。
-- [基础敌兵](enemies/basic-soldiers.md)：刀兵、戟兵、弓兵、盾兵的职责。
+- [英雄：张飞、马超、黄忠](heroes/zhang-fei-ma-chao-huang-zhong.md)：三名差异化武将的首轮可玩原型。
+- [基础敌兵](enemies/basic-soldiers.md)：刀兵、戟兵、枪兵、弓兵、盾兵的职责。
+- [博望坡曹军将领](enemies/bowangpo-commanders.md)：夏侯兰、韩浩与夏侯惇的首轮战斗原型。
 - [精英：夏侯恩](bosses/xiahou-en.md)：偃月刀精英的扇面压迫与反击窗口。
 - [Boss：张郃](bosses/zhang-he.md)：雁翎枪三阶段战斗、招式与场地约束。
 - [第一章：长坂坡·单骑救主](levels/chapter-01-changban.md)：10 分钟剧情关卡垂直切片。
 - [第一章战场布局](levels/chapter-01-layout.md)：单一开放战场、边界、出生点与 Boss 场地规则。
+- [战场地图路线图](levels/map-roadmap.md)：博望坡、乌巢与虎牢关的后续地图方向。
 - [Godot 技术设计](../technical/README.md)：技术架构、性能策略、测试计划与架构决策记录。
 
 ## 文档维护约定

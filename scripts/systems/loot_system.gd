@@ -1,17 +1,29 @@
 class_name LootSystem
 extends Node
 
+const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
+
 signal collected(experience: int, gold: int)
 
 const MAX_DROPS := 96
 const MERGE_DISTANCE := 32.0
-const ATTRACT_DISTANCE := 185.0
-const PICKUP_DISTANCE := 22.0
+const DEFAULT_ATTRACT_DISTANCE := 185.0
+const DEFAULT_PICKUP_DISTANCE := 22.0
 
 var drops: Array[Dictionary] = []
+var attract_distance := DEFAULT_ATTRACT_DISTANCE
+var pickup_distance := DEFAULT_PICKUP_DISTANCE
 
 func reset() -> void:
 	drops.clear()
+	attract_distance = DEFAULT_ATTRACT_DISTANCE
+	pickup_distance = DEFAULT_PICKUP_DISTANCE
+
+func configure_account_progress(profile: Dictionary) -> void:
+	var effects := MILITARY_STRATEGY.effects_for_profile(profile)
+	var range_multiplier := 1.0 + float(effects.get("loot_range_ratio", 0.0))
+	attract_distance = DEFAULT_ATTRACT_DISTANCE * range_multiplier
+	pickup_distance = DEFAULT_PICKUP_DISTANCE * range_multiplier
 
 func drop_loot(at: Vector2, experience: int, gold: int) -> void:
 	var merge_index := _nearest_merge_index(at)
@@ -37,13 +49,13 @@ func tick(delta: float, player_position: Vector2) -> void:
 		var drop_position: Vector2 = drop.get("position", Vector2.ZERO)
 		var to_player: Vector2 = player_position - drop_position
 		var distance := to_player.length()
-		if distance <= PICKUP_DISTANCE:
+		if distance <= pickup_distance:
 			collected.emit(int(drop.get("experience", 0)), int(drop.get("gold", 0)))
 			drops.remove_at(index)
 			continue
-		if distance > ATTRACT_DISTANCE:
+		if distance > attract_distance:
 			continue
-		var attraction := lerpf(180.0, 980.0, 1.0 - distance / ATTRACT_DISTANCE)
+		var attraction := lerpf(180.0, 980.0, 1.0 - distance / attract_distance)
 		drop["position"] = drop_position + to_player.normalized() * attraction * delta
 		drops[index] = drop
 

@@ -1,12 +1,15 @@
 class_name EnemySimulation
 extends Node
 
+const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
+
 signal enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int, ultimate_energy: float)
-signal enemy_attack_requested(enemy_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float)
+signal enemy_attack_requested(enemy_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float, attack_kind: String)
 signal enemy_attack_cancelled(enemy_id: int)
 signal enemy_death_collision(at: Vector2, direction: Vector2)
+signal banner_command_requested(enemy_id: int, at: Vector2)
 
-enum EnemyType { SWORD, HALBERD, ARCHER, SHIELD, ELITE, GUARD }
+enum EnemyType { SWORD, HALBERD, ARCHER, SHIELD, ELITE, GUARD, SPEAR, CROSSBOW, BANNER, CAVALRY }
 enum AttackState { APPROACH, WINDUP, RECOVER }
 enum DeathState { NONE, FALLING, LAUNCHED }
 enum EngagementLayer { ENGAGE, PRESSURE, ATMOSPHERE }
@@ -22,18 +25,74 @@ const DEATH_COLLISION_DAMAGE := 5.0
 const DEATH_COLLISION_KNOCKBACK := 520.0
 const DEATH_COLLISION_RADIUS := 25.0
 const DEATH_COLLISION_MAX_TARGETS := 2
-const FORMATION_ANGLE_STEP := 2.3999632
+const FORMATION_SQUAD_SIZE := 6
+const FORMATION_SLOT_ANGLE_STEP := 0.0959931
+const FORMATION_SECTOR_ANGLES := [-PI * 0.5, PI, 0.0]
 const FORMATION_ARRIVAL_DISTANCE := 10.0
+const ATTACK_KIND_DEFAULT := "default"
+const ATTACK_KIND_ARCHER_DIRECT := "archer_direct"
+const ATTACK_KIND_ARCHER_LEAD := "archer_lead"
+const ATTACK_KIND_ARCHER_VOLLEY := "archer_volley"
+const ATTACK_KIND_HALBERD_SWEEP := "halberd_sweep"
+const ATTACK_KIND_HALBERD_BRACE := "halberd_brace"
+const ATTACK_KIND_SPEAR_THRUST_1 := "spear_thrust_1"
+const ATTACK_KIND_SPEAR_THRUST_2 := "spear_thrust_2"
+const ATTACK_KIND_SPEAR_FORMATION := "spear_formation"
+const ATTACK_KIND_CROSSBOW_DIRECT := "crossbow_direct"
+const ATTACK_KIND_CROSSBOW_VOLLEY := "crossbow_volley"
+const ATTACK_KIND_BANNER_COMMAND := "banner_command"
+const ATTACK_KIND_CAVALRY_STAB := "cavalry_stab"
+const ATTACK_KIND_CAVALRY_CHARGE := "cavalry_charge"
+const ARCHER_LEAD_SPEED_THRESHOLD := 42.0
+const ARCHER_VOLLEY_STORY_TIME := 80.0
+const ARCHER_VOLLEY_COOLDOWN := 6.0
+const ARCHER_VOLLEY_ENDLESS_COOLDOWN := 5.2
+const CROSSBOW_VOLLEY_STORY_TIME := 118.0
+const CROSSBOW_VOLLEY_COOLDOWN := 7.2
+const CROSSBOW_VOLLEY_ENDLESS_COOLDOWN := 6.2
+const CROSSBOW_VOLLEY_MIN_MEMBERS := 3
+const BANNER_AURA_RADIUS := 168.0
+const BANNER_COMMAND_RADIUS := 202.0
+const BANNER_COMMAND_DURATION := 2.8
+const BANNER_DAMAGE_MULTIPLIER := 1.10
+const BANNER_SPEED_MULTIPLIER := 1.08
+const BANNER_COMMAND_DAMAGE_MULTIPLIER := 1.24
+const BANNER_COMMAND_SPEED_MULTIPLIER := 1.22
+const CAVALRY_LINE_HALF_WIDTH := 38.0
+const CAVALRY_CHARGE_DISTANCE := 184.0
+const CAVALRY_CHARGE_START_DELAY := 0.40
+const CAVALRY_CHARGE_SPEED := 780.0
+const CAVALRY_CHARGE_COOLDOWN := 5.6
+const CAVALRY_CLASH_COOLDOWN := 2.4
+const CAVALRY_CLASH_HURT_DURATION := 0.22
+const CAVALRY_CLASH_KNOCKBACK := 560.0
+const HALBERD_SWEEP_RANGE := 130.0
+const HALBERD_BRACE_MIN_DISTANCE := 96.0
+const HALBERD_BRACE_MAX_DISTANCE := 174.0
+const HALBERD_BRACE_APPROACH_SPEED := 78.0
+const SPEAR_LINE_HALF_WIDTH := 36.0
+const SPEAR_FORMATION_MIN_MEMBERS := 3
+const SPEAR_FORMATION_COOLDOWN := 6.0
+const SPEAR_CLASH_COOLDOWN := 2.7
+const SPEAR_CLASH_HURT_DURATION := 0.24
+const SPEAR_CLASH_KNOCKBACK := 520.0
 const SPATIAL_CELL_SIZE := 64.0
 const MAX_SEPARATION_NEIGHBORS := 8
 const LAYER_REFRESH_INTERVAL := 0.55
+const NAVIGATION_REPLAN_INTERVAL := 0.28
+const NAVIGATION_TARGET_SHIFT := 46.0
+const NAVIGATION_WAYPOINT_ARRIVAL := 18.0
 const ENGAGE_MELEE_LIMIT := 10
 const ENGAGE_HALBERD_LIMIT := 3
 const ENGAGE_ARCHER_LIMIT := 5
 const ENGAGE_ELITE_LIMIT := 1
-const FRONTLINE_ATTACK_SLOT_COUNT := 4
-const ARCHER_ATTACK_SLOT_COUNT := 3
-const HALBERD_ATTACK_SLOT_COUNT := 1
+const ENGAGE_SPEAR_LIMIT := 4
+const ENGAGE_CROSSBOW_LIMIT := 3
+const ENGAGE_BANNER_LIMIT := 1
+const ENGAGE_CAVALRY_LIMIT := 3
+const THREAT_HEALTH_MULTIPLIERS := [1.0, 1.35, 1.80, 2.35, 3.00, 3.70, 4.50, 5.40]
+const THREAT_DAMAGE_MULTIPLIERS := [1.0, 1.12, 1.28, 1.48, 1.72, 1.92, 2.14, 2.38]
+const THREAT_ARMOR_BONUSES := [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
 
 var bounds := Rect2(80, 100, 1120, 500)
 var positions: Array[Vector2] = []
@@ -41,6 +100,7 @@ var hit_points := PackedFloat32Array()
 var max_hit_points := PackedFloat32Array()
 var armor := PackedFloat32Array()
 var move_speeds := PackedFloat32Array()
+var damage_multipliers := PackedFloat32Array()
 var cooldowns := PackedFloat32Array()
 var hurt_timers := PackedFloat32Array()
 var attack_states := PackedInt32Array()
@@ -48,6 +108,8 @@ var attack_timers := PackedFloat32Array()
 var types := PackedInt32Array()
 var active := PackedByteArray()
 var knockback_velocities: Array[Vector2] = []
+var recoil_timers := PackedFloat32Array()
+var recoil_velocities: Array[Vector2] = []
 var facing_directions: Array[Vector2] = []
 var boss_guard_flags := PackedByteArray()
 var death_states := PackedByteArray()
@@ -59,6 +121,8 @@ var forced_displacement_velocities: Array[Vector2] = []
 var hit_feedback_timers := PackedFloat32Array()
 var hit_feedback_durations := PackedFloat32Array()
 var hit_feedback_strengths := PackedFloat32Array()
+var slow_timers := PackedFloat32Array()
+var slow_multipliers := PackedFloat32Array()
 var behavior_layers := PackedByteArray()
 var desired_behavior_layers := PackedByteArray()
 var decision_timers := PackedFloat32Array()
@@ -68,11 +132,35 @@ var spawn_anchors: Array[Vector2] = []
 var patrol_offsets: Array[Vector2] = []
 var attack_wait_times := PackedFloat32Array()
 var attack_turn_grants := PackedByteArray()
+var spear_combo_stages := PackedByteArray()
+var spear_combo_timers := PackedFloat32Array()
+var command_aura_strengths := PackedFloat32Array()
+var command_surge_timers := PackedFloat32Array()
+var cavalry_charge_cooldowns := PackedFloat32Array()
+var cavalry_charge_distances := PackedFloat32Array()
+var cavalry_charge_directions: Array[Vector2] = []
+var current_attack_kinds: Array[String] = []
 var free_ids: Array[int] = []
 var active_count := 0
 var boss_guard_count := 0
 var spatial_cells: Dictionary = {}
 var layer_refresh_remaining := 0.0
+var threat_tier := 0
+var battle_mode := "story"
+var battle_elapsed := 0.0
+var formation_time := 0.0
+var last_player_position := Vector2.ZERO
+var player_velocity := Vector2.ZERO
+var has_player_position := false
+var archer_volley_cooldown := 0.0
+var spear_formation_cooldown := 0.0
+var crossbow_volley_cooldown := 0.0
+var navigation_obstacles: Array[Rect2] = []
+var navigation_waypoints: Array[Vector2] = []
+var navigation_targets: Array[Vector2] = []
+var navigation_replan_timers := PackedFloat32Array()
+var navigation_waypoint_active := PackedByteArray()
+var navigation_preferred_sides := PackedInt32Array()
 
 func _ready() -> void:
 	positions.resize(CAPACITY)
@@ -80,6 +168,7 @@ func _ready() -> void:
 	max_hit_points.resize(CAPACITY)
 	armor.resize(CAPACITY)
 	move_speeds.resize(CAPACITY)
+	damage_multipliers.resize(CAPACITY)
 	cooldowns.resize(CAPACITY)
 	hurt_timers.resize(CAPACITY)
 	attack_states.resize(CAPACITY)
@@ -87,6 +176,8 @@ func _ready() -> void:
 	types.resize(CAPACITY)
 	active.resize(CAPACITY)
 	knockback_velocities.resize(CAPACITY)
+	recoil_timers.resize(CAPACITY)
+	recoil_velocities.resize(CAPACITY)
 	facing_directions.resize(CAPACITY)
 	boss_guard_flags.resize(CAPACITY)
 	death_states.resize(CAPACITY)
@@ -98,6 +189,8 @@ func _ready() -> void:
 	hit_feedback_timers.resize(CAPACITY)
 	hit_feedback_durations.resize(CAPACITY)
 	hit_feedback_strengths.resize(CAPACITY)
+	slow_timers.resize(CAPACITY)
+	slow_multipliers.resize(CAPACITY)
 	behavior_layers.resize(CAPACITY)
 	desired_behavior_layers.resize(CAPACITY)
 	decision_timers.resize(CAPACITY)
@@ -107,11 +200,22 @@ func _ready() -> void:
 	patrol_offsets.resize(CAPACITY)
 	attack_wait_times.resize(CAPACITY)
 	attack_turn_grants.resize(CAPACITY)
+	spear_combo_stages.resize(CAPACITY)
+	spear_combo_timers.resize(CAPACITY)
+	command_aura_strengths.resize(CAPACITY)
+	command_surge_timers.resize(CAPACITY)
+	cavalry_charge_cooldowns.resize(CAPACITY)
+	cavalry_charge_distances.resize(CAPACITY)
+	cavalry_charge_directions.resize(CAPACITY)
+	current_attack_kinds.resize(CAPACITY)
 	for id in range(CAPACITY):
 		positions[id] = Vector2.ZERO
 		knockback_velocities[id] = Vector2.ZERO
+		recoil_timers[id] = 0.0
+		recoil_velocities[id] = Vector2.ZERO
 		facing_directions[id] = Vector2.DOWN
 		attack_states[id] = AttackState.APPROACH
+		damage_multipliers[id] = 1.0
 		attack_timers[id] = 0.0
 		boss_guard_flags[id] = 0
 		death_states[id] = DeathState.NONE
@@ -123,6 +227,8 @@ func _ready() -> void:
 		hit_feedback_timers[id] = 0.0
 		hit_feedback_durations[id] = 0.0
 		hit_feedback_strengths[id] = 0.0
+		slow_timers[id] = 0.0
+		slow_multipliers[id] = 1.0
 		behavior_layers[id] = EngagementLayer.ATMOSPHERE
 		desired_behavior_layers[id] = EngagementLayer.ATMOSPHERE
 		decision_timers[id] = 0.0
@@ -132,10 +238,35 @@ func _ready() -> void:
 		patrol_offsets[id] = Vector2.ZERO
 		attack_wait_times[id] = 0.0
 		attack_turn_grants[id] = 0
+		spear_combo_stages[id] = 0
+		spear_combo_timers[id] = 0.0
+		command_aura_strengths[id] = 0.0
+		command_surge_timers[id] = 0.0
+		cavalry_charge_cooldowns[id] = 0.0
+		cavalry_charge_distances[id] = 0.0
+		cavalry_charge_directions[id] = Vector2.ZERO
+		current_attack_kinds[id] = ""
 		free_ids.append(CAPACITY - id - 1)
 
-func reset(world_bounds: Rect2) -> void:
+func set_threat_tier(value: int) -> void:
+	threat_tier = clampi(value, 0, THREAT_HEALTH_MULTIPLIERS.size() - 1)
+
+func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	bounds = world_bounds
+	battle_mode = selected_mode
+	battle_elapsed = 0.0
+	formation_time = 0.0
+	last_player_position = world_bounds.get_center()
+	player_velocity = Vector2.ZERO
+	has_player_position = false
+	archer_volley_cooldown = 0.0
+	spear_formation_cooldown = 0.0
+	crossbow_volley_cooldown = 0.0
+	navigation_waypoints.resize(CAPACITY)
+	navigation_targets.resize(CAPACITY)
+	navigation_replan_timers.resize(CAPACITY)
+	navigation_waypoint_active.resize(CAPACITY)
+	navigation_preferred_sides.resize(CAPACITY)
 	free_ids.clear()
 	spatial_cells.clear()
 	active_count = 0
@@ -147,6 +278,8 @@ func reset(world_bounds: Rect2) -> void:
 		attack_states[id] = AttackState.APPROACH
 		attack_timers[id] = 0.0
 		knockback_velocities[id] = Vector2.ZERO
+		recoil_timers[id] = 0.0
+		recoil_velocities[id] = Vector2.ZERO
 		facing_directions[id] = Vector2.DOWN
 		boss_guard_flags[id] = 0
 		death_states[id] = DeathState.NONE
@@ -158,6 +291,8 @@ func reset(world_bounds: Rect2) -> void:
 		hit_feedback_timers[id] = 0.0
 		hit_feedback_durations[id] = 0.0
 		hit_feedback_strengths[id] = 0.0
+		slow_timers[id] = 0.0
+		slow_multipliers[id] = 1.0
 		behavior_layers[id] = EngagementLayer.ATMOSPHERE
 		desired_behavior_layers[id] = EngagementLayer.ATMOSPHERE
 		decision_timers[id] = 0.0
@@ -167,24 +302,58 @@ func reset(world_bounds: Rect2) -> void:
 		patrol_offsets[id] = Vector2.ZERO
 		attack_wait_times[id] = 0.0
 		attack_turn_grants[id] = 0
+		spear_combo_stages[id] = 0
+		spear_combo_timers[id] = 0.0
+		command_aura_strengths[id] = 0.0
+		command_surge_timers[id] = 0.0
+		cavalry_charge_cooldowns[id] = 0.0
+		cavalry_charge_distances[id] = 0.0
+		cavalry_charge_directions[id] = Vector2.ZERO
+		current_attack_kinds[id] = ""
+		navigation_waypoints[id] = Vector2.ZERO
+		navigation_targets[id] = Vector2.ZERO
+		navigation_replan_timers[id] = 0.0
+		navigation_waypoint_active[id] = 0
+		navigation_preferred_sides[id] = -1 if id % 2 == 0 else 1
+		damage_multipliers[id] = 1.0
 		free_ids.append(CAPACITY - id - 1)
+
+func set_navigation_obstacles(value: Array[Rect2]) -> void:
+	navigation_obstacles = value.duplicate()
+	for id in range(CAPACITY):
+		navigation_replan_timers[id] = 0.0
+		navigation_waypoint_active[id] = 0
+
+func mark_navigation_blocked(id: int) -> void:
+	if id < 0 or id >= CAPACITY:
+		return
+	navigation_replan_timers[id] = 0.0
+	navigation_waypoint_active[id] = 0
+	navigation_preferred_sides[id] = -navigation_preferred_sides[id] if navigation_preferred_sides[id] != 0 else 1
+
+func set_battle_elapsed(value: float) -> void:
+	battle_elapsed = maxf(0.0, value)
 
 func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	if free_ids.is_empty():
 		return -1
 	var id: int = free_ids.pop_back()
 	var stats: Dictionary = _stats(enemy_type)
+	var health_multiplier := _threat_health_multiplier()
 	positions[id] = at
 	types[id] = enemy_type
-	hit_points[id] = stats.hp
-	max_hit_points[id] = stats.hp
-	armor[id] = stats.armor
+	hit_points[id] = float(stats.hp) * health_multiplier
+	max_hit_points[id] = hit_points[id]
+	armor[id] = float(stats.armor) + _threat_armor_bonus()
 	move_speeds[id] = stats.speed
+	damage_multipliers[id] = _threat_damage_multiplier()
 	cooldowns[id] = randf_range(1.2, 1.8)
 	hurt_timers[id] = 0.0
 	attack_states[id] = AttackState.APPROACH
 	attack_timers[id] = 0.0
 	knockback_velocities[id] = Vector2.ZERO
+	recoil_timers[id] = 0.0
+	recoil_velocities[id] = Vector2.ZERO
 	facing_directions[id] = Vector2.DOWN
 	boss_guard_flags[id] = 1 if is_boss_guard else 0
 	death_states[id] = DeathState.NONE
@@ -196,6 +365,8 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	hit_feedback_timers[id] = 0.0
 	hit_feedback_durations[id] = 0.0
 	hit_feedback_strengths[id] = 0.0
+	slow_timers[id] = 0.0
+	slow_multipliers[id] = 1.0
 	behavior_layers[id] = EngagementLayer.ENGAGE
 	desired_behavior_layers[id] = EngagementLayer.ATMOSPHERE
 	decision_timers[id] = 0.0
@@ -203,8 +374,21 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	movement_targets[id] = at
 	spawn_anchors[id] = at
 	patrol_offsets[id] = Vector2.ZERO
+	navigation_waypoints[id] = Vector2.ZERO
+	navigation_targets[id] = Vector2.ZERO
+	navigation_replan_timers[id] = 0.0
+	navigation_waypoint_active[id] = 0
+	navigation_preferred_sides[id] = -1 if id % 2 == 0 else 1
 	attack_wait_times[id] = float((id * 29) % 10) * 0.03
 	attack_turn_grants[id] = 0
+	spear_combo_stages[id] = 0
+	spear_combo_timers[id] = 0.0
+	command_aura_strengths[id] = 0.0
+	command_surge_timers[id] = 0.0
+	cavalry_charge_cooldowns[id] = 1.4 + float(id % 4) * 0.15 if enemy_type == EnemyType.CAVALRY else 0.0
+	cavalry_charge_distances[id] = 0.0
+	cavalry_charge_directions[id] = Vector2.ZERO
+	current_attack_kinds[id] = ""
 	active[id] = 1
 	active_count += 1
 	layer_refresh_remaining = 0.0
@@ -213,6 +397,12 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	return id
 
 func tick(delta: float, player_position: Vector2) -> void:
+	formation_time += delta
+	_track_player_motion(delta, player_position)
+	archer_volley_cooldown = maxf(0.0, archer_volley_cooldown - delta)
+	spear_formation_cooldown = maxf(0.0, spear_formation_cooldown - delta)
+	crossbow_volley_cooldown = maxf(0.0, crossbow_volley_cooldown - delta)
+	_refresh_banner_commands(delta)
 	layer_refresh_remaining = maxf(0.0, layer_refresh_remaining - delta)
 	if layer_refresh_remaining <= 0.0:
 		_assign_desired_behavior_layers(player_position)
@@ -226,7 +416,23 @@ func tick(delta: float, player_position: Vector2) -> void:
 				_tick_dying(id, delta)
 			continue
 		cooldowns[id] -= delta
+		if types[id] == EnemyType.CAVALRY:
+			cavalry_charge_cooldowns[id] = maxf(0.0, cavalry_charge_cooldowns[id] - delta)
+		if types[id] == EnemyType.SPEAR:
+			spear_combo_timers[id] = maxf(0.0, spear_combo_timers[id] - delta)
+			if spear_combo_timers[id] <= 0.0:
+				spear_combo_stages[id] = 0
 		hit_feedback_timers[id] = maxf(0.0, hit_feedback_timers[id] - delta)
+		slow_timers[id] = maxf(0.0, slow_timers[id] - delta)
+		if slow_timers[id] <= 0.0:
+			slow_multipliers[id] = 1.0
+		if recoil_timers[id] > 0.0:
+			var recoil_delta := minf(delta, recoil_timers[id])
+			positions[id] += recoil_velocities[id] * recoil_delta
+			recoil_timers[id] = maxf(0.0, recoil_timers[id] - delta)
+			if recoil_timers[id] <= 0.0:
+				recoil_velocities[id] = Vector2.ZERO
+			_clamp_position(id)
 		if hurt_timers[id] > 0.0:
 			hurt_timers[id] = maxf(0.0, hurt_timers[id] - delta)
 			var forced_delta := minf(delta, forced_displacement_timers[id])
@@ -239,35 +445,79 @@ func tick(delta: float, player_position: Vector2) -> void:
 			knockback_velocities[id] = knockback_velocities[id].move_toward(Vector2.ZERO, 2200.0 * delta)
 			_clamp_position(id)
 			continue
+		# A normal hit uses the hurt window; pure guard recoil is handled independently above.
+		knockback_velocities[id] = Vector2.ZERO
+		forced_displacement_timers[id] = 0.0
+		forced_displacement_velocities[id] = Vector2.ZERO
 		if attack_states[id] != AttackState.APPROACH:
+			_tick_special_attack_motion(id, delta)
 			attack_timers[id] = maxf(0.0, attack_timers[id] - delta)
 			if attack_timers[id] <= 0.0:
 				if attack_states[id] == AttackState.WINDUP:
+					if types[id] == EnemyType.BANNER and current_attack_kinds[id] == ATTACK_KIND_BANNER_COMMAND:
+						banner_command_requested.emit(id, positions[id])
 					attack_states[id] = AttackState.RECOVER
 					attack_timers[id] = _attack_recovery(types[id])
 				else:
 					attack_states[id] = AttackState.APPROACH
+					current_attack_kinds[id] = ""
 			continue
 		decision_timers[id] = maxf(0.0, decision_timers[id] - delta)
 		if decision_timers[id] <= 0.0:
 			_refresh_movement_decision(id, player_position)
+		navigation_replan_timers[id] = maxf(0.0, navigation_replan_timers[id] - delta)
 		var to_player := player_position - positions[id]
 		var distance := to_player.length()
 		var formation_target := movement_targets[id]
 		var to_formation_target := formation_target - positions[id]
 		var formation_direction := to_formation_target.normalized() if to_formation_target.length_squared() > FORMATION_ARRIVAL_DISTANCE * FORMATION_ARRIVAL_DISTANCE else Vector2.ZERO
 		var formation_strength := clampf(to_formation_target.length() / 42.0, 0.0, 1.0)
+		var navigation_direction := _navigation_direction_for(id, formation_target)
 		var separation := _separation_vector(id)
-		var move_intent := formation_direction * formation_strength + separation * 1.35
+		var move_intent := navigation_direction * formation_strength + separation * 1.35
 		if move_intent.length_squared() > 0.01:
-			positions[id] += move_intent.limit_length(1.0) * move_speeds[id] * _layer_speed_multiplier(behavior_layers[id]) * delta
+			var slow_multiplier := slow_multipliers[id] if slow_timers[id] > 0.0 else 1.0
+			positions[id] += move_intent.limit_length(1.0) * move_speeds[id] * _layer_speed_multiplier(behavior_layers[id]) * _command_speed_multiplier(id) * slow_multiplier * delta
 		_clamp_position(id)
-		if attack_turn_grants[id] == 1 and cooldowns[id] <= 0.0 and distance <= _attack_range(types[id]):
-			cooldowns[id] = _attack_cooldown(types[id])
+		if attack_turn_grants[id] == 1 and cooldowns[id] <= 0.0 and _can_trigger_attack(id, player_position, distance):
+			var attack_kind := _choose_attack_kind(id, player_position, distance)
+			cooldowns[id] = _attack_cooldown_for_kind(types[id], attack_kind)
 			attack_wait_times[id] = 0.0
 			attack_states[id] = AttackState.WINDUP
-			attack_timers[id] = _attack_windup(types[id])
-			enemy_attack_requested.emit(id, positions[id], player_position, types[id], _damage(types[id]), attack_timers[id])
+			attack_timers[id] = _attack_windup_for_kind(types[id], attack_kind)
+			var attack_target := _attack_target_for_kind(id, attack_kind, player_position)
+			current_attack_kinds[id] = attack_kind
+			if types[id] == EnemyType.HALBERD:
+				facing_directions[id] = _halberd_horizontal_direction(id, attack_target)
+			if attack_kind == ATTACK_KIND_CAVALRY_CHARGE:
+				_start_cavalry_charge(id, attack_target)
+			enemy_attack_requested.emit(id, positions[id], attack_target, types[id], _damage(types[id]) * damage_multipliers[id] * _command_damage_multiplier(id), attack_timers[id], attack_kind)
+
+func freeze_for_cinematic() -> void:
+	for id in range(CAPACITY):
+		if active[id] == 0:
+			continue
+		attack_states[id] = AttackState.APPROACH
+		attack_timers[id] = 0.0
+		current_attack_kinds[id] = ""
+		knockback_velocities[id] = Vector2.ZERO
+		recoil_timers[id] = 0.0
+		recoil_velocities[id] = Vector2.ZERO
+		forced_displacement_timers[id] = 0.0
+		forced_displacement_velocities[id] = Vector2.ZERO
+		hurt_timers[id] = 0.0
+		hit_feedback_timers[id] = 0.0
+		hit_feedback_durations[id] = 0.0
+		hit_feedback_strengths[id] = 0.0
+		movement_targets[id] = positions[id]
+		decision_timers[id] = INF
+		attack_wait_times[id] = 0.0
+		attack_turn_grants[id] = 0
+		spear_combo_stages[id] = 0
+		spear_combo_timers[id] = 0.0
+		cavalry_charge_distances[id] = 0.0
+		cavalry_charge_directions[id] = Vector2.ZERO
+		command_surge_timers[id] = 0.0
 
 func query(request: AttackRequest) -> Array[int]:
 	var results: Array[int] = []
@@ -278,12 +528,57 @@ func query(request: AttackRequest) -> Array[int]:
 			continue
 		if _request_hits_point(request, positions[id]):
 			results.append(id)
-			if results.size() >= request.pierce:
-				break
+	results.sort_custom(func(first_id: int, second_id: int) -> bool:
+		var first_priority := _request_target_priority(request, first_id)
+		var second_priority := _request_target_priority(request, second_id)
+		if is_equal_approx(first_priority, second_priority):
+			return first_id < second_id
+		return first_priority < second_priority
+	)
+	if results.size() > request.pierce:
+		results.resize(request.pierce)
 	return results
+
+func _request_target_priority(request: AttackRequest, id: int) -> float:
+	var offset := positions[id] - request.origin
+	if request.shape == AttackRequest.Shape.LINE:
+		return maxf(0.0, offset.dot(request.direction))
+	return offset.length_squared()
 
 func apply_damage(id: int, value: float) -> bool:
 	return apply_hit(id, value, Vector2.ZERO, 0.0)
+
+func apply_knockback_only(id: int, direction: Vector2, knockback: float, ignore_knockback_resistance: bool = false, forced_displacement: float = 0.0, forced_displacement_duration: float = 0.0) -> void:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or direction.length_squared() <= 0.01:
+		return
+	var normalized_direction := direction.normalized()
+	var resistance := 1.0 if ignore_knockback_resistance else _knockback_resistance(types[id])
+	var duration := maxf(0.11, forced_displacement_duration)
+	var distance := maxf(forced_displacement, knockback * duration * 0.52)
+	distance *= resistance
+	if distance <= 0.01:
+		return
+	recoil_timers[id] = maxf(recoil_timers[id], duration)
+	recoil_velocities[id] = normalized_direction * distance / duration
+	hit_feedback_strengths[id] = maxf(hit_feedback_strengths[id], 0.72)
+	hit_feedback_durations[id] = maxf(hit_feedback_durations[id], 0.085)
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	desired_behavior_layers[id] = EngagementLayer.ENGAGE
+	decision_timers[id] = 0.0
+
+func apply_slow(id: int, multiplier: float, duration: float) -> void:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or duration <= 0.0:
+		return
+	slow_timers[id] = maxf(slow_timers[id], duration)
+	slow_multipliers[id] = minf(slow_multipliers[id], clampf(multiplier, 0.15, 1.0))
+
+func count_active_within(at: Vector2, radius: float) -> int:
+	var count := 0
+	var radius_squared := radius * radius
+	for id in range(CAPACITY):
+		if active[id] == 1 and positions[id].distance_squared_to(at) <= radius_squared:
+			count += 1
+	return count
 
 func apply_hit(id: int, value: float, direction: Vector2, knockback: float, ignore_knockback_resistance: bool = false, forced_displacement: float = 0.0, forced_displacement_duration: float = 0.0) -> bool:
 	if id < 0 or id >= CAPACITY or active[id] == 0:
@@ -367,11 +662,18 @@ func has_movement_intent(id: int) -> bool:
 		return false
 	return movement_targets[id].distance_squared_to(positions[id]) > 4.0
 
+func is_being_displaced(id: int) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0:
+		return false
+	return recoil_timers[id] > 0.0 or forced_displacement_timers[id] > 0.0 or knockback_velocities[id].length_squared() > 16.0
+
 func get_knockback_direction(id: int) -> Vector2:
 	if id < 0 or id >= CAPACITY:
 		return Vector2.ZERO
 	if forced_displacement_timers[id] > 0.0:
 		return forced_displacement_velocities[id].normalized()
+	if recoil_timers[id] > 0.0:
+		return recoil_velocities[id].normalized()
 	return knockback_velocities[id].normalized()
 
 func get_attack_state(id: int) -> int:
@@ -385,16 +687,95 @@ func cancel_attack(id: int) -> void:
 		return
 	_cancel_attack(id, 0.35)
 
+func resolve_spear_clash(id: int, direction: Vector2) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or types[id] != EnemyType.SPEAR:
+		return false
+	_cancel_attack(id, SPEAR_CLASH_COOLDOWN)
+	spear_combo_stages[id] = 0
+	spear_combo_timers[id] = 0.0
+	var recoil_direction := direction.normalized()
+	if recoil_direction.length_squared() <= 0.01:
+		recoil_direction = Vector2.RIGHT if facing_directions[id].x >= 0.0 else Vector2.LEFT
+	knockback_velocities[id] = recoil_direction * SPEAR_CLASH_KNOCKBACK
+	hurt_timers[id] = SPEAR_CLASH_HURT_DURATION
+	hit_feedback_strengths[id] = 1.35
+	hit_feedback_durations[id] = 0.12
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	desired_behavior_layers[id] = EngagementLayer.ENGAGE
+	decision_timers[id] = 0.0
+	enemy_attack_cancelled.emit(id)
+	return true
+
+func resolve_cavalry_clash(id: int, direction: Vector2) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or types[id] != EnemyType.CAVALRY:
+		return false
+	_cancel_attack(id, CAVALRY_CLASH_COOLDOWN)
+	var recoil_direction := direction.normalized()
+	if recoil_direction.length_squared() <= 0.01:
+		recoil_direction = Vector2.RIGHT if facing_directions[id].x >= 0.0 else Vector2.LEFT
+	knockback_velocities[id] = recoil_direction * CAVALRY_CLASH_KNOCKBACK
+	hurt_timers[id] = CAVALRY_CLASH_HURT_DURATION
+	hit_feedback_strengths[id] = 1.48
+	hit_feedback_durations[id] = 0.13
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	desired_behavior_layers[id] = EngagementLayer.ENGAGE
+	decision_timers[id] = 0.0
+	enemy_attack_cancelled.emit(id)
+	return true
+
+func issue_banner_command(id: int) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or types[id] != EnemyType.BANNER:
+		return false
+	var affected := false
+	for target_id in range(CAPACITY):
+		if active[target_id] == 0 or types[target_id] == EnemyType.BANNER:
+			continue
+		if positions[target_id].distance_squared_to(positions[id]) > BANNER_COMMAND_RADIUS * BANNER_COMMAND_RADIUS:
+			continue
+		command_surge_timers[target_id] = maxf(command_surge_timers[target_id], BANNER_COMMAND_DURATION)
+		affected = true
+	return affected
+
+func command_aura_ratio(id: int) -> float:
+	if id < 0 or id >= CAPACITY or active[id] == 0:
+		return 0.0
+	if command_surge_timers[id] > 0.0:
+		return 1.0
+	return command_aura_strengths[id] * 0.58
+
+func is_banner_commanding(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and active[id] == 1 and types[id] == EnemyType.BANNER and attack_states[id] == AttackState.WINDUP and current_attack_kinds[id] == ATTACK_KIND_BANNER_COMMAND
+
+func is_cavalry_charging(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and active[id] == 1 and cavalry_charge_distances[id] > 0.01
+
 func get_facing_direction(id: int) -> Vector2:
 	return facing_directions[id] if id >= 0 and id < CAPACITY else Vector2.DOWN
 
 func get_boss_guard_count() -> int:
 	return boss_guard_count
 
+func attack_telegraph_limit(enemy_type: int) -> int:
+	var group := _attack_group_for_type(enemy_type)
+	if group == "archer":
+		return _archer_attack_slots()
+	if group == "crossbow":
+		return _crossbow_attack_slots()
+	if group == "halberd":
+		return _halberd_attack_slots()
+	if group == "spear":
+		return _spear_attack_slots()
+	if group == "banner":
+		return _banner_attack_slots()
+	if group == "cavalry":
+		return _cavalry_attack_slots()
+	return _frontline_attack_slots()
+
 func gold_reward(enemy_type: int) -> int:
 	match enemy_type:
-		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD: return 2
-		EnemyType.ELITE: return 12
+		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD, EnemyType.SPEAR, EnemyType.CROSSBOW, EnemyType.CAVALRY: return 2
+		EnemyType.BANNER: return 3
+		EnemyType.ELITE: return 40
 		_: return 1
 
 func _begin_death(id: int, direction: Vector2) -> void:
@@ -493,6 +874,10 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 	var halberd_ids: Array[int] = []
 	var archer_ids: Array[int] = []
 	var elite_ids: Array[int] = []
+	var spear_ids: Array[int] = []
+	var crossbow_ids: Array[int] = []
+	var banner_ids: Array[int] = []
+	var cavalry_ids: Array[int] = []
 	for id in range(CAPACITY):
 		if active[id] == 0:
 			continue
@@ -504,12 +889,24 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 				halberd_ids.append(id)
 			EnemyType.ELITE:
 				elite_ids.append(id)
+			EnemyType.SPEAR:
+				spear_ids.append(id)
+			EnemyType.CROSSBOW:
+				crossbow_ids.append(id)
+			EnemyType.BANNER:
+				banner_ids.append(id)
+			EnemyType.CAVALRY:
+				cavalry_ids.append(id)
 			_:
 				melee_ids.append(id)
-	_assign_nearest_layer(melee_ids, ENGAGE_MELEE_LIMIT, player_position)
+	_assign_nearest_layer(melee_ids, _engage_melee_limit(), player_position)
 	_assign_nearest_layer(halberd_ids, ENGAGE_HALBERD_LIMIT, player_position)
-	_assign_nearest_layer(archer_ids, ENGAGE_ARCHER_LIMIT, player_position)
+	_assign_nearest_layer(archer_ids, _engage_archer_limit(), player_position)
 	_assign_nearest_layer(elite_ids, ENGAGE_ELITE_LIMIT, player_position)
+	_assign_nearest_layer(spear_ids, _engage_spear_limit(), player_position)
+	_assign_nearest_layer(crossbow_ids, _engage_crossbow_limit(), player_position)
+	_assign_nearest_layer(banner_ids, ENGAGE_BANNER_LIMIT, player_position)
+	_assign_nearest_layer(cavalry_ids, _engage_cavalry_limit(), player_position)
 	for id in range(CAPACITY):
 		if active[id] == 0 or desired_behavior_layers[id] == EngagementLayer.ENGAGE:
 			continue
@@ -529,21 +926,39 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 	var frontline_candidates: Array[int] = []
 	var archer_candidates: Array[int] = []
 	var halberd_candidates: Array[int] = []
+	var spear_candidates: Array[int] = []
+	var crossbow_candidates: Array[int] = []
+	var banner_candidates: Array[int] = []
+	var cavalry_candidates: Array[int] = []
 	var frontline_occupied := 0
 	var archer_occupied := 0
 	var halberd_occupied := 0
+	var spear_occupied := 0
+	var crossbow_occupied := 0
+	var banner_occupied := 0
+	var cavalry_occupied := 0
 	for id in range(CAPACITY):
 		attack_turn_grants[id] = 0
 		if active[id] == 0 or behavior_layers[id] != EngagementLayer.ENGAGE:
 			continue
 		var group := _attack_group_for_type(types[id])
 		if attack_states[id] != AttackState.APPROACH:
-			if group == "frontline":
-				frontline_occupied += 1
-			elif group == "archer":
-				archer_occupied += 1
-			else:
-				halberd_occupied += 1
+			# Recovery releases the attack position immediately so another soldier can rotate in.
+			if attack_states[id] == AttackState.WINDUP:
+				if group == "frontline":
+					frontline_occupied += 1
+				elif group == "archer":
+					archer_occupied += 1
+				elif group == "crossbow":
+					crossbow_occupied += 1
+				elif group == "spear":
+					spear_occupied += 1
+				elif group == "banner":
+					banner_occupied += 1
+				elif group == "cavalry":
+					cavalry_occupied += 1
+				else:
+					halberd_occupied += 1
 			continue
 		if cooldowns[id] > 0.0 or positions[id].distance_to(player_position) > _attack_staging_range(types[id]):
 			continue
@@ -551,16 +966,28 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 			frontline_candidates.append(id)
 		elif group == "archer":
 			archer_candidates.append(id)
+		elif group == "crossbow":
+			crossbow_candidates.append(id)
+		elif group == "spear":
+			spear_candidates.append(id)
+		elif group == "banner":
+			banner_candidates.append(id)
+		elif group == "cavalry":
+			cavalry_candidates.append(id)
 		else:
 			halberd_candidates.append(id)
-	_assign_attack_group_grants(frontline_candidates, maxi(0, FRONTLINE_ATTACK_SLOT_COUNT - frontline_occupied))
-	_assign_attack_group_grants(archer_candidates, maxi(0, ARCHER_ATTACK_SLOT_COUNT - archer_occupied))
-	_assign_attack_group_grants(halberd_candidates, maxi(0, HALBERD_ATTACK_SLOT_COUNT - halberd_occupied))
+	_assign_attack_group_grants(frontline_candidates, maxi(0, _frontline_attack_slots() - frontline_occupied), player_position)
+	_assign_attack_group_grants(archer_candidates, maxi(0, _archer_attack_slots() - archer_occupied), player_position)
+	_assign_attack_group_grants(halberd_candidates, maxi(0, _halberd_attack_slots() - halberd_occupied), player_position)
+	_assign_attack_group_grants(spear_candidates, maxi(0, _spear_attack_slots() - spear_occupied), player_position)
+	_assign_attack_group_grants(crossbow_candidates, maxi(0, _crossbow_attack_slots() - crossbow_occupied), player_position)
+	_assign_attack_group_grants(banner_candidates, maxi(0, _banner_attack_slots() - banner_occupied), player_position)
+	_assign_attack_group_grants(cavalry_candidates, maxi(0, _cavalry_attack_slots() - cavalry_occupied), player_position)
 	for id in range(CAPACITY):
 		if active[id] == 1 and previous_grants[id] != attack_turn_grants[id]:
 			decision_timers[id] = 0.0
 
-func _assign_attack_group_grants(candidates: Array[int], available_slots: int) -> void:
+func _assign_attack_group_grants(candidates: Array[int], available_slots: int, player_position: Vector2) -> void:
 	if available_slots <= 0:
 		return
 	candidates.sort_custom(func(first: int, second: int) -> bool:
@@ -568,19 +995,55 @@ func _assign_attack_group_grants(candidates: Array[int], available_slots: int) -
 			return attack_wait_times[first] > attack_wait_times[second]
 		return decision_cycles[first] < decision_cycles[second]
 	)
-	for index in range(mini(available_slots, candidates.size())):
-		attack_turn_grants[candidates[index]] = 1
+	var granted := 0
+	var used_sectors: Dictionary = {}
+	for candidate in candidates:
+		var sector := _attack_sector(candidate, player_position)
+		if used_sectors.has(sector):
+			continue
+		attack_turn_grants[candidate] = 1
+		used_sectors[sector] = true
+		granted += 1
+		if granted >= available_slots:
+			return
+	for candidate in candidates:
+		if attack_turn_grants[candidate] == 1:
+			continue
+		attack_turn_grants[candidate] = 1
+		granted += 1
+		if granted >= available_slots:
+			return
+
+func _attack_sector(id: int, player_position: Vector2) -> int:
+	var angle := (positions[id] - player_position).angle() + PI
+	return clampi(floori(angle / (TAU * 0.25)), 0, 3)
 
 func _attack_group_for_type(enemy_type: int) -> String:
 	if enemy_type == EnemyType.ARCHER:
 		return "archer"
+	if enemy_type == EnemyType.CROSSBOW:
+		return "crossbow"
 	if enemy_type == EnemyType.HALBERD or enemy_type == EnemyType.ELITE:
 		return "halberd"
+	if enemy_type == EnemyType.SPEAR:
+		return "spear"
+	if enemy_type == EnemyType.BANNER:
+		return "banner"
+	if enemy_type == EnemyType.CAVALRY:
+		return "cavalry"
 	return "frontline"
 
 func _attack_staging_range(enemy_type: int) -> float:
 	if enemy_type == EnemyType.ARCHER:
 		return _attack_range(enemy_type) + 70.0
+	if enemy_type == EnemyType.CROSSBOW:
+		return _attack_range(enemy_type) + 82.0
+	if enemy_type == EnemyType.SPEAR:
+		return _attack_range(enemy_type) + 48.0
+	if enemy_type == EnemyType.BANNER:
+		return _attack_range(enemy_type) + 54.0
+	if enemy_type == EnemyType.CAVALRY:
+		return _attack_range(enemy_type) + 66.0
 	return _attack_range(enemy_type) + 145.0
 
 func _assign_nearest_layer(ids: Array[int], limit: int, player_position: Vector2) -> void:
@@ -605,21 +1068,78 @@ func _refresh_movement_decision(id: int, player_position: Vector2) -> void:
 		facing_directions[id] = desired_facing
 	decision_timers[id] = _reaction_delay(layer, id, decision_cycles[id])
 
+func _navigation_direction_for(id: int, target: Vector2) -> Vector2:
+	var direct := target - positions[id]
+	if direct.length_squared() <= 0.01:
+		navigation_waypoint_active[id] = 0
+		return Vector2.ZERO
+	if navigation_obstacles.is_empty():
+		return direct.normalized()
+	if navigation_waypoint_active[id] == 1 and positions[id].distance_to(navigation_waypoints[id]) <= NAVIGATION_WAYPOINT_ARRIVAL:
+		navigation_waypoint_active[id] = 0
+	if navigation_replan_timers[id] <= 0.0 or not navigation_waypoint_active[id] or navigation_targets[id].distance_to(target) > NAVIGATION_TARGET_SHIFT:
+		var waypoint := BATTLEFIELD_LAYOUT.navigation_waypoint_for(
+			positions[id],
+			target,
+			navigation_obstacles,
+			_collision_radius_for_navigation(types[id]),
+			navigation_preferred_sides[id]
+		)
+		navigation_waypoints[id] = waypoint
+		navigation_targets[id] = target
+		navigation_waypoint_active[id] = 1 if waypoint.length_squared() > 0.01 else 0
+		navigation_replan_timers[id] = NAVIGATION_REPLAN_INTERVAL
+	if navigation_waypoint_active[id] == 1:
+		return (navigation_waypoints[id] - positions[id]).normalized()
+	return direct.normalized()
+
+func _collision_radius_for_navigation(enemy_type: int) -> float:
+	match enemy_type:
+		EnemyType.CAVALRY:
+			return 28.0
+		EnemyType.BANNER:
+			return 24.0
+		EnemyType.SHIELD, EnemyType.HALBERD:
+			return 20.0
+		_:
+			return 17.0
+
 func _formation_target(id: int, player_position: Vector2, layer: int) -> Vector2:
 	var enemy_type := types[id]
-	var squad_index := id / 4
-	var squad_slot := id % 4
-	var angle := fmod(float(squad_index) * FORMATION_ANGLE_STEP + float(enemy_type) * 0.71 + deg_to_rad(float(squad_slot - 1) * 14.0), TAU)
-	var ring_index := (squad_index + enemy_type * 5) % 3
-	var radius := _desired_range(enemy_type) + _formation_ring_spacing(enemy_type) * ring_index
+	if enemy_type == EnemyType.SPEAR and layer == EngagementLayer.ENGAGE:
+		var side := -1.0 if positions[id].x < player_position.x else 1.0
+		if is_equal_approx(positions[id].x, player_position.x):
+			side = -1.0 if id % 2 == 0 else 1.0
+		var lane_offset := float(id % 3 - 1) * 28.0
+		var holding_range := _desired_range(enemy_type) + (54.0 if attack_turn_grants[id] == 0 else 0.0)
+		return player_position + Vector2(side * holding_range, lane_offset)
+	if enemy_type == EnemyType.CAVALRY and layer == EngagementLayer.ENGAGE:
+		var cavalry_side := -1.0 if positions[id].x < player_position.x else 1.0
+		if is_equal_approx(positions[id].x, player_position.x):
+			cavalry_side = -1.0 if id % 2 == 0 else 1.0
+		var cavalry_lane_offset := float(id % 3 - 1) * 24.0
+		var cavalry_holding_range := _desired_range(enemy_type) + (72.0 if attack_turn_grants[id] == 0 else 0.0)
+		return player_position + Vector2(cavalry_side * cavalry_holding_range, cavalry_lane_offset)
+	if enemy_type == EnemyType.BANNER and layer == EngagementLayer.ENGAGE:
+		var banner_side := -1.0 if positions[id].x < player_position.x else 1.0
+		if is_equal_approx(positions[id].x, player_position.x):
+			banner_side = -1.0 if id % 2 == 0 else 1.0
+		return player_position + Vector2(banner_side * _desired_range(enemy_type), float(id % 3 - 1) * 42.0)
+	var squad_index := floori(float(id) / float(FORMATION_SQUAD_SIZE))
+	var squad_slot := id % FORMATION_SQUAD_SIZE
+	var sector_index := squad_index % FORMATION_SECTOR_ANGLES.size()
+	var ring_index := floori(float(squad_index) / float(FORMATION_SECTOR_ANGLES.size())) % 3
+	var battalion_index := floori(float(squad_index) / 9.0)
+	var centered_slot := float(squad_slot) - float(FORMATION_SQUAD_SIZE - 1) * 0.5
+	var squad_drift := sin(formation_time * 0.22 + float(squad_index) * 1.37) * 0.035
+	var angle: float = float(FORMATION_SECTOR_ANGLES[sector_index]) + centered_slot * FORMATION_SLOT_ANGLE_STEP + squad_drift + float(battalion_index) * 0.10
+	var radius := _desired_range(enemy_type) + _formation_ring_spacing(enemy_type) * ring_index + float(battalion_index) * 18.0
 	if layer == EngagementLayer.ENGAGE and attack_turn_grants[id] == 0:
-		radius += 74.0 + float(ring_index) * 18.0
+		radius += 64.0 + float(ring_index) * 12.0
 	if layer == EngagementLayer.PRESSURE:
-		radius += 112.0 + float(ring_index) * 22.0
+		radius += 108.0 + float(ring_index) * 18.0
 	elif layer == EngagementLayer.ATMOSPHERE:
-		radius += 182.0 + float(ring_index) * 28.0
-		if spawn_anchors[id].distance_to(player_position) <= radius + 72.0:
-			return spawn_anchors[id]
+		radius += 178.0 + float(ring_index) * 20.0
 	return player_position + Vector2.from_angle(angle) * radius
 
 func _layer_speed_multiplier(layer: int) -> float:
@@ -630,9 +1150,9 @@ func _layer_speed_multiplier(layer: int) -> float:
 
 func _patrol_radius(layer: int) -> float:
 	match layer:
-		EngagementLayer.PRESSURE: return 24.0
-		EngagementLayer.ATMOSPHERE: return 42.0
-		_: return 5.0
+		EngagementLayer.PRESSURE: return 12.0
+		EngagementLayer.ATMOSPHERE: return 9.0
+		_: return 4.0
 
 func _reaction_delay(layer: int, id: int, cycle: int) -> float:
 	var jitter := float((id * 37 + cycle * 19) % 100) / 100.0
@@ -640,6 +1160,246 @@ func _reaction_delay(layer: int, id: int, cycle: int) -> float:
 		EngagementLayer.PRESSURE: return 0.35 + jitter * 0.55
 		EngagementLayer.ATMOSPHERE: return 1.0 + jitter * 1.20
 		_: return 0.10 + jitter * 0.20
+
+func _track_player_motion(delta: float, player_position: Vector2) -> void:
+	if has_player_position:
+		var instantaneous_velocity := (player_position - last_player_position) / maxf(0.001, delta)
+		player_velocity = player_velocity.lerp(instantaneous_velocity.limit_length(360.0), 0.48)
+	else:
+		has_player_position = true
+	last_player_position = player_position
+
+func _predicted_player_position(lead_time: float) -> Vector2:
+	return _clamp_point(last_player_position + player_velocity.limit_length(280.0) * lead_time)
+
+func _attack_trigger_range(id: int, player_position: Vector2) -> float:
+	if types[id] == EnemyType.HALBERD and _player_is_rushing_toward(id, player_position):
+		return HALBERD_BRACE_MAX_DISTANCE
+	return _attack_range(types[id])
+
+func _can_trigger_attack(id: int, player_position: Vector2, distance: float) -> bool:
+	if types[id] != EnemyType.SPEAR and types[id] != EnemyType.CAVALRY:
+		return distance <= _attack_trigger_range(id, player_position)
+	var offset := player_position - positions[id]
+	var half_width := SPEAR_LINE_HALF_WIDTH if types[id] == EnemyType.SPEAR else CAVALRY_LINE_HALF_WIDTH
+	return absf(offset.x) <= _attack_range(types[id]) and absf(offset.y) <= half_width
+
+func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> String:
+	match types[id]:
+		EnemyType.ARCHER:
+			if _can_start_archer_volley():
+				archer_volley_cooldown = ARCHER_VOLLEY_ENDLESS_COOLDOWN if battle_mode == "endless" else ARCHER_VOLLEY_COOLDOWN
+				return ATTACK_KIND_ARCHER_VOLLEY
+			if player_velocity.length() >= ARCHER_LEAD_SPEED_THRESHOLD:
+				return ATTACK_KIND_ARCHER_LEAD
+			return ATTACK_KIND_ARCHER_DIRECT
+		EnemyType.HALBERD:
+			if _player_is_rushing_toward(id, player_position):
+				return ATTACK_KIND_HALBERD_BRACE
+			return ATTACK_KIND_HALBERD_SWEEP
+		EnemyType.SPEAR:
+			if spear_combo_stages[id] == 1:
+				spear_combo_stages[id] = 0
+				spear_combo_timers[id] = 0.0
+				return ATTACK_KIND_SPEAR_THRUST_2
+			if _can_start_spear_formation():
+				spear_formation_cooldown = SPEAR_FORMATION_COOLDOWN
+				return ATTACK_KIND_SPEAR_FORMATION
+			spear_combo_stages[id] = 1
+			spear_combo_timers[id] = 1.25
+			return ATTACK_KIND_SPEAR_THRUST_1
+		EnemyType.CROSSBOW:
+			if _can_start_crossbow_volley():
+				crossbow_volley_cooldown = CROSSBOW_VOLLEY_ENDLESS_COOLDOWN if battle_mode == "endless" else CROSSBOW_VOLLEY_COOLDOWN
+				return ATTACK_KIND_CROSSBOW_VOLLEY
+			return ATTACK_KIND_CROSSBOW_DIRECT
+		EnemyType.BANNER:
+			return ATTACK_KIND_BANNER_COMMAND
+		EnemyType.CAVALRY:
+			var horizontal_distance := absf(player_position.x - positions[id].x)
+			if cavalry_charge_cooldowns[id] <= 0.0 and horizontal_distance >= 84.0:
+				cavalry_charge_cooldowns[id] = CAVALRY_CHARGE_COOLDOWN
+				return ATTACK_KIND_CAVALRY_CHARGE
+			return ATTACK_KIND_CAVALRY_STAB
+	return ATTACK_KIND_DEFAULT
+
+func _attack_target_for_kind(id: int, attack_kind: String, player_position: Vector2) -> Vector2:
+	match attack_kind:
+		ATTACK_KIND_ARCHER_LEAD:
+			return _predicted_player_position(0.24)
+		ATTACK_KIND_ARCHER_VOLLEY:
+			return _predicted_player_position(0.30)
+		ATTACK_KIND_CROSSBOW_DIRECT:
+			return _predicted_player_position(0.16)
+		ATTACK_KIND_CROSSBOW_VOLLEY:
+			return _predicted_player_position(0.26)
+		ATTACK_KIND_HALBERD_SWEEP:
+			return positions[id] + _halberd_horizontal_direction(id, player_position) * HALBERD_SWEEP_RANGE
+		ATTACK_KIND_HALBERD_BRACE:
+			var brace_target := _predicted_player_position(0.16)
+			return positions[id] + _halberd_horizontal_direction(id, brace_target) * HALBERD_BRACE_MAX_DISTANCE
+		ATTACK_KIND_SPEAR_THRUST_1, ATTACK_KIND_SPEAR_THRUST_2, ATTACK_KIND_SPEAR_FORMATION:
+			return positions[id] + _spear_horizontal_direction(id, player_position) * _attack_range(EnemyType.SPEAR)
+		ATTACK_KIND_CAVALRY_STAB:
+			return positions[id] + _spear_horizontal_direction(id, player_position) * 104.0
+		ATTACK_KIND_CAVALRY_CHARGE:
+			return positions[id] + _spear_horizontal_direction(id, player_position) * CAVALRY_CHARGE_DISTANCE
+	return player_position
+
+func _can_start_archer_volley() -> bool:
+	if archer_volley_cooldown > 0.0:
+		return false
+	if battle_mode != "endless" and (battle_mode != "story" or battle_elapsed < ARCHER_VOLLEY_STORY_TIME):
+		return false
+	var engaged_archers := 0
+	for id in range(CAPACITY):
+		if active[id] == 1 and types[id] == EnemyType.ARCHER and behavior_layers[id] == EngagementLayer.ENGAGE:
+			engaged_archers += 1
+			if engaged_archers >= 3:
+				return true
+	return false
+
+func _can_start_spear_formation() -> bool:
+	if spear_formation_cooldown > 0.0:
+		return false
+	var engaged_spears := 0
+	for id in range(CAPACITY):
+		if active[id] == 1 and types[id] == EnemyType.SPEAR and behavior_layers[id] == EngagementLayer.ENGAGE:
+			engaged_spears += 1
+			if engaged_spears >= SPEAR_FORMATION_MIN_MEMBERS:
+				return true
+	return false
+
+func _can_start_crossbow_volley() -> bool:
+	if crossbow_volley_cooldown > 0.0:
+		return false
+	if battle_mode != "endless" and (battle_mode != "story" or battle_elapsed < CROSSBOW_VOLLEY_STORY_TIME):
+		return false
+	var engaged_crossbows := 0
+	for id in range(CAPACITY):
+		if active[id] == 1 and types[id] == EnemyType.CROSSBOW and behavior_layers[id] == EngagementLayer.ENGAGE:
+			engaged_crossbows += 1
+			if engaged_crossbows >= CROSSBOW_VOLLEY_MIN_MEMBERS:
+				return true
+	return false
+
+func _spear_horizontal_direction(id: int, player_position: Vector2) -> Vector2:
+	var horizontal_delta := player_position.x - positions[id].x
+	if absf(horizontal_delta) > 0.01:
+		return Vector2.RIGHT if horizontal_delta > 0.0 else Vector2.LEFT
+	if absf(facing_directions[id].x) > 0.01:
+		return Vector2.RIGHT if facing_directions[id].x > 0.0 else Vector2.LEFT
+	return Vector2.RIGHT if id % 2 == 0 else Vector2.LEFT
+
+func _halberd_horizontal_direction(id: int, target: Vector2) -> Vector2:
+	var horizontal_delta := target.x - positions[id].x
+	if absf(horizontal_delta) > 0.01:
+		return Vector2.RIGHT if horizontal_delta > 0.0 else Vector2.LEFT
+	if absf(facing_directions[id].x) > 0.01:
+		return Vector2.RIGHT if facing_directions[id].x > 0.0 else Vector2.LEFT
+	return Vector2.RIGHT if id % 2 == 0 else Vector2.LEFT
+
+func _player_is_rushing_toward(id: int, player_position: Vector2) -> bool:
+	var speed := player_velocity.length()
+	if speed < HALBERD_BRACE_APPROACH_SPEED:
+		return false
+	var to_halberd := positions[id] - player_position
+	var distance := to_halberd.length()
+	if distance < HALBERD_BRACE_MIN_DISTANCE or distance > HALBERD_BRACE_MAX_DISTANCE:
+		return false
+	return player_velocity.normalized().dot(to_halberd.normalized()) >= 0.58
+
+func _attack_windup_for_kind(enemy_type: int, attack_kind: String) -> float:
+	match attack_kind:
+		ATTACK_KIND_ARCHER_VOLLEY: return 0.96
+		ATTACK_KIND_CROSSBOW_VOLLEY: return 0.96
+		ATTACK_KIND_BANNER_COMMAND: return 0.68
+		ATTACK_KIND_CAVALRY_CHARGE: return 0.70
+		ATTACK_KIND_CAVALRY_STAB: return 0.52
+		ATTACK_KIND_HALBERD_SWEEP: return 0.64
+		ATTACK_KIND_HALBERD_BRACE: return 0.78
+		ATTACK_KIND_SPEAR_THRUST_2: return 0.68
+		ATTACK_KIND_SPEAR_FORMATION: return 1.14
+	return _attack_windup(enemy_type)
+
+func _attack_cooldown_for_kind(enemy_type: int, attack_kind: String) -> float:
+	match attack_kind:
+		ATTACK_KIND_HALBERD_SWEEP: return 1.55
+		ATTACK_KIND_HALBERD_BRACE: return 2.25
+		ATTACK_KIND_SPEAR_THRUST_1: return 0.44
+		ATTACK_KIND_SPEAR_THRUST_2: return 1.60
+		ATTACK_KIND_SPEAR_FORMATION: return 5.20
+		ATTACK_KIND_CROSSBOW_VOLLEY: return 2.60
+		ATTACK_KIND_BANNER_COMMAND: return 6.20
+		ATTACK_KIND_CAVALRY_CHARGE: return 1.65
+		ATTACK_KIND_CAVALRY_STAB: return 1.35
+	return _attack_cooldown(enemy_type)
+
+func _engage_melee_limit() -> int:
+	if battle_mode == "endless":
+		return ENGAGE_MELEE_LIMIT
+	if battle_mode == "story":
+		if battle_elapsed >= 120.0:
+			return ENGAGE_MELEE_LIMIT
+		if battle_elapsed >= 45.0:
+			return 9
+		return 8
+	return ENGAGE_MELEE_LIMIT
+
+func _engage_archer_limit() -> int:
+	if battle_mode == "endless":
+		return ENGAGE_ARCHER_LIMIT
+	if battle_mode == "story":
+		if battle_elapsed >= 130.0:
+			return ENGAGE_ARCHER_LIMIT
+		if battle_elapsed >= 70.0:
+			return 4
+		return 3
+	return ENGAGE_ARCHER_LIMIT
+
+func _engage_spear_limit() -> int:
+	if battle_mode == "endless":
+		return ENGAGE_SPEAR_LIMIT
+	return 3 if battle_elapsed < 240.0 else ENGAGE_SPEAR_LIMIT
+
+func _engage_crossbow_limit() -> int:
+	if battle_mode == "endless":
+		return ENGAGE_CROSSBOW_LIMIT
+	return 2 if battle_elapsed < 180.0 else ENGAGE_CROSSBOW_LIMIT
+
+func _engage_cavalry_limit() -> int:
+	if battle_mode == "endless":
+		return ENGAGE_CAVALRY_LIMIT
+	return 2 if battle_elapsed < 240.0 else ENGAGE_CAVALRY_LIMIT
+
+func _frontline_attack_slots() -> int:
+	if battle_mode == "endless":
+		return 5
+	return 5 if battle_mode == "story" and battle_elapsed >= 120.0 else 4
+
+func _archer_attack_slots() -> int:
+	if battle_mode == "endless":
+		return 4
+	return 4 if battle_mode == "story" and battle_elapsed >= 160.0 else 3
+
+func _crossbow_attack_slots() -> int:
+	if battle_mode == "endless":
+		return 3
+	return 3 if battle_elapsed >= 180.0 else 2
+
+func _halberd_attack_slots() -> int:
+	if battle_mode == "endless":
+		return 2
+	return 2 if battle_mode == "story" and battle_elapsed >= 240.0 else 1
+
+func _spear_attack_slots() -> int:
+	return 2
+
+func _banner_attack_slots() -> int:
+	return 1
+
+func _cavalry_attack_slots() -> int:
+	return 2
 
 func _clamp_point(point: Vector2) -> Vector2:
 	return Vector2(
@@ -654,9 +1414,13 @@ func _personal_space(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ELITE: return 38.0
 		EnemyType.SHIELD: return 36.0
+		EnemyType.SPEAR: return 34.0
 		EnemyType.GUARD: return 34.0
 		EnemyType.HALBERD: return 32.0
 		EnemyType.ARCHER: return 30.0
+		EnemyType.CROSSBOW: return 31.0
+		EnemyType.BANNER: return 36.0
+		EnemyType.CAVALRY: return 39.0
 		_: return 28.0
 
 func _forced_displacement_resistance(enemy_type: int) -> float:
@@ -669,12 +1433,64 @@ func _forced_displacement_resistance(enemy_type: int) -> float:
 func _formation_ring_spacing(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ELITE, EnemyType.SHIELD: return 32.0
+		EnemyType.SPEAR: return 30.0
 		EnemyType.ARCHER: return 28.0
+		EnemyType.CROSSBOW: return 30.0
+		EnemyType.BANNER: return 38.0
+		EnemyType.CAVALRY: return 42.0
 		_: return 26.0
 
 func _clamp_position(id: int) -> void:
 	positions[id].x = clampf(positions[id].x, bounds.position.x + 8.0, bounds.end.x - 8.0)
 	positions[id].y = clampf(positions[id].y, bounds.position.y + 8.0, bounds.end.y - 8.0)
+
+func _refresh_banner_commands(delta: float) -> void:
+	for id in range(CAPACITY):
+		command_aura_strengths[id] = 0.0
+		command_surge_timers[id] = maxf(0.0, command_surge_timers[id] - delta)
+	for banner_id in range(CAPACITY):
+		if active[banner_id] == 0 or types[banner_id] != EnemyType.BANNER:
+			continue
+		for target_id in range(CAPACITY):
+			if active[target_id] == 0 or types[target_id] == EnemyType.BANNER:
+				continue
+			if positions[target_id].distance_squared_to(positions[banner_id]) <= BANNER_AURA_RADIUS * BANNER_AURA_RADIUS:
+				command_aura_strengths[target_id] = 1.0
+
+func _command_speed_multiplier(id: int) -> float:
+	if command_surge_timers[id] > 0.0:
+		return BANNER_COMMAND_SPEED_MULTIPLIER
+	return BANNER_SPEED_MULTIPLIER if command_aura_strengths[id] > 0.0 else 1.0
+
+func _command_damage_multiplier(id: int) -> float:
+	if command_surge_timers[id] > 0.0:
+		return BANNER_COMMAND_DAMAGE_MULTIPLIER
+	return BANNER_DAMAGE_MULTIPLIER if command_aura_strengths[id] > 0.0 else 1.0
+
+func _start_cavalry_charge(id: int, target: Vector2) -> void:
+	var direction := (target - positions[id]).normalized()
+	if absf(direction.x) <= 0.01:
+		direction = Vector2.RIGHT if facing_directions[id].x >= 0.0 else Vector2.LEFT
+	direction = Vector2.RIGHT if direction.x >= 0.0 else Vector2.LEFT
+	cavalry_charge_directions[id] = direction
+	cavalry_charge_distances[id] = CAVALRY_CHARGE_DISTANCE
+	facing_directions[id] = direction
+
+func _tick_special_attack_motion(id: int, delta: float) -> void:
+	if types[id] != EnemyType.CAVALRY or attack_states[id] != AttackState.WINDUP or current_attack_kinds[id] != ATTACK_KIND_CAVALRY_CHARGE:
+		return
+	var charge_start_remaining := _attack_windup_for_kind(EnemyType.CAVALRY, ATTACK_KIND_CAVALRY_CHARGE) - CAVALRY_CHARGE_START_DELAY
+	var motion_delta := delta
+	if attack_timers[id] > charge_start_remaining:
+		motion_delta = maxf(0.0, delta - (attack_timers[id] - charge_start_remaining))
+	if motion_delta <= 0.0:
+		return
+	if cavalry_charge_distances[id] <= 0.0:
+		return
+	var travel := minf(cavalry_charge_distances[id], CAVALRY_CHARGE_SPEED * motion_delta)
+	positions[id] += cavalry_charge_directions[id] * travel
+	cavalry_charge_distances[id] = maxf(0.0, cavalry_charge_distances[id] - travel)
+	_clamp_position(id)
 
 func _request_hits_point(request: AttackRequest, point: Vector2) -> bool:
 	var offset := point - request.origin
@@ -701,6 +1517,14 @@ func _stats(enemy_type: int) -> Dictionary:
 			return {"hp": 22.0, "armor": 0.0, "speed": 72.0}
 		EnemyType.SHIELD:
 			return {"hp": 55.0, "armor": 12.0, "speed": 75.0}
+		EnemyType.SPEAR:
+			return {"hp": 36.0, "armor": 3.0, "speed": 84.0}
+		EnemyType.CROSSBOW:
+			return {"hp": 26.0, "armor": 1.0, "speed": 68.0}
+		EnemyType.BANNER:
+			return {"hp": 34.0, "armor": 4.0, "speed": 78.0}
+		EnemyType.CAVALRY:
+			return {"hp": 32.0, "armor": 2.0, "speed": 142.0}
 		EnemyType.ELITE:
 			return {"hp": 260.0, "armor": 18.0, "speed": 78.0}
 		EnemyType.GUARD:
@@ -708,63 +1532,103 @@ func _stats(enemy_type: int) -> Dictionary:
 		_:
 			return {"hp": 24.0, "armor": 0.0, "speed": 105.0}
 
+func _threat_health_multiplier() -> float:
+	return float(THREAT_HEALTH_MULTIPLIERS[threat_tier])
+
+func _threat_damage_multiplier() -> float:
+	return float(THREAT_DAMAGE_MULTIPLIERS[threat_tier])
+
+func _threat_armor_bonus() -> float:
+	return float(THREAT_ARMOR_BONUSES[threat_tier])
+
 func _desired_range(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ARCHER: return 230.0
-		EnemyType.HALBERD, EnemyType.ELITE: return 135.0
+		EnemyType.CROSSBOW: return 276.0
+		EnemyType.BANNER: return 232.0
+		EnemyType.CAVALRY: return 152.0
+		EnemyType.HALBERD: return 120.0
+		EnemyType.ELITE: return 135.0
+		EnemyType.SPEAR: return 142.0
 		EnemyType.SHIELD: return 56.0
 		_: return 42.0
 
 func _attack_range(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ARCHER: return 280.0
-		EnemyType.HALBERD, EnemyType.ELITE: return 155.0
+		EnemyType.CROSSBOW: return 340.0
+		EnemyType.BANNER: return 252.0
+		EnemyType.CAVALRY: return 228.0
+		EnemyType.HALBERD: return 136.0
+		EnemyType.ELITE: return 155.0
+		EnemyType.SPEAR: return 190.0
 		EnemyType.SHIELD: return 64.0
 		_: return 50.0
 
 func _attack_cooldown(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ARCHER: return 2.1
+		EnemyType.CROSSBOW: return 2.35
+		EnemyType.BANNER: return 6.20
+		EnemyType.CAVALRY: return 1.45
 		EnemyType.HALBERD, EnemyType.ELITE: return 1.7
+		EnemyType.SPEAR: return 1.55
 		_: return 1.35
 
 func _attack_windup(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ARCHER: return 0.85
+		EnemyType.CROSSBOW: return 0.72
+		EnemyType.BANNER: return 0.68
+		EnemyType.CAVALRY: return 0.52
 		EnemyType.HALBERD, EnemyType.ELITE: return 0.75
 		EnemyType.SHIELD: return 0.70
+		EnemyType.SPEAR: return 0.58
 		_: return 0.60
 
 func _attack_recovery(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.ARCHER: return 0.75
+		EnemyType.CROSSBOW: return 0.68
+		EnemyType.BANNER: return 0.52
+		EnemyType.CAVALRY: return 0.48
 		EnemyType.HALBERD, EnemyType.ELITE: return 0.38
 		EnemyType.SHIELD: return 0.45
+		EnemyType.SPEAR: return 0.36
 		_: return 0.28
 
 func _cancel_attack(id: int, cooldown: float) -> void:
 	attack_states[id] = AttackState.APPROACH
 	attack_timers[id] = 0.0
 	cooldowns[id] = maxf(cooldowns[id], cooldown)
+	current_attack_kinds[id] = ""
+	cavalry_charge_distances[id] = 0.0
+	cavalry_charge_directions[id] = Vector2.ZERO
 
 func _damage(enemy_type: int) -> float:
 	match enemy_type:
 		EnemyType.HALBERD: return 10.0
 		EnemyType.ARCHER: return 8.0
 		EnemyType.SHIELD: return 6.0
+		EnemyType.SPEAR: return 9.0
+		EnemyType.CROSSBOW: return 9.0
+		EnemyType.BANNER: return 0.0
+		EnemyType.CAVALRY: return 8.0
 		EnemyType.ELITE: return 16.0
 		EnemyType.GUARD: return 9.0
 		_: return 5.0
 
 func _experience(enemy_type: int) -> int:
 	match enemy_type:
-		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD: return 2
+		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD, EnemyType.SPEAR, EnemyType.CROSSBOW, EnemyType.CAVALRY: return 2
+		EnemyType.BANNER: return 3
 		EnemyType.ELITE: return 22
 		_: return 1
 
 func _ultimate_energy(enemy_type: int) -> float:
 	match enemy_type:
-		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD: return 1.4
+		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD, EnemyType.SPEAR, EnemyType.CROSSBOW, EnemyType.CAVALRY: return 1.4
+		EnemyType.BANNER: return 1.8
 		EnemyType.ELITE: return 26.0
 		_: return 0.8
 
