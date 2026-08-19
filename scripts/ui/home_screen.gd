@@ -4,19 +4,37 @@ extends Control
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
-const CHANGBAN_GROUND_TEXTURE = preload("res://assets/art/environment/changban/grass-dirt-base-01.png")
+const CHANGBAN_GROUND_TEXTURE = preload("res://assets/art/environment/changbanpo/snow-ground-01.png")
 const XINYE_GROUND_TEXTURE = preload("res://assets/art/environment/xinye1/1.png")
 const BOWANGPO_GROUND_TEXTURE = preload("res://assets/art/environment/bowangpo1/1.png")
-const TITLE_BACKGROUND_TEXTURE = preload("res://assets/art/ui/backgrounds/main.png")
+const XINYE_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/xinye1/ground-canvas.png")
+const BOWANGPO_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/bowangpo1/ground-canvas.png")
+const HUOSHAO_XINYE_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/huoshaoxinye1/ground-canvas.png")
+const XIANGYANG_CHETUI_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/xiangyangchetui1/ground-canvas.png")
+const DANGYANG_DUANHOU_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/dangyangduanhou/ground-canvas.png")
+const CHANGBAN_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/changbanpo/ground-canvas.png")
 const NON_COMBAT_BACKGROUND_TEXTURE = preload("res://assets/art/ui/backgrounds/bg.png")
-const RELEASE_HERO_IDS: Array[String] = ["guan_yu", "zhao_yun"]
+const TITLE_LOGO_TEXTURE = preload("res://assets/art/ui/title/logo.png")
+const TITLE_FRAME_DIRECTORY := "res://assets/art/ui/title/frames"
+const TITLE_FRAME_COUNT := 226
+const TITLE_FRAME_RATE := 15.0
+const TITLE_FRAME_CACHE_SIZE := 12
+const TITLE_FRAME_PREFETCH_COUNT := 5
+const TITLE_FRAME_LOOP_CROSSFADE_FRAME_COUNT := 12
+const TITLE_FRAME_LOOP_CROSSFADE_DURATION := float(TITLE_FRAME_LOOP_CROSSFADE_FRAME_COUNT) / TITLE_FRAME_RATE
+const RELEASE_HERO_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun"]
 const HERO_SELECT_SLOT_IDS: Array[String] = ["huang_zhong", "zhang_fei", "guan_yu", "zhao_yun", "ma_chao"]
-const HERO_SELECT_IDLE_SPRITE_SIZE := Vector2(92.0, 72.0)
+const HERO_SELECT_IDLE_SPRITE_SIZES := {
+	"guan_yu": Vector2(92.0, 72.0),
+	"zhao_yun": Vector2(92.0, 72.0),
+	"zhang_fei": Vector2(116.0, 66.0),
+}
 const HERO_SELECT_IDLE_MODEL_TOP := 76.0
 const HERO_SELECT_IDLE_MODEL_BOTTOM_GAP := 12.0
 const HERO_SELECT_IDLE_BOTTOM_PADDING := {
 	"guan_yu": 9.0,
 	"zhao_yun": 16.0,
+	"zhang_fei": 5.0,
 }
 const ZHAO_YUN_SELECT_IDLE_TEXTURES := [
 	preload("res://assets/art/characters/zhao_yun/sprites/idle_right/zhaoyun-idle-right-01.png"),
@@ -30,6 +48,11 @@ const GUAN_YU_SELECT_IDLE_TEXTURES := [
 	preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-03.png"),
 	preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-04.png"),
 	preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-05.png"),
+]
+const ZHANG_FEI_SELECT_IDLE_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-03.png"),
 ]
 const HERO_SELECT_PORTRAIT_SHADER_CODE := """
 shader_type canvas_item;
@@ -59,15 +82,17 @@ const HERO_TREE_BRANCH_START_X := 140.0
 const HERO_TREE_BRANCH_TITLE_HEIGHT := 28.0
 const HERO_TREE_BRANCH_BOTTOM_GAP := 38.0
 const HERO_TREE_ROOT_RECT := Rect2(16.0, 16.0, 108.0, 56.0)
-const HERO_CAROUSEL_TRANSITION_DURATION := 0.32
 const HERO_TREE_SCROLL_DRAG_THRESHOLD := 10.0
+const PAGE_SCROLL_DRAG_THRESHOLD := 10.0
 const STRATEGY_CARD_WIDTH := 286.0
 const STRATEGY_CARD_MIN_HEIGHT := 84.0
 const STRATEGY_CARD_DESCRIPTION_LINE_HEIGHT := 15.0
 const STRATEGY_CARD_DESCRIPTION_CHARS_PER_LINE := 20
 const STRATEGY_CARD_GAP := Vector2(12.0, 12.0)
-const STRATEGY_GRID_START := Vector2(44.0, 246.0)
 const TITLE_MENU_FADE_DURATION := 0.36
+const TITLE_INTRO_DURATION := 1.05
+const TITLE_ENTER_SEAL_DURATION := 0.18
+const TITLE_PROMPT_TEXT := "触碰屏幕开始游戏"
 const HOME_ACTION_BUTTON_SIZE := Vector2(376.0, 80.0)
 const HOME_ACTION_BUTTON_GAP := 16.0
 const EXPEDITION_TAB_SIZE := Vector2(176.0, 48.0)
@@ -111,12 +136,12 @@ const BATTLEFIELD_DEFINITIONS := {
 	},
 }
 const STORY_CHAPTER_DEFINITIONS := {
-	"story_01": {"chapter": "荆州卷 第一章", "title": "新野练兵", "description": "刘备屯兵新野，先熟悉近战推进与拒阵突破。", "tags": ["约5分钟", "刀盾", "初阵"], "duration": "约5分钟"},
-	"story_02": {"chapter": "荆州卷 第二章", "title": "博望坡·火攻", "description": "诸葛亮初出奇谋，在博望坡击破曹军前锋。", "tags": ["约6分钟", "火攻", "枪盾"], "duration": "约6分钟"},
-	"story_03": {"chapter": "荆州卷 第三章", "title": "火烧新野", "description": "曹军压境，新野城中组织撤离并突破追兵。", "tags": ["约6.5分钟", "撤离", "弓手"], "duration": "约6.5分钟"},
-	"story_04": {"chapter": "荆州卷 第四章", "title": "襄阳撤退", "description": "百姓随军南撤，在襄阳北线挡住曹军合围。", "tags": ["约8分钟", "护送", "戟卫"], "duration": "约8分钟"},
-	"story_05": {"chapter": "荆州卷 第五章", "title": "当阳断后", "description": "曹军骑兵紧追不舍，掩护队伍穿过当阳狭路。", "tags": ["约9分钟", "骑兵", "断后"], "duration": "约9分钟"},
-	"story_06": {"chapter": "荆州卷 第六章", "title": "长坂坡·单骑救主", "description": "赵云杀入长坂坡乱军，救出阿斗并击破张郃防线。", "tags": ["约10分钟", "长坂坡", "张郃"], "duration": "约10分钟"},
+	"story_01": {"chapter": "荆州卷 第一章", "title": "新野练兵", "description": "刘备屯兵新野，先熟悉近战推进与拒阵突破。", "tags": ["约5分钟", "刀盾", "初阵"], "duration": "约5分钟", "battlefield_id": "xinye"},
+	"story_02": {"chapter": "荆州卷 第二章", "title": "博望坡·火攻", "description": "诸葛亮初出奇谋，在博望坡击破曹军前锋。", "tags": ["约6分钟", "火攻", "枪盾"], "duration": "约6分钟", "battlefield_id": "bowangpo"},
+	"story_03": {"chapter": "荆州卷 第三章", "title": "火烧新野", "description": "曹军压境，新野城中组织撤离并突破追兵。", "tags": ["约6.5分钟", "撤离", "弓手"], "duration": "约6.5分钟", "battlefield_id": "huoshaoxinye"},
+	"story_04": {"chapter": "荆州卷 第四章", "title": "襄阳撤退", "description": "百姓随军南撤，在襄阳北线挡住曹军合围。", "tags": ["约8分钟", "护送", "戟卫"], "duration": "约8分钟", "battlefield_id": "xiangyangchetui"},
+	"story_05": {"chapter": "荆州卷 第五章", "title": "当阳断后", "description": "曹军骑兵紧追不舍，掩护队伍穿过当阳狭路。", "tags": ["约9分钟", "骑兵", "断后"], "duration": "约9分钟", "battlefield_id": "dangyangduanhou"},
+	"story_06": {"chapter": "荆州卷 第六章", "title": "长坂坡·单骑救主", "description": "赵云杀入长坂坡乱军，救出阿斗并击破张郃防线。", "tags": ["约10分钟", "长坂坡", "张郃"], "duration": "约10分钟", "battlefield_id": "changban"},
 }
 const STORY_CHAPTER_IDS: Array[String] = ["story_01", "story_02", "story_03", "story_04", "story_05", "story_06"]
 
@@ -135,28 +160,36 @@ var profile: Dictionary = {}
 var notice := ""
 var buttons: Array[Button] = []
 var setting_controls: Array[Control] = []
+var music_value_label: Label
+var sfx_value_label: Label
 var page_controls: Array[Control] = []
 var talent_detail_dialog: Control
 var strategy_detail_dialog: Control
 var strategy_detail_notice := ""
-var equip_hero_button: Button
 var hero_ids: Array[String] = []
 var selected_hero_index := 0
-var carousel_touch_index := -1
-var carousel_start := Vector2.ZERO
-var carousel_delta := Vector2.ZERO
-var mouse_dragging_carousel := false
-var carousel_transition_remaining := 0.0
-var carousel_transition_direction := 0
-var carousel_transition_from_index := 0
-var carousel_transition_to_index := 0
 var hero_tree_touch_index := -1
 var hero_tree_drag_start := Vector2.ZERO
 var hero_tree_drag_scroll_start := 0
 var hero_tree_dragging := false
 var hero_tree_mouse_dragging := false
+var page_scroll_touch_index := -1
+var page_scroll_drag_start := Vector2.ZERO
+var page_scroll_drag_start_offset := 0
+var page_scroll_dragging := false
+var page_scroll_mouse_dragging := false
 var title_elapsed := 0.0
+var title_enter_seal_remaining := 0.0
 var title_menu_fade_remaining := 0.0
+var title_frame_layer: TextureRect
+var title_frame_transition_layer: TextureRect
+var title_frame_paths := PackedStringArray()
+var title_frame_cache: Dictionary = {}
+var title_frame_index := -1
+var title_frame_transition_elapsed := 0.0
+var title_frame_transition_outgoing_start_index := -1
+var title_frame_transition_active := false
+var title_frame_playback_offset := 0
 var hero_select_idle_elapsed := 0.0
 var hero_select_idle_sprite: TextureRect
 var portrait_cache: Dictionary = {}
@@ -167,9 +200,13 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
+	UITheme.install(self)
 	resized.connect(_rebuild_current_page)
+	_setup_title_frame_player()
 	profile = SaveService.load_profile()
 	AudioService.apply_settings(profile.get("settings", {}) as Dictionary)
+	AudioService.play_title_bgm()
+	LoadingOverlay.finish_transition()
 	if SceneRouter.title_seen:
 		_show_main()
 	else:
@@ -193,19 +230,21 @@ func _process(delta: float) -> void:
 	var needs_redraw := false
 	if page == "title":
 		title_elapsed += delta
+		_update_title_frame(delta)
 		needs_redraw = true
+	if title_enter_seal_remaining > 0.0:
+		title_enter_seal_remaining = maxf(0.0, title_enter_seal_remaining - delta)
+		needs_redraw = true
+		if title_enter_seal_remaining <= 0.0:
+			SceneRouter.title_seen = true
+			title_menu_fade_remaining = TITLE_MENU_FADE_DURATION
+			_show_main()
 	if page == "hero_select":
 		hero_select_idle_elapsed += delta
 		_update_hero_select_idle_sprite()
 		needs_redraw = true
 	if title_menu_fade_remaining > 0.0:
 		title_menu_fade_remaining = maxf(0.0, title_menu_fade_remaining - delta)
-		needs_redraw = true
-	if carousel_transition_remaining > 0.0:
-		carousel_transition_remaining = maxf(0.0, carousel_transition_remaining - delta)
-		if carousel_transition_remaining <= 0.0:
-			selected_hero_index = carousel_transition_to_index
-			_refresh_equip_hero_button()
 		needs_redraw = true
 	if needs_redraw:
 		queue_redraw()
@@ -215,32 +254,46 @@ func _show_title() -> void:
 	profile = SaveService.load_profile()
 	notice = ""
 	title_elapsed = 0.0
+	title_enter_seal_remaining = 0.0
 	title_menu_fade_remaining = 0.0
+	title_frame_playback_offset = 0
+	title_frame_transition_elapsed = 0.0
+	title_frame_transition_outgoing_start_index = -1
+	title_frame_transition_active = false
+	if title_frame_layer != null:
+		title_frame_layer.show()
+		if title_frame_transition_layer != null:
+			title_frame_transition_layer.show()
+			title_frame_transition_layer.modulate.a = 0.0
+		_update_title_frame(0.0, true)
 	_clear_buttons()
 	grab_focus()
 	queue_redraw()
 
 func _enter_from_title() -> void:
-	if page != "title":
+	if page != "title" or title_enter_seal_remaining > 0.0:
 		return
-	SceneRouter.title_seen = true
-	title_menu_fade_remaining = TITLE_MENU_FADE_DURATION
-	_show_main()
+	title_enter_seal_remaining = TITLE_ENTER_SEAL_DURATION
+	queue_redraw()
 
 func _show_main() -> void:
 	page = "main"
 	profile = SaveService.load_profile()
 	notice = ""
-	carousel_transition_remaining = 0.0
-	carousel_transition_direction = 0
+	_clear_title_frame_cache()
+	if title_frame_layer != null:
+		title_frame_layer.hide()
+	if title_frame_transition_layer != null:
+		title_frame_transition_layer.hide()
 	_clear_buttons()
 	var command_x := (size.x - HOME_ACTION_BUTTON_SIZE.x) * 0.5
 	var command_y := clampf(size.y * 0.5 - 88.0, 180.0, size.y - 196.0)
 	_create_button("出征", "剧情战役、无尽与试炼", Vector2(command_x, command_y), _show_modes, HOME_ACTION_BUTTON_SIZE, false, 20)
 	_create_button("军需", "武将、战法与军略", Vector2(command_x, command_y + HOME_ACTION_BUTTON_SIZE.y + HOME_ACTION_BUTTON_GAP), _show_shop, HOME_ACTION_BUTTON_SIZE, false, 20)
+	var margin := _safe_margin()
 	if SceneRouter.is_map_editor_available():
-		_create_button("地图编辑器", "战场布局与障碍", Vector2(size.x - 286.0, 76.0), _open_map_editor, Vector2(132.0, 44.0), false, 14)
-	_create_button("设置", "", Vector2(size.x - 146.0, 76.0), _show_settings, Vector2(118.0, 44.0), false, 16)
+		_create_button("地图编辑器", "战场布局与障碍", Vector2(size.x - margin - 250.0, 76.0), _open_map_editor, Vector2(132.0, 44.0), false, 14)
+	_create_button("设置", "", Vector2(size.x - margin - 118.0, 76.0), _show_settings, Vector2(118.0, 44.0), false, 16)
 	queue_redraw()
 
 func _open_map_editor() -> void:
@@ -267,7 +320,7 @@ func _show_expedition(tab: String = "story") -> void:
 		"story": _populate_story_expedition()
 		"endless": _populate_endless_expedition()
 		"boss_trial": _populate_boss_trial_expedition()
-	_create_button("返回", "", Vector2(28.0, 28.0), _show_main, Vector2(126.0, 46.0))
+	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
 	queue_redraw()
 
 func _populate_story_expedition() -> void:
@@ -383,7 +436,7 @@ func _show_shop(section: String = "heroes") -> void:
 		"heroes": _populate_hero_shop()
 		"strategies": _populate_strategy_shop()
 		"tianji": _populate_tianji_shop()
-	_create_button("返回", "", Vector2(28.0, 28.0), _show_main, Vector2(126.0, 46.0))
+	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
 	queue_redraw()
 
 func _show_shop_heroes() -> void:
@@ -578,7 +631,7 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 	overlay.color = Color(0.01, 0.02, 0.03, 0.76)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 20
+	overlay.z_index = 40
 	add_child(overlay)
 	page_controls.append(overlay)
 	talent_detail_dialog = overlay
@@ -674,6 +727,8 @@ func _show_strategy_detail(strategy_id: String, feedback: String = "") -> void:
 	var maxed := rank >= max_rank
 	var cost := SaveService.strategy_cost(strategy_id)
 	var current_merit := int(current_profile.get("military_merit", 0))
+	var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
+	var prerequisite_unlocked := prerequisite_id.is_empty() or SaveService.strategy_rank(prerequisite_id) > 0
 	var branch_title := "军略"
 	var branch_id := str(definition.get("branch", ""))
 	for branch_variant in MILITARY_STRATEGY.BRANCHES:
@@ -685,7 +740,7 @@ func _show_strategy_detail(strategy_id: String, feedback: String = "") -> void:
 	overlay.color = Color(0.01, 0.02, 0.03, 0.76)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 20
+	overlay.z_index = 40
 	add_child(overlay)
 	page_controls.append(overlay)
 	strategy_detail_dialog = overlay
@@ -748,6 +803,9 @@ func _show_strategy_detail(strategy_id: String, feedback: String = "") -> void:
 	if not feedback.is_empty():
 		status_label.text = feedback
 		status_label.add_theme_color_override("font_color", Color("e67363"))
+	elif not prerequisite_unlocked:
+		status_label.text = "前置军略：%s" % MILITARY_STRATEGY.title_for(prerequisite_id)
+		status_label.add_theme_color_override("font_color", Color("f1bd73"))
 	elif maxed:
 		status_label.text = "该军略已满阶"
 		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
@@ -757,9 +815,10 @@ func _show_strategy_detail(strategy_id: String, feedback: String = "") -> void:
 	dialog.add_child(status_label)
 	var action_y := dialog_size.y - 62.0
 	var action_width := (content_width - 12.0) * 0.5
-	var purchase_title := "已满阶" if maxed else "研习 · %d 军功" % cost
-	var purchase_button := _create_button(purchase_title, "", Vector2(24.0, action_y), Callable(self, "_buy_strategy_from_detail").bind(strategy_id), Vector2(action_width, 44.0), maxed, 16, dialog, false)
-	if maxed:
+	var purchase_title := "已满阶" if maxed else ("需先解锁前置" if not prerequisite_unlocked else "研习 · %d 军功" % cost)
+	var purchase_disabled := maxed or not prerequisite_unlocked or current_merit < cost
+	var purchase_button := _create_button(purchase_title, "", Vector2(24.0, action_y), Callable(self, "_buy_strategy_from_detail").bind(strategy_id), Vector2(action_width, 44.0), purchase_disabled, 16, dialog, false)
+	if purchase_disabled:
 		_set_button_locked_visual(purchase_button)
 	var close_button := _create_button("取消", "", Vector2(36.0 + action_width, action_y), _close_strategy_detail, Vector2(action_width, 44.0), false, 16, dialog, false)
 	close_button.add_theme_stylebox_override("normal", _make_box_style(Color("17242a"), DRAGON_BLUE, 2))
@@ -772,6 +831,10 @@ func _buy_strategy_from_detail(strategy_id: String) -> void:
 	var max_rank := MILITARY_STRATEGY.max_rank_for(strategy_id)
 	if rank >= max_rank:
 		_show_strategy_detail(strategy_id, "该军略已满阶")
+		return
+	var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
+	if not prerequisite_id.is_empty() and SaveService.strategy_rank(prerequisite_id) <= 0:
+		_show_strategy_detail(strategy_id, "请先解锁前置军略：%s" % MILITARY_STRATEGY.title_for(prerequisite_id))
 		return
 	var cost := SaveService.strategy_cost(strategy_id)
 	if int(current_profile.get("military_merit", 0)) < cost:
@@ -872,20 +935,31 @@ func _select_shop_hero(hero_id: String) -> void:
 func _populate_strategy_shop() -> void:
 	var row_heights := _strategy_row_heights()
 	var current_merit := int(profile.get("military_merit", 0))
+	var viewport := Rect2(36.0, 232.0, maxf(320.0, size.x - 72.0), maxf(260.0, size.y - 276.0))
+	var scroll := _create_page_scroll(viewport, "纵向滚动查看完整军略")
+	var content := Control.new()
+	content.mouse_filter = Control.MOUSE_FILTER_PASS
+	var content_width := maxf(viewport.size.x - 18.0, 40.0 + float(MILITARY_STRATEGY.BRANCHES.size()) * (STRATEGY_CARD_WIDTH + STRATEGY_CARD_GAP.x) + 20.0)
+	var content_height := 62.0
+	for row_height in row_heights:
+		content_height += row_height + STRATEGY_CARD_GAP.y
+	content_height += 24.0
+	content.custom_minimum_size = Vector2(content_width, content_height)
+	content.size = content.custom_minimum_size
+	scroll.add_child(content)
 	for branch_index in range(MILITARY_STRATEGY.BRANCHES.size()):
 		var branch: Dictionary = MILITARY_STRATEGY.BRANCHES[branch_index] as Dictionary
 		var nodes: Array = branch.get("nodes", []) as Array
-		var branch_origin := STRATEGY_GRID_START + Vector2(float(branch_index) * (STRATEGY_CARD_WIDTH + STRATEGY_CARD_GAP.x), 0.0)
+		var branch_origin := Vector2(20.0 + float(branch_index) * (STRATEGY_CARD_WIDTH + STRATEGY_CARD_GAP.x), 46.0)
 		var branch_label := Label.new()
 		branch_label.text = "%s\n%s" % [str(branch.get("title", "军略")), str(branch.get("subtitle", ""))]
-		branch_label.position = branch_origin - Vector2(0.0, 46.0)
-		branch_label.size = Vector2(STRATEGY_CARD_WIDTH, 42.0)
+		branch_label.position = branch_origin - Vector2(0.0, 42.0)
+		branch_label.size = Vector2(STRATEGY_CARD_WIDTH, 40.0)
 		branch_label.add_theme_font_size_override("font_size", 13)
 		branch_label.add_theme_color_override("font_color", GOLD_BRIGHT)
 		branch_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		branch_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(branch_label)
-		page_controls.append(branch_label)
+		content.add_child(branch_label)
 		var row_offset := 0.0
 		for node_index in range(nodes.size()):
 			var strategy_id := str(nodes[node_index])
@@ -895,13 +969,22 @@ func _populate_strategy_shop() -> void:
 			var maxed := rank >= max_rank
 			var cost := SaveService.strategy_cost(strategy_id)
 			var can_afford := current_merit >= cost
-			var status := "已满阶" if maxed else ("军功不足 · 还差 %d" % (cost - current_merit) if not can_afford else ("下一阶 %d 军功 · %d/%d" % [cost, rank, max_rank]))
+			var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
+			var prerequisite_unlocked := prerequisite_id.is_empty() or SaveService.strategy_rank(prerequisite_id) > 0
+			var prerequisite_title := MILITARY_STRATEGY.title_for(prerequisite_id) if not prerequisite_id.is_empty() else ""
+			var status := "下一阶 %d 军功 · %d/%d" % [cost, rank, max_rank]
+			if maxed:
+				status = "已满阶"
+			elif not prerequisite_unlocked:
+				status = "前置：%s" % prerequisite_title
+			elif not can_afford:
+				status = "军功不足 · 还差 %d" % (cost - current_merit)
 			var card_height := row_heights[node_index]
-			var card := _create_strategy_card(str(definition.get("title", strategy_id)), str(definition.get("description", "")), status, branch_origin + Vector2(0.0, row_offset), Vector2(STRATEGY_CARD_WIDTH, card_height), Callable(self, "_show_strategy_detail").bind(strategy_id), false, can_afford or maxed)
+			var card := _create_strategy_card(str(definition.get("title", strategy_id)), str(definition.get("description", "")), status, branch_origin + Vector2(0.0, row_offset), Vector2(STRATEGY_CARD_WIDTH, card_height), Callable(self, "_show_strategy_detail").bind(strategy_id), false, (can_afford or maxed) and prerequisite_unlocked, content)
 			card.tooltip_text = "%s · 全英雄永久生效" % str(definition.get("description", ""))
 			if rank > 0:
 				_set_button_owned_visual(card)
-			elif not can_afford:
+			elif not can_afford or not prerequisite_unlocked:
 				_set_button_locked_visual(card)
 			row_offset += card_height + STRATEGY_CARD_GAP.y
 
@@ -916,9 +999,17 @@ func _populate_tianji_shop() -> void:
 	tianji_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(tianji_info)
 	page_controls.append(tianji_info)
+	var viewport := Rect2(48.0, 292.0, maxf(320.0, size.x - 96.0), maxf(240.0, size.y - 336.0))
+	var scroll := _create_page_scroll(viewport, "纵向滚动查看天机卡牌")
+	var content := Control.new()
+	content.mouse_filter = Control.MOUSE_FILTER_PASS
 	var column_count := 3
-	var card_size := Vector2((size.x - 136.0) / float(column_count), 148.0)
-	var card_start := Vector2(56.0, 294.0)
+	var content_width := maxf(320.0, viewport.size.x - 18.0)
+	var card_size := Vector2((content_width - 24.0) / float(column_count), 148.0)
+	var row_count := int(ceil(float(TIANJI_CATALOG.ORDER.size()) / float(column_count)))
+	content.custom_minimum_size = Vector2(content_width, 12.0 + float(row_count) * (card_size.y + 14.0) + 12.0)
+	content.size = content.custom_minimum_size
+	scroll.add_child(content)
 	for index in range(TIANJI_CATALOG.ORDER.size()):
 		var skill_id := TIANJI_CATALOG.ORDER[index]
 		var definition := TIANJI_CATALOG.definition_for(skill_id)
@@ -931,8 +1022,8 @@ func _populate_tianji_shop() -> void:
 		var subtitle := "%s\n%s\n%s\n战斗中需通过三选一“启阵”后生效。" % [str(definition.get("subtitle", "天机")), str(definition.get("description", "")), state]
 		var column := index % column_count
 		var row := int(index / column_count)
-		var position := card_start + Vector2(float(column) * (card_size.x + 12.0), float(row) * (card_size.y + 14.0))
-		var card := _create_button(TIANJI_CATALOG.title_for(skill_id), subtitle, position, Callable(self, "_buy_tianji").bind(skill_id), card_size, maxed, 15)
+		var position := Vector2(12.0 + float(column) * (card_size.x + 12.0), 12.0 + float(row) * (card_size.y + 14.0))
+		var card := _create_button(TIANJI_CATALOG.title_for(skill_id), subtitle, position, Callable(self, "_buy_tianji").bind(skill_id), card_size, maxed, 15, content, false)
 		card.tooltip_text = str(definition.get("description", ""))
 		if rank > 0:
 			_set_button_owned_visual(card)
@@ -960,8 +1051,8 @@ func _strategy_card_height_for(description: String) -> float:
 	var line_count := maxi(1, ceili(float(description.length()) / float(STRATEGY_CARD_DESCRIPTION_CHARS_PER_LINE)))
 	return maxf(STRATEGY_CARD_MIN_HEIGHT, 60.0 + float(line_count) * STRATEGY_CARD_DESCRIPTION_LINE_HEIGHT)
 
-func _create_strategy_card(title: String, description: String, status: String, at: Vector2, card_size: Vector2, callback: Callable, disabled: bool, purchasable: bool) -> Button:
-	var card := _create_button("", "", at, callback, card_size, disabled, 13)
+func _create_strategy_card(title: String, description: String, status: String, at: Vector2, card_size: Vector2, callback: Callable, disabled: bool, purchasable: bool, parent: Control = null) -> Button:
+	var card := _create_button("", "", at, callback, card_size, disabled, 13, parent, parent == null)
 	var text_width := card_size.x - 24.0
 	var description_lines := maxi(1, ceili(float(description.length()) / float(STRATEGY_CARD_DESCRIPTION_CHARS_PER_LINE)))
 	var description_height := float(description_lines) * STRATEGY_CARD_DESCRIPTION_LINE_HEIGHT
@@ -999,16 +1090,41 @@ func _show_settings() -> void:
 	profile = SaveService.load_profile()
 	notice = ""
 	_clear_buttons()
-	var start := Vector2(size.x * 0.5 - 270.0, size.y * 0.5 - 150.0)
+	var panel_size := Vector2(minf(640.0, size.x - 56.0), minf(470.0, size.y - 96.0))
+	var panel_origin := Vector2((size.x - panel_size.x) * 0.5, (size.y - panel_size.y) * 0.5 + 18.0)
+	var panel := Panel.new()
+	panel.position = panel_origin
+	panel.size = panel_size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", _make_box_style(PANEL_FILL, Color("7b6644"), 1))
+	add_child(panel)
+	page_controls.append(panel)
+	_create_settings_label(panel, "设置", Vector2(28.0, 22.0), Vector2(panel_size.x - 56.0, 34.0), 30, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_LEFT)
+	_create_settings_label(panel, "中军帐 · 声音与战场反馈", Vector2(28.0, 58.0), Vector2(panel_size.x - 56.0, 22.0), 14, MUTED, HORIZONTAL_ALIGNMENT_LEFT)
+	var content_width := panel_size.x - 56.0
 	var sound_text := "开启" if SaveService.setting_enabled("sound_enabled") else "关闭"
 	var vibration_text := "开启" if SaveService.setting_enabled("vibration_enabled") else "关闭"
-	_create_button("音量：%s" % sound_text, "点击切换", start, _toggle_sound, Vector2(540.0, 56.0))
-	_create_volume_slider(start + Vector2(154.0, 102.0), _music_volume(), "背景音乐音量", _on_music_volume_changed)
-	_create_volume_slider(start + Vector2(154.0, 170.0), _sfx_volume(), "战斗音效音量", _on_sfx_volume_changed)
-	_create_weather_selector(start + Vector2(154.0, 229.0))
-	_create_button("震动：%s" % vibration_text, "点击切换", start + Vector2(0, 292.0), _toggle_vibration, Vector2(540.0, 56.0))
-	_create_button("返回", "", Vector2(28.0, 28.0), _show_main, Vector2(126.0, 46.0))
+	_create_button("音量：%s" % sound_text, "点击切换总开关", panel_origin + Vector2(28.0, 96.0), _toggle_sound, Vector2(content_width, 52.0), false, 17)
+	_create_settings_label(panel, "音乐", Vector2(28.0, 166.0), Vector2(120.0, 24.0), 18, Color("d6e5e2"))
+	_create_volume_slider(panel_origin + Vector2(154.0, 166.0), _music_volume(), "背景音乐音量", _on_music_volume_changed)
+	music_value_label = _create_settings_label(panel, "%d%%" % int(round(_music_volume() * 100.0)), Vector2(panel_size.x - 118.0, 166.0), Vector2(90.0, 24.0), 17, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_RIGHT)
+	_create_settings_label(panel, "音效", Vector2(28.0, 228.0), Vector2(120.0, 24.0), 18, Color("d6e5e2"))
+	_create_volume_slider(panel_origin + Vector2(154.0, 228.0), _sfx_volume(), "战斗音效音量", _on_sfx_volume_changed)
+	sfx_value_label = _create_settings_label(panel, "%d%%" % int(round(_sfx_volume() * 100.0)), Vector2(panel_size.x - 118.0, 228.0), Vector2(90.0, 24.0), 17, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_RIGHT)
+	_create_settings_label(panel, "环境", Vector2(28.0, 290.0), Vector2(120.0, 24.0), 18, Color("d6e5e2"))
+	_create_weather_selector(panel_origin + Vector2(154.0, 284.0))
+	_create_button("震动：%s" % vibration_text, "命中与受击反馈", panel_origin + Vector2(28.0, 348.0), _toggle_vibration, Vector2(content_width, 52.0), false, 17)
+	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
 	queue_redraw()
+
+func _create_settings_label(parent: Control, text: String, at: Vector2, label_size: Vector2, font_size: int, color: Color, alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var label := UITheme.label(text, font_size, color)
+	label.position = at
+	label.size = label_size
+	label.horizontal_alignment = alignment
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	parent.add_child(label)
+	return label
 
 func _show_hero_details() -> void:
 	_show_hero_details_from("main")
@@ -1020,7 +1136,7 @@ func _show_hero_details_from(return_page: String) -> void:
 	notice = ""
 	_clear_buttons()
 	var return_callback := _show_hero_select_from_details if hero_details_return_page == "hero_select" else _show_main
-	_create_button("返回", "", Vector2(28.0, 28.0), return_callback, Vector2(126.0, 46.0))
+	_create_button("返回", "", Vector2(_safe_margin(), 28.0), return_callback, Vector2(126.0, 46.0))
 	queue_redraw()
 
 func _show_hero_select(mode: String, battlefield_id: String, return_tab: String, preserve_selection: bool = false) -> void:
@@ -1037,11 +1153,12 @@ func _show_hero_select(mode: String, battlefield_id: String, return_tab: String,
 	_populate_hero_select_portraits()
 	_populate_hero_select_slots()
 	var can_depart := _is_release_hero_available(_selected_hero_id())
-	var depart_button := _create_button("出征", "", Vector2(size.x - 202.0, 28.0), _begin_selected_run, Vector2(174.0, 46.0), not can_depart, 18)
+	var margin := _safe_margin()
+	var depart_button := _create_button("出征", "", Vector2(size.x - margin - 174.0, 28.0), _begin_selected_run, Vector2(174.0, 46.0), not can_depart, 18)
 	_configure_hero_select_action_button(depart_button, true)
 	depart_button.add_theme_font_size_override("font_size", 18)
 	depart_button.z_index = 24
-	var back_button := _create_button("返回", "", Vector2(28.0, 28.0), Callable(self, "_show_expedition").bind(hero_select_return_tab), Vector2(126.0, 46.0))
+	var back_button := _create_button("返回", "", Vector2(margin, 28.0), Callable(self, "_show_expedition").bind(hero_select_return_tab), Vector2(126.0, 46.0))
 	back_button.z_index = 24
 	queue_redraw()
 
@@ -1073,6 +1190,12 @@ func _story_battlefield_id(chapter: int) -> String:
 			return "xinye"
 		2:
 			return "bowangpo_story"
+		3:
+			return "huoshaoxinye"
+		4:
+			return "xiangyangchetui"
+		5:
+			return "dangyangduanhou"
 		_:
 			return "changban"
 
@@ -1092,8 +1215,9 @@ func _buy_strategy(strategy_id: String) -> void:
 		queue_redraw()
 		return
 	var is_maxed := SaveService.strategy_rank(strategy_id) >= MILITARY_STRATEGY.max_rank_for(strategy_id)
+	var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
 	_show_shop("strategies")
-	notice = "该军略已满阶" if is_maxed else "军功不足"
+	notice = "该军略已满阶" if is_maxed else ("请先解锁前置军略：%s" % MILITARY_STRATEGY.title_for(prerequisite_id) if not prerequisite_id.is_empty() and SaveService.strategy_rank(prerequisite_id) <= 0 else "军功不足")
 	queue_redraw()
 
 func _buy_tianji(skill_id: String) -> void:
@@ -1136,14 +1260,6 @@ func _equip_shop_hero(hero_id: String) -> void:
 		notice = "%s 已上阵" % str(HERO_CATALOG.definition_for(hero_id).get("name", "武将"))
 		queue_redraw()
 
-func _equip_selected_hero() -> void:
-	var hero_id := _selected_hero_id()
-	if SaveService.equip_hero(hero_id):
-		profile = SaveService.load_profile()
-		notice = "%s 已上阵" % str(_selected_hero().get("name", "武将"))
-		_refresh_equip_hero_button()
-		queue_redraw()
-
 func _toggle_sound() -> void:
 	var enabled := not SaveService.setting_enabled("sound_enabled")
 	SaveService.set_setting("sound_enabled", enabled)
@@ -1164,12 +1280,16 @@ func _on_music_volume_changed(value: float) -> void:
 	var volume := snappedf(clampf(value, 0.0, 1.0), 0.05)
 	SaveService.set_setting_value("music_volume", volume)
 	AudioService.set_music_volume(volume)
+	if is_instance_valid(music_value_label):
+		music_value_label.text = "%d%%" % int(round(volume * 100.0))
 	queue_redraw()
 
 func _on_sfx_volume_changed(value: float) -> void:
 	var volume := snappedf(clampf(value, 0.0, 1.0), 0.05)
 	SaveService.set_setting_value("sfx_volume", volume)
 	AudioService.set_sfx_volume(volume)
+	if is_instance_valid(sfx_value_label):
+		sfx_value_label.text = "%d%%" % int(round(volume * 100.0))
 	queue_redraw()
 
 func _on_weather_mode_selected(index: int) -> void:
@@ -1350,44 +1470,6 @@ func _selected_hero_id() -> String:
 func _selected_hero() -> Dictionary:
 	return HERO_CATALOG.definition_for(_selected_hero_id())
 
-func _hero_carousel_rect() -> Rect2:
-	return Rect2(size.x * 0.45, 170.0, size.x * 0.50, size.y - 300.0)
-
-func _cycle_hero(delta: int) -> void:
-	if hero_ids.size() <= 1 or carousel_transition_remaining > 0.0:
-		return
-	var next_index := clampi(selected_hero_index + delta, 0, hero_ids.size() - 1)
-	if next_index == selected_hero_index:
-		return
-	carousel_transition_direction = delta
-	carousel_transition_from_index = selected_hero_index
-	carousel_transition_to_index = next_index
-	carousel_transition_remaining = HERO_CAROUSEL_TRANSITION_DURATION
-	queue_redraw()
-
-func _refresh_equip_hero_button() -> void:
-	if page != "main" or not is_instance_valid(equip_hero_button):
-		return
-	var equipped := SaveService.equipped_hero_id() == _selected_hero_id()
-	equip_hero_button.text = "已上阵" if equipped else "上阵"
-	equip_hero_button.disabled = equipped
-	if equipped:
-		_set_button_owned_visual(equip_hero_button)
-	else:
-		equip_hero_button.add_theme_color_override("font_color", Color("f2e5c4"))
-		equip_hero_button.add_theme_color_override("font_hover_color", Color.WHITE)
-		equip_hero_button.add_theme_stylebox_override("normal", _make_box_style(PANEL_FILL, GOLD, 2))
-		equip_hero_button.add_theme_stylebox_override("hover", _make_box_style(Color("1a2b33"), DRAGON_BLUE, 3))
-		equip_hero_button.add_theme_stylebox_override("pressed", _make_box_style(Color("2e291d"), GOLD_BRIGHT, 3))
-		equip_hero_button.add_theme_stylebox_override("disabled", _make_box_style(Color("131a1e"), Color("425058"), 1))
-
-func _finish_carousel_drag() -> void:
-	if absf(carousel_delta.x) >= 42.0:
-		_cycle_hero(1 if carousel_delta.x < 0.0 else -1)
-	carousel_touch_index = -1
-	mouse_dragging_carousel = false
-	carousel_delta = Vector2.ZERO
-
 func _gui_input(event: InputEvent) -> void:
 	if page != "title":
 		return
@@ -1427,6 +1509,63 @@ func _create_button(title: String, subtitle: String, at: Vector2, callback: Call
 	if track_for_cleanup:
 		buttons.append(button)
 	return button
+
+func _create_page_scroll(viewport: Rect2, tooltip: String = "") -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.position = viewport.position
+	scroll.size = viewport.size
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.scroll_deadzone = int(PAGE_SCROLL_DRAG_THRESHOLD)
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	scroll.tooltip_text = tooltip
+	scroll.gui_input.connect(_on_page_scroll_gui_input.bind(scroll))
+	add_child(scroll)
+	page_controls.append(scroll)
+	return scroll
+
+func _on_page_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			page_scroll_touch_index = event.index
+			page_scroll_drag_start = event.position
+			page_scroll_drag_start_offset = scroll.scroll_vertical
+			page_scroll_dragging = false
+		elif event.index == page_scroll_touch_index:
+			if page_scroll_dragging:
+				scroll.accept_event()
+			page_scroll_touch_index = -1
+			page_scroll_dragging = false
+		return
+	if event is InputEventScreenDrag and event.index == page_scroll_touch_index:
+		if _update_page_scroll(scroll, event.position):
+			scroll.accept_event()
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			page_scroll_mouse_dragging = true
+			page_scroll_drag_start = event.position
+			page_scroll_drag_start_offset = scroll.scroll_vertical
+			page_scroll_dragging = false
+		elif page_scroll_mouse_dragging:
+			if page_scroll_dragging:
+				scroll.accept_event()
+			page_scroll_mouse_dragging = false
+			page_scroll_dragging = false
+		return
+	if event is InputEventMouseMotion and page_scroll_mouse_dragging:
+		if _update_page_scroll(scroll, event.position):
+			scroll.accept_event()
+
+func _update_page_scroll(scroll: ScrollContainer, pointer_position: Vector2) -> bool:
+	var delta_y := pointer_position.y - page_scroll_drag_start.y
+	if not page_scroll_dragging and absf(delta_y) < PAGE_SCROLL_DRAG_THRESHOLD:
+		return false
+	page_scroll_dragging = true
+	var bar := scroll.get_v_scroll_bar()
+	var target_scroll := clampf(float(page_scroll_drag_start_offset) - delta_y, bar.min_value, bar.max_value)
+	scroll.scroll_vertical = int(round(target_scroll))
+	return true
 
 func _create_volume_slider(at: Vector2, value: float, tooltip: String, callback: Callable) -> HSlider:
 	var slider := HSlider.new()
@@ -1482,6 +1621,9 @@ func _clear_buttons() -> void:
 	talent_detail_dialog = null
 	strategy_detail_dialog = null
 	strategy_detail_notice = ""
+	page_scroll_touch_index = -1
+	page_scroll_dragging = false
+	page_scroll_mouse_dragging = false
 	for control in page_controls:
 		if is_instance_valid(control):
 			control.queue_free()
@@ -1489,10 +1631,11 @@ func _clear_buttons() -> void:
 	for button in buttons:
 		button.queue_free()
 	buttons.clear()
-	equip_hero_button = null
 	for control in setting_controls:
 		control.queue_free()
 	setting_controls.clear()
+	music_value_label = null
+	sfx_value_label = null
 
 func _rebuild_current_page() -> void:
 	match page:
@@ -1504,19 +1647,25 @@ func _rebuild_current_page() -> void:
 		"hero_details": _show_hero_details()
 		_: _show_main()
 
+func _safe_margin() -> float:
+	return clampf(minf(size.x, size.y) * 0.045, 24.0, 56.0)
+
 func _draw() -> void:
 	if page == "title":
-		draw_texture_rect(TITLE_BACKGROUND_TEXTURE, Rect2(Vector2.ZERO, size), false)
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		_draw_title_screen(ThemeDB.fallback_font)
 		return
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var background_rect := Rect2(Vector2.ZERO, size)
 	draw_texture_rect(NON_COMBAT_BACKGROUND_TEXTURE, background_rect, false, Color(0.78, 0.78, 0.78, 0.94))
 	draw_rect(background_rect, Color(0.02, 0.025, 0.03, 0.48))
 	var font := ThemeDB.fallback_font
+	var margin := _safe_margin()
 	if page == "main":
-		draw_string(font, Vector2(68, 96), "三国 破阵无双", HORIZONTAL_ALIGNMENT_LEFT, -1, 42, GOLD_BRIGHT)
-		draw_string(font, Vector2(72, 128), "名将破阵 · 兵海无双", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("a9c2c7"))
-	draw_string(font, Vector2(size.x - 318, 52), "军功  %d" % int(profile.get("military_merit", 0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 21, GOLD_BRIGHT)
+		draw_string(font, Vector2(margin + 12.0, 96), "三国 破阵无双", HORIZONTAL_ALIGNMENT_LEFT, -1, 42, GOLD_BRIGHT)
+		draw_string(font, Vector2(margin + 16.0, 128), "名将破阵 · 兵海无双", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("a9c2c7"))
+	if page == "shop":
+		draw_string(font, Vector2(size.x - margin - 240.0, 52), "军功  %d" % int(profile.get("military_merit", 0)), HORIZONTAL_ALIGNMENT_LEFT, 220.0, 21, GOLD_BRIGHT)
 	match page:
 		"modes", "expedition": _draw_expedition(font)
 		"hero_select": _draw_hero_select(font)
@@ -1530,24 +1679,197 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, fade_alpha))
 
 func _draw_title_screen(font: Font) -> void:
-	var center := size * 0.5
-	var frame_color := Color(0.80, 0.67, 0.42, 0.18)
-	var inset := 42.0
-	var corner := 46.0
-	draw_line(Vector2(inset, inset), Vector2(inset + corner, inset), frame_color, 1.0)
-	draw_line(Vector2(inset, inset), Vector2(inset, inset + corner), frame_color, 1.0)
-	draw_line(Vector2(size.x - inset, inset), Vector2(size.x - inset - corner, inset), frame_color, 1.0)
-	draw_line(Vector2(size.x - inset, inset), Vector2(size.x - inset, inset + corner), frame_color, 1.0)
-	draw_line(Vector2(inset, size.y - inset), Vector2(inset + corner, size.y - inset), frame_color, 1.0)
-	draw_line(Vector2(inset, size.y - inset), Vector2(inset, size.y - inset - corner), frame_color, 1.0)
-	draw_line(Vector2(size.x - inset, size.y - inset), Vector2(size.x - inset - corner, size.y - inset), frame_color, 1.0)
-	draw_line(Vector2(size.x - inset, size.y - inset), Vector2(size.x - inset, size.y - inset - corner), frame_color, 1.0)
-	var pulse := 0.46 + 0.44 * (sin(title_elapsed * 2.4) + 1.0) * 0.5
-	var prompt_color := Color(0.96, 0.88, 0.68, pulse)
-	var prompt_y := size.y - 84.0
-	draw_line(Vector2(center.x - 176.0, prompt_y - 10.0), Vector2(center.x - 84.0, prompt_y - 10.0), Color(prompt_color.r, prompt_color.g, prompt_color.b, pulse * 0.42), 1.0)
-	draw_line(Vector2(center.x + 84.0, prompt_y - 10.0), Vector2(center.x + 176.0, prompt_y - 10.0), Color(prompt_color.r, prompt_color.g, prompt_color.b, pulse * 0.42), 1.0)
-	draw_string(font, Vector2(center.x - 130.0, prompt_y), "点击任意位置进入游戏", HORIZONTAL_ALIGNMENT_CENTER, 260.0, 18, prompt_color)
+	var intro_progress := clampf(title_elapsed / TITLE_INTRO_DURATION, 0.0, 1.0)
+	var intro_eased := 1.0 - pow(1.0 - intro_progress, 3.0)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.012, 0.016, 0.018, 0.22))
+	var logo_size := minf(size.y * 0.46, size.x * 0.30)
+	var logo_center := Vector2(size.x * 0.76, size.y * 0.39)
+	var logo_rect := Rect2(logo_center - Vector2.ONE * logo_size * 0.5, Vector2.ONE * logo_size)
+	draw_texture_rect(TITLE_LOGO_TEXTURE, Rect2(logo_rect.position + Vector2(5.0, 8.0), logo_rect.size), false, Color(0.0, 0.0, 0.0, intro_eased * 0.42))
+	draw_texture_rect(TITLE_LOGO_TEXTURE, logo_rect, false, Color(1.0, 0.98, 0.92, intro_eased))
+	var pulse_phase := (sin(title_elapsed * 3.1) + 1.0) * 0.5
+	var pulse := 0.44 + 0.56 * pulse_phase
+	var prompt_color := Color(0.84, 0.62, 0.30, pulse).lerp(Color(1.0, 0.94, 0.66, pulse), pulse_phase)
+	var prompt_font_size := 24 if size.x >= 720.0 else 20
+	var prompt_y := size.y * 0.79
+	var prompt_width := font.get_string_size(TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size).x
+	var prompt_center_x := size.x * 0.76
+	var prompt_left := prompt_center_x - prompt_width * 0.5
+	var short_line_gap := 22.0
+	var short_line_width := 42.0
+	var guide_y := prompt_y - 13.0
+	var guide_color := Color(prompt_color.r, prompt_color.g, prompt_color.b, 0.30 + pulse_phase * 0.62)
+	var guide_width := 1.1 + pulse_phase * 1.0
+	draw_line(Vector2(prompt_left - short_line_gap - short_line_width, guide_y), Vector2(prompt_left - short_line_gap, guide_y), guide_color, guide_width)
+	draw_line(Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap, guide_y), Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap + short_line_width, guide_y), guide_color, guide_width)
+	var blade_center := Vector2(prompt_center_x, guide_y)
+	draw_line(blade_center - Vector2(4.0, 0.0), blade_center + Vector2(4.0, 0.0), Color(1.0, 0.82, 0.44, 0.38 + pulse_phase * 0.54), guide_width + 0.3)
+	draw_line(blade_center - Vector2(2.4, 2.4), blade_center + Vector2(2.4, 2.4), Color(1.0, 0.82, 0.44, 0.22 + pulse_phase * 0.54), guide_width)
+	draw_string_outline(font, Vector2(prompt_left, prompt_y), TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, 4, Color(1.0, 0.57, 0.18, 0.10 + pulse_phase * 0.32))
+	draw_string(font, Vector2(prompt_left, prompt_y), TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, prompt_color)
+	if intro_progress < 1.0:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, (1.0 - intro_eased) * 0.62))
+	if title_enter_seal_remaining > 0.0:
+		_draw_title_enter_seal(Vector2(prompt_center_x, size.y * 0.5))
+
+func _setup_title_frame_player() -> void:
+	title_frame_layer = TextureRect.new()
+	title_frame_layer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_frame_layer.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	title_frame_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	title_frame_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_frame_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_frame_layer.show_behind_parent = true
+	title_frame_layer.z_index = -19
+	title_frame_layer.hide()
+	add_child(title_frame_layer)
+	title_frame_transition_layer = TextureRect.new()
+	title_frame_transition_layer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_frame_transition_layer.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	title_frame_transition_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	title_frame_transition_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_frame_transition_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_frame_transition_layer.show_behind_parent = true
+	title_frame_transition_layer.z_index = -18
+	title_frame_transition_layer.modulate.a = 0.0
+	title_frame_transition_layer.hide()
+	add_child(title_frame_transition_layer)
+	_load_title_frame_paths()
+	_update_title_frame(0.0, true)
+
+func _load_title_frame_paths() -> void:
+	title_frame_paths.clear()
+	# Build the list from known resource names so Android can load frames from the PCK.
+	for frame_number in range(1, TITLE_FRAME_COUNT + 1):
+		title_frame_paths.append(TITLE_FRAME_DIRECTORY.path_join("frame_%04d.webp" % frame_number))
+
+func _update_title_frame(delta: float = 0.0, force: bool = false) -> void:
+	if title_frame_layer == null or title_frame_paths.is_empty():
+		return
+	var frame_count := title_frame_paths.size()
+	var base_frame_index := posmod(int(floor(title_elapsed * TITLE_FRAME_RATE)), frame_count)
+	var frame_index := posmod(base_frame_index + title_frame_playback_offset, frame_count)
+	if title_frame_transition_active:
+		title_frame_transition_elapsed = minf(TITLE_FRAME_LOOP_CROSSFADE_DURATION, title_frame_transition_elapsed + maxf(0.0, delta))
+		var transition_progress := clampf(title_frame_transition_elapsed / TITLE_FRAME_LOOP_CROSSFADE_DURATION, 0.0, 1.0)
+		var transition_frame_offset := mini(TITLE_FRAME_LOOP_CROSSFADE_FRAME_COUNT, int(floor(title_frame_transition_elapsed * TITLE_FRAME_RATE)))
+		var outgoing_index := mini(frame_count - 1, title_frame_transition_outgoing_start_index + transition_frame_offset)
+		var incoming_index := mini(frame_count - 1, transition_frame_offset)
+		var outgoing_texture := _load_title_frame_texture(outgoing_index)
+		var incoming_texture := _load_title_frame_texture(incoming_index)
+		if outgoing_texture != null:
+			title_frame_layer.texture = outgoing_texture
+		if incoming_texture != null and title_frame_transition_layer != null:
+			title_frame_transition_layer.texture = incoming_texture
+		# Smoothstep keeps both layers moving continuously without a visible opacity kink.
+		var eased_progress := transition_progress * transition_progress * (3.0 - 2.0 * transition_progress)
+		title_frame_layer.modulate.a = 1.0 - eased_progress
+		if title_frame_transition_layer != null:
+			title_frame_transition_layer.modulate.a = eased_progress
+		title_frame_index = outgoing_index
+		for offset in range(1, TITLE_FRAME_PREFETCH_COUNT + 1):
+			_load_title_frame_texture(posmod(outgoing_index + offset, frame_count))
+			_load_title_frame_texture(posmod(incoming_index + offset, frame_count))
+		if transition_progress >= 1.0:
+			if incoming_texture != null:
+				title_frame_layer.texture = incoming_texture
+			title_frame_layer.modulate.a = 1.0
+			if title_frame_transition_layer != null:
+				title_frame_transition_layer.modulate.a = 0.0
+				title_frame_transition_layer.hide()
+			title_frame_transition_active = false
+			title_frame_transition_elapsed = 0.0
+			title_frame_transition_outgoing_start_index = -1
+			# Resume normal playback at the first frame after the overlap, not at raw frame 0.
+			title_frame_playback_offset = posmod(incoming_index - base_frame_index, frame_count)
+			title_frame_index = incoming_index
+			_trim_title_frame_cache(incoming_index)
+		return
+	if not force and frame_index == title_frame_index:
+		return
+	var texture := _load_title_frame_texture(frame_index)
+	if texture == null:
+		return
+	var transition_start_threshold := maxi(0, frame_count - TITLE_FRAME_LOOP_CROSSFADE_FRAME_COUNT)
+	var is_loop_boundary := not force and frame_index >= transition_start_threshold and title_frame_index < transition_start_threshold
+	if is_loop_boundary and title_frame_transition_layer != null:
+		title_frame_transition_outgoing_start_index = frame_index
+		title_frame_transition_elapsed = 0.0
+		title_frame_transition_layer.texture = _load_title_frame_texture(0)
+		title_frame_transition_layer.show()
+		title_frame_transition_layer.modulate.a = 0.0
+		title_frame_layer.texture = texture
+		title_frame_layer.modulate.a = 1.0
+		title_frame_transition_active = true
+		title_frame_index = frame_index
+		return
+	title_frame_layer.texture = texture
+	title_frame_layer.modulate.a = 1.0
+	title_frame_index = frame_index
+	for offset in range(1, TITLE_FRAME_PREFETCH_COUNT + 1):
+		_load_title_frame_texture(posmod(frame_index + offset, title_frame_paths.size()))
+	_trim_title_frame_cache(frame_index)
+
+func _load_title_frame_texture(frame_index: int) -> Texture2D:
+	if frame_index < 0 or frame_index >= title_frame_paths.size():
+		return null
+	if title_frame_cache.has(frame_index):
+		return title_frame_cache[frame_index] as Texture2D
+	var texture := ResourceLoader.load(title_frame_paths[frame_index], "Texture2D", ResourceLoader.CACHE_MODE_REUSE) as Texture2D
+	if texture == null:
+		push_warning("Unable to load title frame: %s" % title_frame_paths[frame_index])
+		return null
+	title_frame_cache[frame_index] = texture
+	return texture
+
+func _trim_title_frame_cache(active_index: int) -> void:
+	while title_frame_cache.size() > TITLE_FRAME_CACHE_SIZE:
+		var discard_index := -1
+		var furthest_distance := -1
+		for cached_index_variant in title_frame_cache.keys():
+			var cached_index := int(cached_index_variant)
+			if cached_index == active_index:
+				continue
+			var distance := absi(cached_index - active_index)
+			distance = mini(distance, title_frame_paths.size() - distance)
+			if distance > furthest_distance:
+				furthest_distance = distance
+				discard_index = cached_index
+		if discard_index < 0:
+			break
+		title_frame_cache.erase(discard_index)
+
+func _clear_title_frame_cache() -> void:
+	title_frame_index = -1
+	title_frame_cache.clear()
+	title_frame_transition_elapsed = 0.0
+	title_frame_transition_outgoing_start_index = -1
+	title_frame_transition_active = false
+	title_frame_playback_offset = 0
+	if title_frame_layer != null:
+		title_frame_layer.texture = null
+		title_frame_layer.modulate.a = 1.0
+	if title_frame_transition_layer != null:
+		title_frame_transition_layer.texture = null
+		title_frame_transition_layer.modulate.a = 0.0
+
+func _draw_title_enter_seal(center: Vector2) -> void:
+	var progress := 1.0 - title_enter_seal_remaining / TITLE_ENTER_SEAL_DURATION
+	var eased := 1.0 - pow(1.0 - progress, 3.0)
+	var flash_alpha := (1.0 - eased) * 0.46
+	var seal_center := Vector2(center.x, size.y * 0.64)
+	var half_width := lerpf(20.0, 112.0, eased)
+	var half_height := lerpf(12.0, 58.0, eased)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.98, 0.49, 0.12, flash_alpha * 0.16))
+	draw_rect(Rect2(seal_center - Vector2(half_width, half_height), Vector2(half_width * 2.0, half_height * 2.0)), Color(1.0, 0.77, 0.34, flash_alpha), false, 2.2)
+	draw_line(seal_center - Vector2(half_width * 0.74, 0.0), seal_center + Vector2(half_width * 0.74, 0.0), Color(1.0, 0.85, 0.48, flash_alpha), 1.6)
+	draw_line(seal_center - Vector2(0.0, half_height * 0.66), seal_center + Vector2(0.0, half_height * 0.66), Color(1.0, 0.68, 0.26, flash_alpha * 0.82), 1.6)
+	for index in range(6):
+		var angle := TAU * float(index) / 6.0 + PI * 0.5
+		var direction := Vector2.from_angle(angle)
+		var start := seal_center + direction * (half_width * 0.72)
+		var finish := seal_center + direction * (half_width + 32.0 + eased * 42.0)
+		draw_line(start, finish, Color(1.0, 0.69, 0.28, flash_alpha * 0.76), 1.2)
 
 func _draw_hero_select(font: Font) -> void:
 	var battlefield := _battlefield_definition(selected_run_battlefield_id)
@@ -1609,7 +1931,7 @@ func _create_hero_select_idle_sprite(slot_rect: Rect2, hero_id: String, animated
 
 	var sprite := TextureRect.new()
 	sprite.texture = _hero_select_idle_texture(hero_id, animated)
-	sprite.size = HERO_SELECT_IDLE_SPRITE_SIZE
+	sprite.size = HERO_SELECT_IDLE_SPRITE_SIZES.get(hero_id, Vector2(92.0, 72.0))
 	var bottom_padding := float(HERO_SELECT_IDLE_BOTTOM_PADDING.get(hero_id, 12.0))
 	sprite.position = Vector2((model_area.size.x - sprite.size.x) * 0.5, model_area.size.y - sprite.size.y + bottom_padding)
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1630,6 +1952,12 @@ func _hero_select_idle_texture(hero_id: String, animated: bool) -> Texture2D:
 			return GUAN_YU_SELECT_IDLE_TEXTURES[0] as Texture2D
 		var guan_frame := int(hero_select_idle_elapsed / 0.18) % GUAN_YU_SELECT_IDLE_TEXTURES.size()
 		return GUAN_YU_SELECT_IDLE_TEXTURES[guan_frame] as Texture2D
+	if hero_id == "zhang_fei":
+		if not animated:
+			return ZHANG_FEI_SELECT_IDLE_TEXTURES[0] as Texture2D
+		var zhang_order: Array[int] = [0, 1, 2, 1]
+		var zhang_frame := zhang_order[int(hero_select_idle_elapsed / 0.18) % zhang_order.size()]
+		return ZHANG_FEI_SELECT_IDLE_TEXTURES[zhang_frame] as Texture2D
 	if not animated:
 		return ZHAO_YUN_SELECT_IDLE_TEXTURES[0] as Texture2D
 	var zhao_order: Array[int] = [0, 1, 2, 3, 2, 1]
@@ -1640,169 +1968,6 @@ func _draw_ellipse_shadow(center: Vector2, radius: Vector2, color: Color) -> voi
 	draw_set_transform(center, 0.0, radius)
 	draw_circle(Vector2.ZERO, 1.0, color)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-func _draw_hero_carousel(font: Font) -> void:
-	var area := _hero_carousel_rect()
-	draw_string(font, Vector2(area.position.x, area.position.y - 28.0), "选择上阵武将", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, GOLD_BRIGHT)
-	var center_rect := Rect2(area.get_center() - Vector2(132.0, 171.0), Vector2(264.0, 342.0))
-	var side_width := 112.0
-	var left_rect := Rect2(center_rect.position.x - side_width - 22.0, center_rect.position.y + 58.0, side_width, 222.0)
-	var right_rect := Rect2(center_rect.end.x + 22.0, center_rect.position.y + 58.0, side_width, 222.0)
-	if carousel_transition_remaining > 0.0:
-		_draw_hero_carousel_transition(center_rect, left_rect, right_rect, font)
-	else:
-		var left_hero := _hero_at_offset(-1)
-		var right_hero := _hero_at_offset(1)
-		if left_hero.is_empty():
-			_draw_placeholder_hero(left_rect, font)
-		else:
-			_draw_compact_hero_card(left_rect, left_hero, font)
-		if right_hero.is_empty():
-			_draw_placeholder_hero(right_rect, font)
-		else:
-			_draw_compact_hero_card(right_rect, right_hero, font)
-		_draw_hero_card(center_rect, _selected_hero(), true, font)
-	draw_string(font, Vector2(area.get_center().x - 134.0, area.end.y - 14.0), "左右拖动切换武将", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED)
-
-func _draw_hero_carousel_transition(center_rect: Rect2, left_rect: Rect2, right_rect: Rect2, font: Font) -> void:
-	var progress := 1.0 - carousel_transition_remaining / HERO_CAROUSEL_TRANSITION_DURATION
-	var eased := 1.0 - pow(1.0 - progress, 3.0)
-	var outgoing_slot := left_rect if carousel_transition_direction > 0 else right_rect
-	var incoming_slot := right_rect if carousel_transition_direction > 0 else left_rect
-	var outgoing_rect := _interpolate_hero_card_rect(center_rect, outgoing_slot, eased)
-	var incoming_rect := _interpolate_hero_card_rect(incoming_slot, center_rect, eased)
-	var outgoing_hero := _hero_at_index(carousel_transition_from_index)
-	var incoming_hero := _hero_at_index(carousel_transition_to_index)
-	_draw_hero_card(outgoing_rect, outgoing_hero, progress < 0.5, font, outgoing_rect.size.x >= 168.0)
-	_draw_hero_card(incoming_rect, incoming_hero, progress >= 0.5, font, incoming_rect.size.x >= 168.0)
-
-func _interpolate_hero_card_rect(from: Rect2, to: Rect2, progress: float) -> Rect2:
-	return Rect2(from.position.lerp(to.position, progress), from.size.lerp(to.size, progress))
-
-func _hero_at_offset(offset: int) -> Dictionary:
-	return _hero_at_index(selected_hero_index + offset)
-
-func _hero_at_index(index: int) -> Dictionary:
-	if index < 0 or index >= hero_ids.size():
-		return {}
-	return HERO_CATALOG.definition_for(hero_ids[index])
-
-func _draw_hero_card(rect: Rect2, hero: Dictionary, selected: bool, font: Font, show_text: bool = true) -> void:
-	_draw_panel(rect, GOLD if selected else Color("485762"), selected)
-	var portrait_path := str(hero.get("portrait", ""))
-	if not portrait_path.is_empty():
-		var portrait := _portrait_for(portrait_path)
-		if portrait != null:
-			var portrait_margin := maxf(14.0, rect.size.x * 0.10)
-			var portrait_height := maxf(86.0, rect.size.y - 88.0)
-			_draw_hero_portrait_top_crop(portrait, Rect2(rect.position + Vector2(portrait_margin, 14.0), Vector2(rect.size.x - portrait_margin * 2.0, portrait_height)))
-	elif str(hero.get("id", "")) == "guan_yu":
-		_draw_guan_yu_card_placeholder(rect)
-	else:
-		_draw_unarted_hero_card_placeholder(Rect2(rect.position + Vector2(18.0, 14.0), Vector2(rect.size.x - 36.0, maxf(76.0, rect.size.y - 88.0))), str(hero.get("id", "")))
-	if not show_text:
-		return
-	draw_string(font, Vector2(rect.position.x, rect.end.y - 46.0), str(hero.get("name", "武将")), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 27, Color("f4e6c4"))
-	draw_string(font, Vector2(rect.position.x, rect.end.y - 20.0), str(hero.get("role", "")), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 14, Color("9db7bd"))
-
-func _draw_guan_yu_card_placeholder(rect: Rect2) -> void:
-	var center := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.42)
-	draw_circle(center + Vector2(0, -62), 24.0, Color("d7b98c"))
-	draw_rect(Rect2(center + Vector2(-26, -88), Vector2(52, 11)), Color("17221d"))
-	var robe := PackedVector2Array([
-		center + Vector2(-72, 82), center + Vector2(-48, -24), center + Vector2(-18, -42),
-		center + Vector2(25, -42), center + Vector2(59, -18), center + Vector2(78, 82),
-	])
-	draw_colored_polygon(robe, Color("164b3b"))
-	draw_rect(Rect2(center + Vector2(-53, -6), Vector2(108, 8)), Color("c7a544"))
-	draw_line(center + Vector2(-72, 46), center + Vector2(92, -106), Color("b99a42"), 8.0)
-	draw_arc(center + Vector2(92, -106), 28.0, -2.94, 0.28, 12, Color("85c998"), 12.0)
-	draw_line(center + Vector2(5, -48), center + Vector2(7, -16), Color("1a1712"), 8.0)
-
-func _draw_compact_hero_card(rect: Rect2, hero: Dictionary, font: Font) -> void:
-	_draw_panel(rect, Color("485762"))
-	var portrait_rect := Rect2(rect.position + Vector2(12, 15), Vector2(rect.size.x - 24, 116))
-	var portrait_path := str(hero.get("portrait", ""))
-	if not portrait_path.is_empty():
-		var portrait := _portrait_for(portrait_path)
-		if portrait != null:
-			_draw_hero_portrait_top_crop(portrait, portrait_rect)
-	elif str(hero.get("id", "")) == "guan_yu":
-		_draw_compact_guan_yu_placeholder(portrait_rect)
-	else:
-		_draw_unarted_hero_card_placeholder(portrait_rect, str(hero.get("id", "")))
-	draw_string(font, Vector2(rect.position.x, rect.end.y - 42.0), str(hero.get("name", "武将")), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 18, Color("e5d5ad"))
-	draw_string(font, Vector2(rect.position.x, rect.end.y - 20.0), str(hero.get("role", "")), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 11, MUTED)
-
-func _draw_hero_portrait_top_crop(portrait: Texture2D, rect: Rect2) -> void:
-	var texture_size := portrait.get_size()
-	if texture_size.x <= 0.0 or texture_size.y <= 0.0 or rect.size.x <= 0.0 or rect.size.y <= 0.0:
-		return
-	var target_aspect := rect.size.x / rect.size.y
-	var source_height := minf(texture_size.y, texture_size.x / target_aspect)
-	var source_rect := Rect2(Vector2.ZERO, Vector2(texture_size.x, source_height))
-	draw_texture_rect_region(portrait, rect, source_rect)
-
-func _draw_compact_guan_yu_placeholder(rect: Rect2) -> void:
-	var center := Vector2(rect.get_center().x, rect.position.y + 69.0)
-	draw_circle(center + Vector2(0, -37), 13.0, Color("d7b98c"))
-	draw_rect(Rect2(center + Vector2(-14, -50), Vector2(28, 6)), Color("17221d"))
-	var robe := PackedVector2Array([
-		center + Vector2(-33, 40), center + Vector2(-24, -13), center + Vector2(-9, -23),
-		center + Vector2(12, -23), center + Vector2(27, -10), center + Vector2(37, 40),
-	])
-	draw_colored_polygon(robe, Color("164b3b"))
-	draw_line(center + Vector2(-30, 26), center + Vector2(37, -47), Color("b99a42"), 4.0)
-	draw_arc(center + Vector2(37, -47), 13.0, -2.94, 0.28, 8, Color("85c998"), 5.0)
-
-func _draw_unarted_hero_card_placeholder(rect: Rect2, hero_id: String) -> void:
-	var scale := minf(rect.size.x / 184.0, rect.size.y / 184.0)
-	var center := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.56)
-	var robe := Color("5e6978")
-	var accent := Color("d4a956")
-	var weapon_color := Color("dfe5e6")
-	match hero_id:
-		"zhang_fei":
-			robe = Color("653d36")
-			accent = Color("de8545")
-		"ma_chao":
-			robe = Color("667b9d")
-			accent = Color("c8dbe5")
-		"huang_zhong":
-			robe = Color("8b633d")
-			accent = Color("d9b661")
-		_:
-			return
-	draw_circle(center + Vector2(0, -48.0 * scale), 16.0 * scale, Color("d7b88e"))
-	draw_rect(Rect2(center + Vector2(-17.0, -66.0) * scale, Vector2(34.0, 8.0) * scale), Color("28272a"))
-	var body := PackedVector2Array([
-		center + Vector2(-38.0, 46.0) * scale, center + Vector2(-28.0, -26.0) * scale,
-		center + Vector2(-12.0, -36.0) * scale, center + Vector2(16.0, -34.0) * scale,
-		center + Vector2(30.0, -18.0) * scale, center + Vector2(42.0, 46.0) * scale,
-	])
-	draw_colored_polygon(body, robe)
-	draw_rect(Rect2(center + Vector2(-28.0, -4.0) * scale, Vector2(56.0, 6.0) * scale), accent)
-	if hero_id == "huang_zhong":
-		var bow_center := center + Vector2(34.0, -18.0) * scale
-		draw_arc(bow_center, 28.0 * scale, -1.1, 1.1, 10, accent, 3.0 * scale)
-		draw_line(center + Vector2(-8.0, -18.0) * scale, center + Vector2(74.0, -18.0) * scale, weapon_color, 1.4 * scale)
-	else:
-		var endpoint := center + Vector2(78.0, -90.0) * scale
-		if hero_id == "zhang_fei":
-			endpoint = center + Vector2(92.0, -58.0) * scale
-		draw_line(center + Vector2(-34.0, 26.0) * scale, endpoint, Color("845735"), 5.0 * scale)
-		var direction := (endpoint - center).normalized()
-		var side := Vector2(-direction.y, direction.x)
-		var tip := endpoint + direction * 10.0 * scale
-		draw_colored_polygon(PackedVector2Array([tip, endpoint - direction * 10.0 * scale + side * 6.0 * scale, endpoint - direction * 10.0 * scale - side * 6.0 * scale]), weapon_color)
-	if hero_id == "ma_chao":
-		for index in range(3):
-			draw_line(center + Vector2(-65.0 - float(index) * 12.0, 28.0 + float(index) * 4.0) * scale, center + Vector2(-32.0 - float(index) * 8.0, 18.0 + float(index) * 4.0) * scale, Color(accent.r, accent.g, accent.b, 0.40 - float(index) * 0.08), 2.0 * scale)
-
-func _draw_placeholder_hero(rect: Rect2, font: Font) -> void:
-	draw_rect(rect, Color("10171c"))
-	draw_rect(rect, Color("43515a"), false, 1.0)
-	draw_string(font, Vector2(rect.get_center().x - 24.0, rect.get_center().y - 4.0), "未解锁", HORIZONTAL_ALIGNMENT_CENTER, 48, 14, MUTED)
 
 func _draw_expedition(font: Font) -> void:
 	draw_string(font, Vector2(size.x * 0.5 - 48.0, 52.0), "出征", HORIZONTAL_ALIGNMENT_LEFT, -1, 32, GOLD_BRIGHT)
@@ -1846,17 +2011,24 @@ func _draw_story_expedition_route(font: Font) -> void:
 func _draw_story_chapter_preview(rect: Rect2, definition: Dictionary, unlocked: bool, font: Font) -> void:
 	_draw_panel(rect, GOLD if unlocked else Color("4c5960"), true)
 	var inner := rect.grow(-8.0)
-	var preview_texture: Texture2D = CHANGBAN_GROUND_TEXTURE
-	var preview_label := "长坂坡"
-	match selected_story_chapter_id:
-		"story_01":
-			preview_texture = XINYE_GROUND_TEXTURE
-			preview_label = "新野校场"
-		"story_02":
-			preview_texture = BOWANGPO_GROUND_TEXTURE
+	var preview_texture: Texture2D = CHANGBAN_GROUND_CANVAS_TEXTURE
+	var preview_label := "长坂坡雪夜"
+	match str(definition.get("battlefield_id", "changban")):
+		"xinye":
+			preview_texture = XINYE_GROUND_CANVAS_TEXTURE
+			preview_label = "新野练兵"
+		"bowangpo":
+			preview_texture = BOWANGPO_GROUND_CANVAS_TEXTURE
 			preview_label = "博望坡火谷"
-		_:
-			pass
+		"huoshaoxinye":
+			preview_texture = HUOSHAO_XINYE_GROUND_CANVAS_TEXTURE
+			preview_label = "火烧新野"
+		"xiangyangchetui":
+			preview_texture = XIANGYANG_CHETUI_GROUND_CANVAS_TEXTURE
+			preview_label = "襄阳撤退"
+		"dangyangduanhou":
+			preview_texture = DANGYANG_DUANHOU_GROUND_CANVAS_TEXTURE
+			preview_label = "当阳断后"
 	draw_texture_rect(preview_texture, inner, true, Color(0.54, 0.62, 0.66, 0.78) if unlocked else Color(0.34, 0.39, 0.40, 0.52))
 	draw_rect(inner, Color(0.02, 0.04, 0.05, 0.38))
 	draw_rect(Rect2(inner.position, Vector2(inner.size.x, 40.0)), Color(0.03, 0.06, 0.07, 0.60))
@@ -1916,9 +2088,9 @@ func _draw_battlefield_preview(rect: Rect2, definition: Dictionary, unlocked: bo
 	var inner := rect.grow(-8.0)
 	match battlefield_id:
 		"changban":
-			draw_texture_rect(CHANGBAN_GROUND_TEXTURE, inner, true, Color(0.54, 0.62, 0.66, 0.72))
+			draw_texture_rect(CHANGBAN_GROUND_CANVAS_TEXTURE, inner, true, Color(0.54, 0.62, 0.66, 0.72))
 		"bowangpo":
-			draw_rect(inner, Color("1c2422"))
+			draw_texture_rect(BOWANGPO_GROUND_CANVAS_TEXTURE, inner, true, Color(0.54, 0.62, 0.66, 0.72))
 			for index in range(5):
 				var fire_y := inner.position.y + 72.0 + float(index) * 54.0
 				draw_line(Vector2(inner.position.x + 30.0, fire_y), Vector2(inner.end.x - 34.0, fire_y + 24.0), Color(0.94, 0.34, 0.12, 0.50), 7.0)
@@ -1960,23 +2132,19 @@ func _draw_shop(font: Font) -> void:
 		subtitle = "诸葛天机 · 军功研习 · 战斗中通过三选一启阵。"
 	draw_string(font, Vector2(size.x * 0.5 - 230.0, 178.0), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 460.0, 16, Color("a9c2c7"))
 
-func _draw_settings(font: Font) -> void:
-	var start := Vector2(size.x * 0.5 - 270.0, size.y * 0.5 - 150.0)
-	var music_percent := int(round(_music_volume() * 100.0))
-	var sfx_percent := int(round(_sfx_volume() * 100.0))
-	draw_string(font, Vector2(size.x * 0.5 - 56.0, start.y - 46.0), "设置", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, GOLD_BRIGHT)
-	draw_string(font, Vector2(start.x, start.y + 94.0), "音乐", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("d6e5e2"))
-	draw_string(font, Vector2(start.x + 454.0, start.y + 94.0), "%d%%" % music_percent, HORIZONTAL_ALIGNMENT_RIGHT, 86.0, 17, GOLD_BRIGHT)
-	draw_string(font, Vector2(start.x, start.y + 162.0), "音效", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("d6e5e2"))
-	draw_string(font, Vector2(start.x + 454.0, start.y + 162.0), "%d%%" % sfx_percent, HORIZONTAL_ALIGNMENT_RIGHT, 86.0, 17, GOLD_BRIGHT)
-	draw_string(font, Vector2(start.x, start.y + 221.0), "环境", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("d6e5e2"))
+func _draw_settings(_font: Font) -> void:
+	pass
 
 func _draw_hero_details(font: Font) -> void:
 	var hero := _selected_hero()
 	var stats := HERO_CATALOG.display_stats_for(_selected_hero_id(), profile)
-	draw_string(font, Vector2(190, 102), "%s · %s" % [hero.get("name", "武将"), hero.get("role", "")], HORIZONTAL_ALIGNMENT_LEFT, -1, 32, GOLD_BRIGHT)
-	draw_string(font, Vector2(190, 134), "当前属性", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("b9c9cd"))
-	var stats_rect := Rect2(190, 158, 370, 374)
+	var margin := clampf(size.x * 0.055, 32.0, 76.0)
+	var content_top := clampf(size.y * 0.16, 118.0, 168.0)
+	var panel_height := maxf(300.0, size.y - content_top - 96.0)
+	var stats_width := clampf(size.x * 0.32, 320.0, 430.0)
+	draw_string(font, Vector2(margin, content_top - 56.0), "%s · %s" % [hero.get("name", "武将"), hero.get("role", "")], HORIZONTAL_ALIGNMENT_LEFT, -1, 32, GOLD_BRIGHT)
+	draw_string(font, Vector2(margin, content_top - 24.0), "当前属性", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("b9c9cd"))
+	var stats_rect := Rect2(margin, content_top, stats_width, panel_height)
 	_draw_panel(stats_rect, DRAGON_BLUE, true)
 	var stat_rows := [
 		["攻击", "%.1f" % float(stats.get("attack", 0.0))],
@@ -1993,7 +2161,8 @@ func _draw_hero_details(font: Font) -> void:
 		var y := stats_rect.position.y + 38.0 + index * 40.0
 		draw_string(font, Vector2(stats_rect.position.x + 28.0, y), row[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("adc1c5"))
 		draw_string(font, Vector2(stats_rect.end.x - 148.0, y), row[1], HORIZONTAL_ALIGNMENT_RIGHT, 120, 18, Color("f2e5c4"))
-	var skill_rect := Rect2(600, 158, size.x - 700, 420)
+	var skill_x := stats_rect.end.x + clampf(size.x * 0.03, 28.0, 48.0)
+	var skill_rect := Rect2(skill_x, content_top, maxf(300.0, size.x - skill_x - margin), panel_height)
 	_draw_panel(skill_rect, GOLD, true)
 	draw_string(font, Vector2(skill_rect.position.x + 28, skill_rect.position.y + 38), "技能", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, GOLD_BRIGHT)
 	var skills: Array = hero.get("skills", [])
@@ -2021,21 +2190,7 @@ func _draw_panel(rect: Rect2, accent: Color, emphasize: bool = false) -> void:
 	draw_line(rect.end - Vector2(8, 8), rect.end - Vector2(8, 26), GOLD, 1.0)
 
 func _make_box_style(background: Color, border: Color, border_width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.border_width_left = border_width
-	style.border_width_top = border_width
-	style.border_width_right = border_width
-	style.border_width_bottom = border_width
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_right = 6
-	style.corner_radius_bottom_left = 6
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
-	style.shadow_size = 7
-	style.shadow_offset = Vector2(0, 4)
-	return style
+	return UITheme.box_style(background, border, border_width)
 
 func _alpha(color: Color, opacity: float) -> Color:
 	return Color(color.r, color.g, color.b, opacity)

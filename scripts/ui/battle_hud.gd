@@ -9,6 +9,9 @@ const GOLD_BRIGHT := Color("f4d58d")
 const DRAGON_BLUE := Color("63b9df")
 const HEALTH_RED := Color("d45a58")
 const DISABLED := Color("566069")
+const COMBO_TIMEOUT := 1.20
+const COMBO_POP_DURATION := 0.18
+const COMBO_FADE_DURATION := 0.28
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 
 signal upgrade_selected(upgrade_id: String)
@@ -42,6 +45,9 @@ var move_stick_offset := Vector2.ZERO
 var run_gold := 0
 var hero_portrait: Texture2D
 var offscreen_named_targets: Array[Dictionary] = []
+var combo_count := 0
+var combo_remaining := 0.0
+var combo_pop_remaining := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -55,6 +61,9 @@ func configure(player_actor: HeroActor, boss_actor: BossActor, run_director: Run
 	director = run_director
 	elites = elite_actors
 	tianji = tianji_system
+	combo_count = 0
+	combo_remaining = 0.0
+	combo_pop_remaining = 0.0
 	hero_portrait = null
 	if player != null:
 		var portrait_path := str(HERO_CATALOG.definition_for(player.hero_id).get("portrait", ""))
@@ -76,6 +85,18 @@ func _process(delta: float) -> void:
 	ui_time += delta
 	message_time = maxf(0.0, message_time - delta)
 	ultimate_denied_time = maxf(0.0, ultimate_denied_time - delta)
+	combo_remaining = maxf(0.0, combo_remaining - delta)
+	combo_pop_remaining = maxf(0.0, combo_pop_remaining - delta)
+	if combo_remaining <= 0.0:
+		combo_count = 0
+	queue_redraw()
+
+func record_combo_hits(hit_count: int) -> void:
+	if hit_count <= 0:
+		return
+	combo_count += hit_count
+	combo_remaining = COMBO_TIMEOUT
+	combo_pop_remaining = COMBO_POP_DURATION
 	queue_redraw()
 
 func set_message(value: String) -> void:
@@ -366,10 +387,29 @@ func _layout_pause_buttons() -> void:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	_draw_top_hud(font)
+	_draw_combo_counter(font)
 	_draw_tianji_slots(font)
 	_draw_skill_cluster(font)
 	_draw_named_target_indicators()
 	_draw_modal_backdrop(font)
+
+func _draw_combo_counter(font: Font) -> void:
+	if combo_count <= 0 or modal_active or result_active:
+		return
+	var pop_ratio := clampf(combo_pop_remaining / COMBO_POP_DURATION, 0.0, 1.0)
+	var fade_ratio := clampf(combo_remaining / COMBO_FADE_DURATION, 0.0, 1.0)
+	var alpha := minf(1.0, fade_ratio)
+	var text_scale := 1.0 + pop_ratio * 0.20
+	var font_size := maxi(18, int(27.0 * text_scale))
+	var text_width := 320.0 * text_scale
+	var lift := (1.0 - fade_ratio) * 10.0
+	var origin := Vector2(size.x * 0.5 - text_width * 0.5, 91.0 - lift)
+	var label := "连击 x %d" % combo_count
+	var outline := Color(0.20, 0.07, 0.015, alpha * 0.94)
+	var fill := Color(1.0, 0.72, 0.20, alpha)
+	for offset in [Vector2(-2, -2), Vector2(2, -2), Vector2(-2, 2), Vector2(2, 2)]:
+		draw_string(font, origin + offset, label, HORIZONTAL_ALIGNMENT_CENTER, text_width, font_size, outline)
+	draw_string(font, origin, label, HORIZONTAL_ALIGNMENT_CENTER, text_width, font_size, fill)
 
 func _draw_top_hud(font: Font) -> void:
 	var player_panel := Rect2(16, 14, 372, 116)
@@ -620,12 +660,16 @@ func _draw_skill_cluster(font: Font) -> void:
 	_draw_move_pad(font)
 	var basic_label := player.basic_ability_label() if player != null else "普攻"
 	_draw_skill_button(attack_center(), 64.0, "普攻", basic_label, DRAGON_BLUE, true, font)
-	# Guan Yu can cancel his basic attacks and drag charge with the active skill.
-	# The button therefore reflects cooldown readiness rather than a transient action lock.
-	var active_enabled := player != null and player.active_cooldown <= 0.02
+	# The active skill is charge-based: a non-empty reserve stays visually usable
+	# even while the next charge is recovering in the background.
+	var active_enabled := player != null and player.active_charge_count > 0
 	var active_color := Color("6bbd9f") if active_enabled else DISABLED
 	var active_label := player.active_ability_label() if player != null else "主动"
-	var active_subtitle := active_label if active_enabled else "%.1fs" % maxf(0.0, player.active_cooldown)
+	var active_subtitle := active_label
+	if player != null:
+		active_subtitle = player.active_charges_label()
+		if not active_enabled:
+			active_subtitle += " · %.1fs" % maxf(0.0, player.active_cooldown)
 	_draw_skill_button(active_center(), 50.0, "主动", active_subtitle, active_color, active_enabled, font)
 	var ultimate_ready := player != null and player.is_ultimate_ready()
 	var ultimate_label := player.ultimate_ability_label() if player != null else "无双"
@@ -801,6 +845,7 @@ func _draw_hero_badge(texture: Texture2D, rect: Rect2) -> void:
 
 func _draw_skill_button(center: Vector2, radius: float, title: String, subtitle: String, accent: Color, enabled: bool, font: Font) -> void:
 	var pulse := 0.70 + 0.30 * (sin(ui_time * 6.0) + 1.0) * 0.5 if enabled else 0.65
+	var subtitle_width := clampf(maxf(40.0, float(subtitle.length()) * 7.0 + 8.0), 40.0, radius * 2.1)
 	draw_circle(center, radius + 7.0, Color(0.01, 0.02, 0.03, 0.72))
 	draw_circle(center, radius, Color("142027"))
 	draw_arc(center, radius, 0.0, TAU, 32, accent, 3.0)
@@ -808,7 +853,7 @@ func _draw_skill_button(center: Vector2, radius: float, title: String, subtitle:
 	draw_line(center + Vector2(-radius * 0.45, 0), center + Vector2(radius * 0.45, 0), _alpha(accent, 0.45), 2.0)
 	draw_line(center + Vector2(0, -radius * 0.32), center + Vector2(0, radius * 0.32), _alpha(accent, 0.45), 2.0)
 	draw_string(font, center + Vector2(-22, -5), title, HORIZONTAL_ALIGNMENT_CENTER, 44, 18, accent.lightened(0.18))
-	draw_string(font, center + Vector2(-20, 18), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 40, 12, Color("d1d9d5") if enabled else Color("899198"))
+	draw_string(font, center + Vector2(-subtitle_width * 0.5, 18), subtitle, HORIZONTAL_ALIGNMENT_CENTER, subtitle_width, 12, Color("d1d9d5") if enabled else Color("899198"))
 
 func _make_box_style(background: Color, border: Color, border_width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

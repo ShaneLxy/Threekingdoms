@@ -6,6 +6,8 @@ const COMMON_ATTACK_BONUS := 0.05
 const COMMON_DEFENSE_BONUS := 0.05
 const COMMON_SPEED_BONUS := 0.02
 const COMMON_HEAL_RATIO := 0.10
+const BASIC_ATTACK_MOVEMENT_DISTANCE := 18.0
+const BASIC_ATTACK_MOVEMENT_SPEED_RATIO := 0.42
 
 # Shared contract for every playable hero. Individual heroes own their combo,
 # passive, skill state, and presentation while the battle scene consumes this API.
@@ -32,6 +34,8 @@ var defense_bonus := 0.0
 var defense_ratio_bonus := 0.0
 var speed := 0.0
 var active_cooldown := 0.0
+var active_charge_count := 1
+var active_charge_capacity := 1
 var ultimate_energy := 0.0
 var ultimate_time := 0.0
 var ultimate_segment_index := 0
@@ -48,6 +52,7 @@ var military_energy_gain_multiplier := 1.0
 var military_elite_energy_bonus := 0.0
 var military_gold_multiplier := 1.0
 var military_active_cooldown_reduction := 0.0
+var basic_attack_movement_remaining := 0.0
 
 func configure_hero(selected_hero_id: String) -> void:
 	hero_id = selected_hero_id
@@ -77,7 +82,52 @@ func request_active(_direction: Vector2 = Vector2.ZERO) -> bool:
 	return false
 
 func can_use_active() -> bool:
-	return active_cooldown <= 0.0 and ultimate_time <= 0.0 and (not is_action_locked() or current_action == "basic")
+	return active_charge_count > 0 and ultimate_time <= 0.0 and (not is_action_locked() or current_action == "basic")
+
+func active_charges_label() -> String:
+	return "%d/%d" % [active_charge_count, active_charge_capacity]
+
+func reset_active_charges() -> void:
+	active_charge_count = active_charge_capacity
+	active_cooldown = 0.0
+
+func begin_basic_attack_movement() -> void:
+	basic_attack_movement_remaining = BASIC_ATTACK_MOVEMENT_DISTANCE
+
+func clear_basic_attack_movement() -> void:
+	basic_attack_movement_remaining = 0.0
+
+func tick_basic_attack_movement(delta: float, move_direction: Vector2) -> void:
+	if current_action not in ["basic", "drag_release"] or basic_attack_movement_remaining <= 0.0 or move_direction.length_squared() <= 0.01:
+		return
+	var travel_distance := minf(speed * BASIC_ATTACK_MOVEMENT_SPEED_RATIO * delta, basic_attack_movement_remaining)
+	if travel_distance <= 0.0:
+		return
+	var direction := move_direction.normalized()
+	position += direction * travel_distance
+	position.x = clampf(position.x, bounds.position.x + 12.0, bounds.end.x - 12.0)
+	position.y = clampf(position.y, bounds.position.y + 12.0, bounds.end.y - 12.0)
+	basic_attack_movement_remaining = maxf(0.0, basic_attack_movement_remaining - travel_distance)
+
+func consume_active_charge(cooldown_duration: float) -> bool:
+	if active_charge_count <= 0:
+		return false
+	active_charge_count -= 1
+	if active_charge_count < active_charge_capacity and active_cooldown <= 0.0:
+		active_cooldown = cooldown_duration
+	return true
+
+func tick_active_charge_recovery(delta: float, cooldown_duration: float) -> void:
+	if active_charge_count >= active_charge_capacity:
+		active_charge_count = active_charge_capacity
+		active_cooldown = 0.0
+		return
+	active_cooldown = maxf(0.0, active_cooldown - delta)
+	if active_cooldown > 0.0:
+		return
+	active_charge_count = mini(active_charge_capacity, active_charge_count + 1)
+	if active_charge_count < active_charge_capacity:
+		active_cooldown = cooldown_duration
 
 func request_ultimate(_direction: Vector2 = Vector2.ZERO) -> bool:
 	return false
@@ -94,6 +144,7 @@ func _apply_military_strategy(profile: Dictionary) -> void:
 	defense_bonus += float(effects.get("defense_bonus", 0.0))
 	speed *= 1.0 + float(effects.get("move_speed_ratio", 0.0))
 	military_active_cooldown_reduction = float(effects.get("active_cooldown_reduction", 0.0))
+	active_charge_capacity = maxi(1, int(effects.get("active_charge_capacity", 1)))
 	military_named_damage_ratio = float(effects.get("named_damage_ratio", 0.0))
 	military_pierce_bonus = int(effects.get("pierce_bonus", 0))
 	military_elite_heal_ratio = float(effects.get("elite_heal_ratio", 0.0))
@@ -244,6 +295,9 @@ func drag_charge_ratio() -> float:
 	return 0.0
 
 func is_wusheng_active() -> bool:
+	return false
+
+func is_zhang_fei_ultimate_active() -> bool:
 	return false
 
 func try_block_frontal_projectile(_origin: Vector2) -> bool:

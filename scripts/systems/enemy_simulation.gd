@@ -25,6 +25,9 @@ const DEATH_COLLISION_DAMAGE := 5.0
 const DEATH_COLLISION_KNOCKBACK := 520.0
 const DEATH_COLLISION_RADIUS := 25.0
 const DEATH_COLLISION_MAX_TARGETS := 2
+const LAUNCH_COLLISION_RADIUS := 29.0
+const LAUNCH_DECELERATION := 2100.0
+const LAUNCH_MIN_SPEED := 170.0
 const FORMATION_SQUAD_SIZE := 6
 const FORMATION_SLOT_ANGLE_STEP := 0.0959931
 const FORMATION_SECTOR_ANGLES := [-PI * 0.5, PI, 0.0]
@@ -116,6 +119,14 @@ var death_states := PackedByteArray()
 var death_timers := PackedFloat32Array()
 var death_velocities: Array[Vector2] = []
 var death_impact_charges := PackedByteArray()
+var launch_timers := PackedFloat32Array()
+var launch_durations := PackedFloat32Array()
+var launch_velocities: Array[Vector2] = []
+var launch_collision_damages := PackedFloat32Array()
+var launch_collision_knockbacks := PackedFloat32Array()
+var launch_collision_charges := PackedByteArray()
+var launch_relay_charges := PackedByteArray()
+var launch_hit_targets: Array[Dictionary] = []
 var forced_displacement_timers := PackedFloat32Array()
 var forced_displacement_velocities: Array[Vector2] = []
 var hit_feedback_timers := PackedFloat32Array()
@@ -184,6 +195,14 @@ func _ready() -> void:
 	death_timers.resize(CAPACITY)
 	death_velocities.resize(CAPACITY)
 	death_impact_charges.resize(CAPACITY)
+	launch_timers.resize(CAPACITY)
+	launch_durations.resize(CAPACITY)
+	launch_velocities.resize(CAPACITY)
+	launch_collision_damages.resize(CAPACITY)
+	launch_collision_knockbacks.resize(CAPACITY)
+	launch_collision_charges.resize(CAPACITY)
+	launch_relay_charges.resize(CAPACITY)
+	launch_hit_targets.resize(CAPACITY)
 	forced_displacement_timers.resize(CAPACITY)
 	forced_displacement_velocities.resize(CAPACITY)
 	hit_feedback_timers.resize(CAPACITY)
@@ -222,6 +241,7 @@ func _ready() -> void:
 		death_timers[id] = 0.0
 		death_velocities[id] = Vector2.ZERO
 		death_impact_charges[id] = 0
+		_clear_launch_state(id)
 		forced_displacement_timers[id] = 0.0
 		forced_displacement_velocities[id] = Vector2.ZERO
 		hit_feedback_timers[id] = 0.0
@@ -286,6 +306,7 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 		death_timers[id] = 0.0
 		death_velocities[id] = Vector2.ZERO
 		death_impact_charges[id] = 0
+		_clear_launch_state(id)
 		forced_displacement_timers[id] = 0.0
 		forced_displacement_velocities[id] = Vector2.ZERO
 		hit_feedback_timers[id] = 0.0
@@ -360,6 +381,7 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	death_timers[id] = 0.0
 	death_velocities[id] = Vector2.ZERO
 	death_impact_charges[id] = 0
+	_clear_launch_state(id)
 	forced_displacement_timers[id] = 0.0
 	forced_displacement_velocities[id] = Vector2.ZERO
 	hit_feedback_timers[id] = 0.0
@@ -414,6 +436,9 @@ func tick(delta: float, player_position: Vector2) -> void:
 		if active[id] == 0:
 			if death_states[id] != DeathState.NONE:
 				_tick_dying(id, delta)
+			continue
+		if launch_timers[id] > 0.0:
+			_tick_enemy_launch(id, delta)
 			continue
 		cooldowns[id] -= delta
 		if types[id] == EnemyType.CAVALRY:
@@ -505,6 +530,7 @@ func freeze_for_cinematic() -> void:
 		recoil_velocities[id] = Vector2.ZERO
 		forced_displacement_timers[id] = 0.0
 		forced_displacement_velocities[id] = Vector2.ZERO
+		_clear_launch_state(id)
 		hurt_timers[id] = 0.0
 		hit_feedback_timers[id] = 0.0
 		hit_feedback_durations[id] = 0.0
@@ -609,6 +635,109 @@ func apply_hit(id: int, value: float, direction: Vector2, knockback: float, igno
 	_begin_death(id, direction)
 	return true
 
+func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, collision_damage: float, collision_knockback: float, collision_targets: int, relay_count: int = 0) -> bool:
+	if id < 0 or id >= CAPACITY or (active[id] == 0 and death_states[id] == DeathState.NONE):
+		return false
+	if not _can_be_launched(id) or direction.length_squared() <= 0.01:
+		return false
+	if speed <= 0.0 or duration <= 0.0 or collision_targets <= 0:
+		return false
+	var normalized_direction := direction.normalized()
+	launch_timers[id] = duration
+	launch_durations[id] = duration
+	launch_velocities[id] = normalized_direction * speed
+	launch_collision_damages[id] = maxf(1.0, collision_damage)
+	launch_collision_knockbacks[id] = maxf(0.0, collision_knockback)
+	launch_collision_charges[id] = clampi(collision_targets, 1, 8)
+	launch_relay_charges[id] = clampi(relay_count, 0, 1)
+	launch_hit_targets[id].clear()
+	facing_directions[id] = normalized_direction
+	attack_states[id] = AttackState.APPROACH
+	attack_timers[id] = 0.0
+	current_attack_kinds[id] = ""
+	knockback_velocities[id] = Vector2.ZERO
+	forced_displacement_timers[id] = 0.0
+	forced_displacement_velocities[id] = Vector2.ZERO
+	hurt_timers[id] = maxf(hurt_timers[id], duration)
+	hit_feedback_strengths[id] = maxf(hit_feedback_strengths[id], 1.65)
+	hit_feedback_durations[id] = maxf(hit_feedback_durations[id], 0.14)
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	return true
+
+func is_enemy_launched(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and launch_timers[id] > 0.0
+
+func launch_visual_offset(id: int) -> Vector2:
+	if not is_enemy_launched(id) or launch_durations[id] <= 0.0:
+		return Vector2.ZERO
+	var progress := clampf(1.0 - launch_timers[id] / launch_durations[id], 0.0, 1.0)
+	return Vector2.UP * sin(progress * PI) * 38.0
+
+func _tick_enemy_launch(id: int, delta: float) -> void:
+	launch_timers[id] = maxf(0.0, launch_timers[id] - delta)
+	var velocity := launch_velocities[id]
+	var direction := velocity.normalized()
+	if direction.length_squared() > 0.01:
+		var start_position := positions[id]
+		positions[id] += velocity * delta
+		launch_velocities[id] = velocity.move_toward(Vector2.ZERO, LAUNCH_DECELERATION * delta)
+		_clamp_position(id)
+		_apply_launch_collision(id, direction, start_position, positions[id])
+	if launch_timers[id] <= 0.0 or launch_velocities[id].length() < LAUNCH_MIN_SPEED:
+		_stop_enemy_launch(id)
+
+func _apply_launch_collision(source_id: int, direction: Vector2, start_position: Vector2, end_position: Vector2) -> void:
+	if launch_collision_charges[source_id] <= 0:
+		return
+	var target_id := -1
+	var nearest_travel := INF
+	var travel_distance := start_position.distance_to(end_position)
+	for candidate_id in range(CAPACITY):
+		if candidate_id == source_id or active[candidate_id] == 0 or launch_hit_targets[source_id].has(candidate_id):
+			continue
+		var offset := positions[candidate_id] - start_position
+		var forward_travel := offset.dot(direction)
+		if forward_travel < -LAUNCH_COLLISION_RADIUS or forward_travel > travel_distance + LAUNCH_COLLISION_RADIUS:
+			continue
+		var closest_position := start_position + direction * clampf(forward_travel, 0.0, travel_distance)
+		if positions[candidate_id].distance_squared_to(closest_position) > LAUNCH_COLLISION_RADIUS * LAUNCH_COLLISION_RADIUS or forward_travel >= nearest_travel:
+			continue
+		target_id = candidate_id
+		nearest_travel = forward_travel
+	if target_id < 0:
+		return
+	launch_hit_targets[source_id][target_id] = true
+	launch_collision_charges[source_id] -= 1
+	var target_defeated := apply_hit(target_id, launch_collision_damages[source_id], direction, launch_collision_knockbacks[source_id], true, 48.0, 0.10)
+	enemy_death_collision.emit(positions[target_id], direction)
+	if target_defeated and launch_relay_charges[source_id] > 0:
+		var inherited_speed := maxf(LAUNCH_MIN_SPEED, launch_velocities[source_id].length() * 0.78)
+		var inherited_duration := maxf(0.22, launch_timers[source_id] * 0.82)
+		var inherited_targets := mini(2, launch_collision_charges[source_id] + 1)
+		launch_relay_charges[source_id] = 0
+		if launch_enemy(target_id, direction, inherited_speed, inherited_duration, launch_collision_damages[source_id] * 0.85, launch_collision_knockbacks[source_id] * 0.82, inherited_targets, 0):
+			_stop_enemy_launch(source_id)
+
+func _stop_enemy_launch(id: int) -> void:
+	var was_active := active[id] == 1
+	_clear_launch_state(id)
+	if was_active:
+		hurt_timers[id] = maxf(hurt_timers[id], 0.12)
+		decision_timers[id] = 0.0
+
+func _can_be_launched(id: int) -> bool:
+	return types[id] not in [EnemyType.SHIELD, EnemyType.ELITE, EnemyType.GUARD, EnemyType.CAVALRY]
+
+func _clear_launch_state(id: int) -> void:
+	launch_timers[id] = 0.0
+	launch_durations[id] = 0.0
+	launch_velocities[id] = Vector2.ZERO
+	launch_collision_damages[id] = 0.0
+	launch_collision_knockbacks[id] = 0.0
+	launch_collision_charges[id] = 0
+	launch_relay_charges[id] = 0
+	launch_hit_targets[id] = {}
+
 func get_armor(id: int) -> float:
 	return armor[id]
 
@@ -658,6 +787,8 @@ func get_behavior_layer(id: int) -> int:
 func has_movement_intent(id: int) -> bool:
 	if id < 0 or id >= CAPACITY or active[id] == 0:
 		return false
+	if launch_timers[id] > 0.0:
+		return false
 	if attack_states[id] != AttackState.APPROACH or hurt_timers[id] > 0.0:
 		return false
 	return movement_targets[id].distance_squared_to(positions[id]) > 4.0
@@ -665,11 +796,13 @@ func has_movement_intent(id: int) -> bool:
 func is_being_displaced(id: int) -> bool:
 	if id < 0 or id >= CAPACITY or active[id] == 0:
 		return false
-	return recoil_timers[id] > 0.0 or forced_displacement_timers[id] > 0.0 or knockback_velocities[id].length_squared() > 16.0
+	return launch_timers[id] > 0.0 or recoil_timers[id] > 0.0 or forced_displacement_timers[id] > 0.0 or knockback_velocities[id].length_squared() > 16.0
 
 func get_knockback_direction(id: int) -> Vector2:
 	if id < 0 or id >= CAPACITY:
 		return Vector2.ZERO
+	if launch_timers[id] > 0.0:
+		return launch_velocities[id].normalized()
 	if forced_displacement_timers[id] > 0.0:
 		return forced_displacement_velocities[id].normalized()
 	if recoil_timers[id] > 0.0:
@@ -781,18 +914,19 @@ func gold_reward(enemy_type: int) -> int:
 func _begin_death(id: int, direction: Vector2) -> void:
 	var type := types[id]
 	var at := positions[id]
+	var preserves_launch := launch_timers[id] > 0.0
 	active[id] = 0
 	active_count -= 1
 	if boss_guard_flags[id] == 1:
 		boss_guard_flags[id] = 0
 		boss_guard_count -= 1
-	death_states[id] = DeathState.FALLING
+	death_states[id] = DeathState.LAUNCHED if preserves_launch else DeathState.FALLING
 	death_timers[id] = DEATH_DISPLAY_DURATION
 	death_velocities[id] = Vector2.ZERO
 	death_impact_charges[id] = 0
 	forced_displacement_timers[id] = 0.0
 	forced_displacement_velocities[id] = Vector2.ZERO
-	if direction.length_squared() > 0.01 and randf() <= DEATH_LAUNCH_CHANCE:
+	if not preserves_launch and direction.length_squared() > 0.01 and randf() <= DEATH_LAUNCH_CHANCE:
 		death_states[id] = DeathState.LAUNCHED
 		death_velocities[id] = direction.normalized() * DEATH_LAUNCH_SPEED
 		death_impact_charges[id] = DEATH_COLLISION_MAX_TARGETS
@@ -800,7 +934,9 @@ func _begin_death(id: int, direction: Vector2) -> void:
 
 func _tick_dying(id: int, delta: float) -> void:
 	death_timers[id] = maxf(0.0, death_timers[id] - delta)
-	if death_states[id] == DeathState.LAUNCHED:
+	if launch_timers[id] > 0.0:
+		_tick_enemy_launch(id, delta)
+	elif death_states[id] == DeathState.LAUNCHED:
 		var direction := death_velocities[id].normalized()
 		positions[id] += death_velocities[id] * delta
 		death_velocities[id] = death_velocities[id].move_toward(Vector2.ZERO, DEATH_LAUNCH_DECELERATION * delta)
@@ -828,6 +964,7 @@ func _recycle_dead(id: int) -> void:
 	death_timers[id] = 0.0
 	death_velocities[id] = Vector2.ZERO
 	death_impact_charges[id] = 0
+	_clear_launch_state(id)
 	free_ids.append(id)
 
 func _rebuild_spatial_cells() -> void:

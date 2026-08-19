@@ -7,6 +7,7 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 		return _resolve_displacement_only(request, hits, enemies)
 	var empowered_targets := _select_empowered_knockback_targets(request, hits)
 	var resolved_hits := 0
+	var launched_targets := 0
 	for id in hits:
 		if request.excluded_enemy_ids.has(id):
 			continue
@@ -26,6 +27,18 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 		if empowered_targets.has(id):
 			knockback *= request.empowered_knockback_multiplier
 		enemies.apply_hit(id, damage, knockback_direction, knockback, request.ignore_knockback_resistance, request.forced_displacement, request.forced_displacement_duration)
+		if request.launches_enemies and (request.launch_target_limit <= 0 or launched_targets < request.launch_target_limit):
+			if enemies.launch_enemy(
+				id,
+				knockback_direction,
+				request.launch_speed,
+				request.launch_duration,
+				maxf(1.0, damage * request.launch_collision_damage_multiplier),
+				request.launch_collision_knockback,
+				request.launch_collision_max_targets,
+				request.launch_relay_count
+			):
+				launched_targets += 1
 		if request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
 			enemies.apply_slow(id, request.slow_multiplier, request.slow_duration)
 		if request.one_hit_per_target:

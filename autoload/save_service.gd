@@ -10,6 +10,7 @@ const PROFILE_BACKUP_PATH := "user://profile.json.bak"
 const PROFILE_TEMP_PATH := "user://profile.json.tmp"
 const CURRENT_SAVE_VERSION := 2
 const PROTOTYPE_HERO_GRANT := ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao", "huang_zhong"]
+const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := true
 
 var profile: Dictionary = {
 	"save_version": CURRENT_SAVE_VERSION,
@@ -54,6 +55,8 @@ func has_completed_chapter(chapter_id: String) -> bool:
 	return (profile.get("completed_chapters", []) as Array).has(chapter_id)
 
 func is_story_chapter_unlocked(chapter: int) -> bool:
+	if LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS:
+		return true
 	if chapter <= 1:
 		return true
 	if chapter == 2 and has_completed_chapter("changban"):
@@ -61,6 +64,8 @@ func is_story_chapter_unlocked(chapter: int) -> bool:
 	return has_completed_chapter("story_%02d" % (chapter - 1))
 
 func is_battlefield_unlocked(battlefield_id: String) -> bool:
+	if LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS:
+		return true
 	match battlefield_id:
 		"changban", "hulao": return true
 		"bowangpo": return has_completed_chapter("changban") or has_completed_chapter("story_01")
@@ -98,6 +103,9 @@ func can_purchase_strategy(strategy_id: String) -> bool:
 	var definition := MILITARY_STRATEGY.definition_for(strategy_id)
 	var current_rank := strategy_rank(strategy_id)
 	if definition.is_empty() or current_rank >= int(definition.get("max_rank", 0)):
+		return false
+	var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
+	if not prerequisite_id.is_empty() and strategy_rank(prerequisite_id) <= 0:
 		return false
 	return int(profile.get("military_merit", 0)) >= MILITARY_STRATEGY.cost_for(strategy_id, current_rank)
 

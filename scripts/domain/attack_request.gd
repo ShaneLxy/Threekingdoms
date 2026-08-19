@@ -49,6 +49,17 @@ var grants_breakout_guard_on_hit := false
 var slow_multiplier := 1.0
 var slow_duration := 0.0
 var clears_projectiles := false
+# Some attacks turn ordinary soldiers into moving collision projectiles.  This
+# stays on the attack request so hero-specific launch behavior remains outside
+# the shared enemy simulation.
+var launches_enemies := false
+var launch_speed := 0.0
+var launch_duration := 0.0
+var launch_collision_damage_multiplier := 0.0
+var launch_collision_knockback := 0.0
+var launch_collision_max_targets := 0
+var launch_relay_count := 0
+var launch_target_limit := 0
 
 static func line(at: Vector2, toward: Vector2, length: float, line_width: float, damage_multiplier: float, max_targets: int, name: String) -> AttackRequest:
 	var request := AttackRequest.new()

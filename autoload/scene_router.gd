@@ -13,20 +13,24 @@ func start_run(mode: String, battlefield_id: String = "changban", story_chapter:
 	active_mode = mode
 	active_battlefield_id = battlefield_id
 	active_story_chapter = clampi(story_chapter, 1, 6)
+	LoadingOverlay.show_transition("正在点兵 · 奔赴战场")
 	get_tree().change_scene_to_file(RUN_SCENE)
 
 func restart_run() -> void:
+	LoadingOverlay.show_transition("正在重整旗鼓")
 	get_tree().reload_current_scene()
 
 func go_home() -> void:
+	LoadingOverlay.show_transition("正在回营 · 整备军务")
 	get_tree().change_scene_to_file(HOME_SCENE)
 
 func is_map_editor_available() -> bool:
-	return OS.has_feature("editor") or OS.is_debug_build()
+	return OS.has_feature("pc") and (OS.has_feature("editor") or OS.is_debug_build())
 
 func open_map_editor() -> void:
 	if not is_map_editor_available():
 		return
+	LoadingOverlay.show_transition("正在展开舆图")
 	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
 
 func finish_run(result: Dictionary) -> void:

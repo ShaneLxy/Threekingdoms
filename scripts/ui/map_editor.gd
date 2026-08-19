@@ -31,6 +31,8 @@ var notice_time := 0.0
 var map_dirty := false
 var palette_group := "map"
 var palette_page := 0
+var cached_ground_layers: Array[Dictionary] = []
+var ground_load_error := ""
 var palette_buttons: Array[Button] = []
 var toolbar_controls: Array[Control] = []
 var selected_info_label: Label
@@ -50,8 +52,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	current_battlefield_id = BATTLEFIELD_LAYOUT.canonical_id(SceneRouter.active_battlefield_id)
+	_refresh_ground_layers()
 	_load_map()
 	_build_controls()
+	LoadingOverlay.finish_transition()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -79,7 +83,7 @@ func _build_controls() -> void:
 	var save := _make_button("保存本地", Vector2(464.0, 18.0), Vector2(104.0, 42.0), Callable(self, "_save_map"), 14)
 	var publish := _make_button("发布默认", Vector2(578.0, 18.0), Vector2(104.0, 42.0), Callable(self, "_publish_default_map"), 14)
 	var select := _make_button("选择模式", Vector2(692.0, 18.0), Vector2(100.0, 42.0), Callable(self, "_select_mode"), 14)
-	collision_mode_button = _make_button("绘制阻挡区", Vector2(802.0, 18.0), Vector2(110.0, 42.0), Callable(self, "_toggle_collision_mode"), 14)
+	collision_mode_button = _make_button("绘制禁行区", Vector2(802.0, 18.0), Vector2(110.0, 42.0), Callable(self, "_toggle_collision_mode"), 14)
 	var cancel_place := _make_button("取消操作", Vector2(922.0, 18.0), Vector2(100.0, 42.0), Callable(self, "_cancel_placement"), 14)
 	var zoom_out := _make_button("缩小", Vector2(1032.0, 18.0), Vector2(64.0, 42.0), Callable(self, "_scale_selected").bind(-0.1), 14)
 	var zoom_in := _make_button("放大", Vector2(1104.0, 18.0), Vector2(64.0, 42.0), Callable(self, "_scale_selected").bind(0.1), 14)
@@ -109,7 +113,7 @@ func _create_palette() -> void:
 	palette_description = Label.new()
 	palette_description.position = Vector2(18.0, 116.0)
 	palette_description.size = Vector2(214.0, 34.0)
-	palette_description.text = "地皮已自动组合 · 选择建筑或装饰后放置"
+	palette_description.text = _map_editing_hint()
 	palette_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	palette_description.add_theme_font_size_override("font_size", 12)
 	palette_description.add_theme_color_override("font_color", MUTED)
@@ -149,7 +153,7 @@ func _rebuild_palette_buttons() -> void:
 	if palette_title != null:
 		palette_title.text = "公共素材库" if palette_group == "common" else ("跨图素材库" if palette_group == "other" else "本图专属素材")
 	if palette_description != null:
-		palette_description.text = "%s · 地皮自动组合，仅编辑建筑、装饰和阻挡区" % BATTLEFIELD_LAYOUT.title_for(current_battlefield_id)
+		palette_description.text = "%s · %s" % [BATTLEFIELD_LAYOUT.title_for(current_battlefield_id), _map_editing_hint()]
 	if map_assets_button != null:
 		map_assets_button.disabled = palette_group == "map"
 	if common_assets_button != null:
@@ -194,6 +198,7 @@ func _switch_battlefield(index: int) -> void:
 	palette_group = "map"
 	palette_page = 0
 	map_dirty = false
+	_refresh_ground_layers()
 	_load_map()
 	_update_mode_button()
 	_rebuild_palette_buttons()
@@ -255,14 +260,14 @@ func _toggle_collision_mode() -> void:
 	moving_zone = false
 	resizing_zone = false
 	_update_mode_button()
-	_set_notice("阻挡区模式：拖动绘制矩形，可选择、移动、调整大小或删除" if collision_mode else "已返回素材选择模式")
+	_set_notice("禁行区模式：拖动绘制矩形，可选择、移动、调整大小或删除" if collision_mode else "已返回素材选择模式")
 	_update_selected_info()
 	queue_redraw()
 
 func _update_mode_button() -> void:
 	if collision_mode_button == null:
 		return
-	collision_mode_button.text = "返回素材模式" if collision_mode else "绘制阻挡区"
+	collision_mode_button.text = "返回素材模式" if collision_mode else "绘制禁行区"
 	collision_mode_button.disabled = false
 
 func _cancel_placement() -> void:
@@ -335,6 +340,32 @@ func _asset_definition(asset_id: String) -> Dictionary:
 
 func _asset_label(asset_id: String) -> String:
 	return str(_asset_definition(asset_id).get("label", "素材"))
+
+func _map_editing_hint() -> String:
+	if BATTLEFIELD_LAYOUT.has_baked_scene_for(current_battlefield_id):
+		return "完整底图已加载 · 红色禁行区外为可活动范围"
+	return "地皮自动组合 · 可编辑建筑、装饰和禁行区"
+
+func _refresh_ground_layers() -> void:
+	cached_ground_layers.clear()
+	ground_load_error = ""
+	var missing_paths: Array[String] = []
+	for raw_layer in BATTLEFIELD_LAYOUT.ground_layers_for(current_battlefield_id):
+		if not raw_layer is Dictionary:
+			continue
+		var layer := (raw_layer as Dictionary).duplicate(true)
+		var path := str(layer.get("path", ""))
+		var texture := ResourceLoader.load(path, "Texture2D", ResourceLoader.CACHE_MODE_REPLACE) as Texture2D
+		if texture == null:
+			if not path.is_empty():
+				missing_paths.append(path)
+			continue
+		layer["texture"] = texture
+		cached_ground_layers.append(layer)
+	if not missing_paths.is_empty():
+		ground_load_error = "底图加载失败：%s" % "、".join(missing_paths)
+	if cached_ground_layers.is_empty() and ground_load_error.is_empty():
+		ground_load_error = "未配置地皮底图：%s" % current_battlefield_id
 
 func _texture_for(asset_id: String) -> Texture2D:
 	return load(str(_asset_definition(asset_id).get("path", ""))) as Texture2D
@@ -599,7 +630,7 @@ func _draw() -> void:
 	draw_rect(background, Color(0.02, 0.025, 0.03, 0.62))
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(166.0, 47.0), "%s · 地图编辑器" % BATTLEFIELD_LAYOUT.title_for(current_battlefield_id), HORIZONTAL_ALIGNMENT_LEFT, -1, 25, GOLD_BRIGHT)
-	draw_string(font, Vector2(166.0, 70.0), "地皮自动组合 · 建筑仅作背景 · 发布默认地图后将随 APK 一同打包", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("a9c2c7"))
+	draw_string(font, Vector2(166.0, 70.0), _map_editing_hint(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("a9c2c7"))
 	_draw_palette_panel()
 	_draw_map_canvas(font)
 	if notice_time > 0.0 and not notice.is_empty():
@@ -617,24 +648,29 @@ func _draw_map_canvas(font: Font) -> void:
 		draw_line(MAP_RECT.position + Vector2(x, 0), MAP_RECT.position + Vector2(x, MAP_RECT.size.y), Color(1.0, 1.0, 1.0, 0.05), 1.0)
 	for y in range(0, int(MAP_RECT.size.y) + 1, 64):
 		draw_line(MAP_RECT.position + Vector2(0, y), MAP_RECT.position + Vector2(MAP_RECT.size.x, y), Color(1.0, 1.0, 1.0, 0.05), 1.0)
-	var order: Array[int] = []
-	for index in range(objects.size()):
-		order.append(index)
-	order.sort_custom(Callable(self, "_sort_object_indices"))
-	for index in order:
-		_draw_object(index)
+	if not BATTLEFIELD_LAYOUT.has_baked_scene_for(current_battlefield_id):
+		var order: Array[int] = []
+		for index in range(objects.size()):
+			order.append(index)
+		order.sort_custom(Callable(self, "_sort_object_indices"))
+		for index in order:
+			_draw_object(index)
 	_draw_collision_zones()
 	draw_string(font, MAP_RECT.position + Vector2(14.0, 26.0), "地皮：%s" % BATTLEFIELD_LAYOUT.ground_summary_for(current_battlefield_id), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("e6d4a6"))
 
 func _draw_auto_ground_layers(target: Rect2) -> void:
 	var drew_base := false
-	for layer in BATTLEFIELD_LAYOUT.ground_layers_for(current_battlefield_id):
-		var texture := load(str(layer.get("path", ""))) as Texture2D
+	for layer in cached_ground_layers:
+		var texture := layer.get("texture") as Texture2D
 		if texture == null:
 			continue
 		var tint := Color(str(layer.get("tint", "ffffff")))
 		tint.a = clampf(float(layer.get("opacity", 1.0)), 0.0, 1.0)
 		var role := str(layer.get("role", "blend"))
+		if role == "canvas":
+			draw_texture_rect(texture, target, false, tint)
+			drew_base = true
+			continue
 		if role == "base":
 			draw_texture_rect(texture, target, true, tint)
 			drew_base = true
@@ -651,6 +687,8 @@ func _draw_auto_ground_layers(target: Rect2) -> void:
 			draw_texture_rect(texture, region_rect, true, tint)
 	if not drew_base:
 		draw_rect(target, Color("31372a"))
+		if not ground_load_error.is_empty():
+			draw_string(ThemeDB.fallback_font, target.position + Vector2(18.0, 58.0), ground_load_error, HORIZONTAL_ALIGNMENT_LEFT, target.size.x - 36.0, 14, Color("ff9d89"))
 
 func _sort_object_indices(first: int, second: int) -> bool:
 	return float(objects[first].get("position", Vector2.ZERO).y) < float(objects[second].get("position", Vector2.ZERO).y)
@@ -672,7 +710,7 @@ func _draw_collision_zones() -> void:
 		var selected := collision_mode and index == selected_zone_index
 		draw_rect(rect, Color(0.78, 0.18, 0.14, 0.27 if selected else 0.18))
 		draw_rect(rect, Color("ef7563") if selected else OBSTACLE_RED, false, 3.0 if selected else 2.0)
-		draw_string(ThemeDB.fallback_font, rect.position + Vector2(6.0, 17.0), "阻挡区 %d" % (index + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("ffe0bf"))
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(6.0, 17.0), "禁行区 %d" % (index + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("ffe0bf"))
 		if selected:
 			var handle := _zone_resize_handle(rect)
 			draw_rect(handle, Color("f4d58d", 0.9))

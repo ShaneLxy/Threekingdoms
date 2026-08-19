@@ -24,7 +24,7 @@ const BRANCHES := [
 		"id": "command",
 		"title": "军令营",
 		"subtitle": "整肃号令，改善主动技能与无双节奏。",
-		"nodes": ["command_manual", "command_drum", "command_opening", "command_bounty"],
+		"nodes": ["command_manual", "command_reserve", "command_drum", "command_opening", "command_bounty"],
 	},
 ]
 
@@ -42,6 +42,7 @@ const DEFINITIONS := {
 	"march_recovery": {"branch": "march", "title": "战阵回息", "description": "升级时额外回复最大生命的 5%。", "max_rank": 1, "costs": [300]},
 	"march_scavenge": {"branch": "march", "title": "行军缴获", "description": "本局拾取的军功 +10%；行军营核心节点。", "max_rank": 1, "costs": [850]},
 	"command_manual": {"branch": "command", "title": "战法操典", "description": "全英雄主动技能基础冷却 -0.25 秒。", "max_rank": 2, "costs": [220, 360]},
+	"command_reserve": {"branch": "command", "title": "蓄势待发", "description": "主动技能可储存使用次数：1阶最多 2 次，2阶最多 3 次。", "max_rank": 2, "costs": [300, 520]},
 	"command_drum": {"branch": "command", "title": "鼓角激励", "description": "全英雄获得的无双能量 +5%。", "max_rank": 2, "costs": [240, 400]},
 	"command_opening": {"branch": "command", "title": "先声夺势", "description": "每局开战时获得 5 点无双能量。", "max_rank": 2, "costs": [260, 420]},
 	"command_bounty": {"branch": "command", "title": "兵符奖赏", "description": "击败精英额外获得 6 点无双能量；军令营核心节点。", "max_rank": 1, "costs": [900]},
@@ -68,6 +69,15 @@ static func cost_for(strategy_id: String, current_rank: int) -> int:
 		return 0
 	return int(costs[current_rank])
 
+static func prerequisite_for(strategy_id: String) -> String:
+	for branch_variant in BRANCHES:
+		var branch: Dictionary = branch_variant as Dictionary
+		var nodes: Array = branch.get("nodes", []) as Array
+		var node_index := nodes.find(strategy_id)
+		if node_index > 0:
+			return str(nodes[node_index - 1])
+	return ""
+
 static func effects_for_profile(profile: Dictionary) -> Dictionary:
 	var ranks: Dictionary = profile.get("military_strategies", {}) as Dictionary
 	var rank := func(strategy_id: String) -> int:
@@ -85,6 +95,7 @@ static func effects_for_profile(profile: Dictionary) -> Dictionary:
 		"level_heal_ratio": rank.call("march_recovery") * 0.05,
 		"gold_ratio": rank.call("march_scavenge") * 0.10,
 		"active_cooldown_reduction": rank.call("command_manual") * 0.25,
+		"active_charge_capacity": 1 + rank.call("command_reserve"),
 		"ultimate_energy_ratio": 1.0 + rank.call("command_drum") * 0.05,
 		"starting_ultimate_energy": rank.call("command_opening") * 5.0,
 		"elite_ultimate_energy": rank.call("command_bounty") * 6.0,

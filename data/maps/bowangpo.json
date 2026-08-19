@@ -1,18 +1,82 @@
 {
+  "collision_zones": [
+    {
+      "h": 97.0,
+      "w": 120.0,
+      "x": 0.0,
+      "y": 185.0
+    },
+    {
+      "h": 176.0,
+      "w": 179.0,
+      "x": 821.0,
+      "y": 8.0
+    },
+    {
+      "h": 55.0,
+      "w": 156.0,
+      "x": 170.0,
+      "y": 0.0
+    },
+    {
+      "h": 85.0,
+      "w": 142.0,
+      "x": 564.0,
+      "y": 2.0
+    },
+    {
+      "h": 62.0,
+      "w": 148.0,
+      "x": 261.0,
+      "y": 35.0
+    }
+  ],
   "map_id": "bowangpo",
   "objects": [
-    {"id": "rock_platform", "position": {"x": 178.0, "y": 124.0}, "scale": 0.92, "obstacle": true},
-    {"id": "rock_platform", "position": {"x": 830.0, "y": 458.0}, "scale": 0.86, "obstacle": true},
-    {"id": "fire_path", "position": {"x": 504.0, "y": 280.0}, "scale": 1.14, "obstacle": false},
-    {"id": "dead_tree", "position": {"x": 160.0, "y": 372.0}, "scale": 0.78, "obstacle": true},
-    {"id": "burnt_log", "position": {"x": 814.0, "y": 236.0}, "scale": 0.76, "obstacle": true},
-    {"id": "dead_log", "position": {"x": 312.0, "y": 474.0}, "scale": 0.78, "obstacle": true}
-  ],
-  "collision_zones": [
-    {"x": 112.0, "y": 76.0, "w": 134.0, "h": 100.0},
-    {"x": 768.0, "y": 404.0, "w": 142.0, "h": 86.0},
-    {"x": 106.0, "y": 326.0, "w": 108.0, "h": 94.0},
-    {"x": 740.0, "y": 188.0, "w": 142.0, "h": 76.0},
-    {"x": 240.0, "y": 438.0, "w": 148.0, "h": 62.0}
+    {
+      "id": "rock_platform",
+      "obstacle": true,
+      "position": {
+        "x": 830.0,
+        "y": 458.0
+      },
+      "scale": 0.86
+    },
+    {
+      "id": "fire_path",
+      "obstacle": false,
+      "position": {
+        "x": 504.0,
+        "y": 280.0
+      },
+      "scale": 1.14
+    },
+    {
+      "id": "dead_tree",
+      "obstacle": true,
+      "position": {
+        "x": 160.0,
+        "y": 372.0
+      },
+      "scale": 0.78
+    },
+    {
+      "id": "burnt_log",
+      "obstacle": true,
+      "position": {
+        "x": 814.0,
+        "y": 236.0
+      },
+      "scale": 0.76
+    },
+    {
+      "id": "dead_log",
+      "obstacle": true,
+      "position": {
+        "x": 312.0,
+        "y": 474.0
+      },
+      "scale": 0.78
+    }
   ]
 }

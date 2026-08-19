@@ -151,6 +151,7 @@ func _ready() -> void:
 	input_router.pause_requested.connect(_on_pause_requested)
 	if director.is_boss_trial():
 		call_deferred("_start_boss_trial")
+	LoadingOverlay.finish_transition()
 
 func _exit_tree() -> void:
 	AudioService.stop_hero_firewheel_loop()
@@ -249,7 +250,7 @@ func _world_bounds_for_mode(mode: String) -> Rect2:
 	return BOWANGPO_WORLD_BOUNDS if _active_battlefield_id() == "bowangpo" else WORLD_BOUNDS
 
 func _active_battlefield_id() -> String:
-	return SceneRouter.active_battlefield_id if SceneRouter.active_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "hulao"] else "changban"
+	return SceneRouter.active_battlefield_id if SceneRouter.active_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao"] else "changban"
 
 func _capture_enemy_positions() -> Array[Vector2]:
 	var origins: Array[Vector2] = []
@@ -477,6 +478,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 		player_action_clash_consumed = true
 		player.consume_weapon_clash_window()
 	var hit_count := combat.resolve_hero_attack(request, player.base_attack, player.attack_bonus, enemies)
+	var combo_hit_count := hit_count
 	for elite in elites:
 		var elite_id := elite.get_instance_id()
 		var can_hit_elite := not request.one_hit_per_target or not request.hit_elite_ids.has(elite_id)
@@ -491,6 +493,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 			elite_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, elite_damage)
 			var elite_result := elite.receive_player_hit(elite_damage)
 			var elite_actual_damage := float(elite_result.get("damage", 0.0))
+			if elite_actual_damage > 0.0:
+				combo_hit_count += 1
 			if elite_actual_damage > 0.0 and request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
 				elite.apply_slow(maxf(0.35, request.slow_multiplier + 0.10), request.slow_duration * 0.78)
 			var interrupt_elite := bool(elite_result.get("stance_broken", false))
@@ -517,6 +521,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 			boss_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.BOSS, "boss", request, boss_damage)
 			var boss_result := boss.receive_player_hit(boss_damage)
 			var boss_actual_damage := float(boss_result.get("damage", 0.0))
+			if boss_actual_damage > 0.0:
+				combo_hit_count += 1
 			if boss_actual_damage > 0.0 and request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
 				boss.apply_slow(maxf(0.45, request.slow_multiplier + 0.16), request.slow_duration * 0.62)
 			var interrupt_boss := bool(boss_result.get("stance_broken", false))
@@ -539,6 +545,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 		request.breakout_granted = true
 	if hit_count > 0:
 		_record_player_attack_audio(request)
+	if combo_hit_count > 0:
+		hud.record_combo_hits(combo_hit_count)
 	if not request.visual_emitted and not request.suppress_visual_feedback:
 		renderer.add_flash(request)
 		if request.dash_kind == HeroActor.DashKind.ULTIMATE:
@@ -838,11 +846,11 @@ func _audio_action_id_for_request(request: AttackRequest) -> String:
 		"青龙破阵", "青龙断浪": return "active"
 		"武圣刀浪", "武圣震阵", "武圣拖刀震阵": return "ultimate"
 		"威震华夏·横江", "威震华夏·断岳", "威震华夏·斩将": return "ultimate"
-		"蛇矛横扫": return "basic_1"
-		"横矛断阵": return "basic_2"
-		"燕人震退": return "basic_3"
-		"据水断桥": return "active"
-		"当阳怒吼·横断", "当阳怒吼·震地", "当阳怒吼·断喝": return "ultimate"
+		"扫阵横击": return "basic_1"
+		"蛇矛挑阵": return "basic_2"
+		"断阵横掷", "丈八跃砸": return "basic_3"
+		"据水断桥·掀阵", "据水断桥·跃砸": return "active"
+		"万夫莫开·怒喝震阵", "万夫莫开·横扫", "万夫莫开·掀阵", "万夫莫开·断阵": return "ultimate"
 		"银枪点阵": return "basic_1"
 		"流星横挑": return "basic_2"
 		"踏阵突刺": return "basic_3"
@@ -863,7 +871,7 @@ func _audio_action_id_for_request(request: AttackRequest) -> String:
 func _tick_player_move_audio(delta: float, move_direction: Vector2) -> void:
 	var moved := player.position.distance_squared_to(player_last_audio_position) > 0.01
 	player_last_audio_position = player.position
-	var is_regular_movement := moved and move_direction.length_squared() > 0.01 and not player.is_attacking() and player.ultimate_time <= 0.0 and not player.is_path_dashing()
+	var is_regular_movement := moved and move_direction.length_squared() > 0.01 and not player.is_attacking() and (player.ultimate_time <= 0.0 or player.is_zhang_fei_ultimate_active()) and not player.is_path_dashing()
 	if not is_regular_movement:
 		move_sound_cooldown = 0.0
 		return
@@ -905,7 +913,7 @@ func _hitstop_duration(request: AttackRequest, hit_count: int) -> float:
 		return minf(0.135, hitstop + 0.014)
 	if request.label == "威震华夏·斩将":
 		return minf(0.150, hitstop + 0.026)
-	if request.label in ["燕人震退", "据水断桥", "当阳怒吼·震地", "当阳怒吼·断喝"]:
+	if request.label in ["断阵横掷", "丈八跃砸", "据水断桥·掀阵", "据水断桥·跃砸", "万夫莫开·怒喝震阵", "万夫莫开·掀阵", "万夫莫开·断阵"]:
 		return minf(0.155, hitstop + 0.030)
 	if request.label in ["踏阵突刺", "西凉破阵", "银枪奔雷"]:
 		return minf(0.125, hitstop + 0.015)

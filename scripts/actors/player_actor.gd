@@ -13,14 +13,14 @@ const ULTIMATE_FINAL_DASH_DISTANCE := 220.0
 const ULTIMATE_DASH_WIDTH := 54.0
 const ULTIMATE_FINAL_SHOCKWAVE_RANGE := 124.0
 const ULTIMATE_FINAL_SHOCKWAVE_KNOCKBACK := 840.0
-const THIRD_DASH_DISTANCE := 100.0
+const THIRD_DASH_DISTANCE := 112.0
 const THIRD_DASH_DURATION := 0.14
-const THIRD_DASH_WIDTH := 112.0
+const THIRD_DASH_WIDTH := 144.0
 const THIRD_DASH_KNOCKBACK := 460.0
 const THIRD_DASH_FORCED_DISPLACEMENT := 60.0
-# The third-strike flare starts 52 units ahead of Zhao Yun and reaches 110 units at its peak.
-# Keep the moving line hitbox slightly beyond that visible tip.
-const THIRD_DASH_FRONT_REACH := 114.0
+# The third-strike flare reaches well beyond Zhao Yun's body. Keep the moving
+# line hitbox broad enough to cover the visible spear sweep, especially on X.
+const THIRD_DASH_FRONT_REACH := 132.0
 const ACTIVE_DASH_DISTANCE := 230.0
 const ACTIVE_DASH_DURATION := 0.24
 const ACTIVE_DASH_WIDTH := 78.0
@@ -109,6 +109,8 @@ var path_dash_finish: AttackRequest
 var path_dash_recovery_duration := 0.0
 var path_dash_recovery_multiplier := 0.0
 var has_buffered_basic := false
+var buffered_basic_direction := Vector2.ZERO
+var current_move_direction := Vector2.ZERO
 var movement_recovery_remaining := 0.0
 var movement_recovery_multiplier := 0.0
 var breakout_guard_remaining := 0.0
@@ -173,6 +175,8 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	combo_stage = 0
 	combo_window = 0.0
 	active_cooldown = 0.0
+	active_charge_capacity = 1
+	active_charge_count = 1
 	ultimate_energy = 0.0
 	ultimate_time = 0.0
 	ultimate_state = UltimateState.INACTIVE
@@ -212,7 +216,10 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	path_dash_recovery_duration = 0.0
 	path_dash_recovery_multiplier = 0.0
 	current_action = ""
+	clear_basic_attack_movement()
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
+	current_move_direction = Vector2.ZERO
 	movement_recovery_remaining = 0.0
 	movement_recovery_multiplier = 0.0
 	breakout_guard_remaining = 0.0
@@ -273,7 +280,8 @@ func ultimate_ability_label() -> String:
 	return "七进"
 
 func tick(delta: float, move_direction: Vector2) -> void:
-	active_cooldown = maxf(0.0, active_cooldown - delta)
+	current_move_direction = move_direction
+	tick_active_charge_recovery(delta, _active_cooldown_for_current_state())
 	firewheel_cooldown_remaining = maxf(0.0, firewheel_cooldown_remaining - delta)
 	combo_window = maxf(0.0, combo_window - delta)
 	var was_dragon_active := dragon_timer > 0.0
@@ -304,6 +312,8 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		var move_multiplier := _dragon_move_multiplier()
 		if path_dash_remaining > 0.0:
 			_tick_path_dash(delta)
+		elif current_action == "basic" and hit_delay_remaining <= 0.0:
+			tick_basic_attack_movement(delta, move_direction)
 		elif not is_action_locked():
 			_update_facing_from_movement(move_direction)
 			_move(move_direction, speed * move_multiplier * delta)
@@ -321,14 +331,16 @@ func tick(delta: float, move_direction: Vector2) -> void:
 	if was_locked and attack_lock_remaining <= 0.0:
 		_finish_action()
 
-func request_basic(_direction: Vector2 = Vector2.ZERO) -> bool:
+func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	if ultimate_time > 0.0:
 		return false
 	if is_action_locked():
 		if current_action == "basic" and combo_stage < BASIC_COMBO_STAGES and not has_buffered_basic:
 			has_buffered_basic = true
+			buffered_basic_direction = _eight_way_direction(_current_basic_input(direction), last_attack_direction)
 			return true
 		return false
+	_update_facing_from_movement(_current_basic_input(direction))
 	if combo_window <= 0.0:
 		combo_stage = 0
 	combo_stage = (combo_stage % BASIC_COMBO_STAGES) + 1
@@ -336,7 +348,7 @@ func request_basic(_direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_cooldown > 0.0 or ultimate_time > 0.0:
+	if active_charge_count <= 0 or ultimate_time > 0.0:
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -344,7 +356,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 		_cancel_basic_for_skill()
 	active_dash_direction = _eight_way_direction(direction, active_dash_direction)
 	_update_facing_from_movement(active_dash_direction)
-	active_cooldown = active_cooldown_duration
+	consume_active_charge(_active_cooldown_for_current_state())
 	current_action = "active"
 	combat_action_started.emit("active")
 	attack_lock_remaining = 0.72
@@ -474,6 +486,7 @@ func apply_level_up_benefits() -> void:
 func apply_account_progress(profile: Dictionary) -> void:
 	_apply_military_strategy(profile)
 	active_cooldown_duration = maxf(4.0, active_cooldown_duration - military_active_cooldown_reduction)
+	reset_active_charges()
 	basic_pierce_bonus += military_pierce_bonus
 
 func current_stats() -> Dictionary:
@@ -488,6 +501,9 @@ func current_stats() -> Dictionary:
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
+
+func _active_cooldown_for_current_state() -> float:
+	return active_cooldown_duration
 
 func has_dragon() -> bool:
 	return dragon_timer > 0.0 and dragon_stacks > 0
@@ -795,9 +811,11 @@ func _begin_basic(stage: int) -> void:
 		_begin_firewheel()
 		return
 	current_action = "basic"
+	begin_basic_attack_movement()
 	projectile_guard_blocks_remaining = PROJECTILE_GUARD_BLOCK_LIMIT if projectile_guard_level > 0 else 0
 	combo_window = 0.58
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
 	pending_first_strike_shockwave = null
 	combat_action_started.emit("basic_%d" % stage)
 	var request: AttackRequest
@@ -839,6 +857,7 @@ func _begin_firewheel() -> void:
 	combo_stage = 4
 	combo_window = 0.0
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
 	combat_action_started.emit("firewheel")
 	pending_attack = null
 	pending_first_strike_shockwave = null
@@ -1088,6 +1107,8 @@ func _cancel_basic_for_skill() -> void:
 	attack_lock_remaining = 0.0
 	combo_window = 0.0
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
+	clear_basic_attack_movement()
 	current_action = ""
 	combo_stage = 0
 	combat_action_finished.emit("basic_%d" % cancelled_stage)
@@ -1134,13 +1155,20 @@ func _finish_action() -> void:
 		combat_action_finished.emit("basic_%d" % combo_stage)
 	if current_action == "basic" and combo_stage == BASIC_COMBO_STAGES and firewheel_enabled and firewheel_cooldown_remaining <= 0.0 and has_dragon():
 		has_buffered_basic = false
+		clear_basic_attack_movement()
 		_begin_firewheel()
 		return
 	if current_action == "basic" and has_buffered_basic:
+		var next_direction := _current_basic_input()
+		if next_direction.length_squared() <= 0.01:
+			next_direction = buffered_basic_direction
 		has_buffered_basic = false
+		buffered_basic_direction = Vector2.ZERO
+		_update_facing_from_movement(next_direction)
 		combo_stage = (combo_stage % BASIC_COMBO_STAGES) + 1
 		_begin_basic(combo_stage)
 		return
+	clear_basic_attack_movement()
 	if current_action == "active":
 		combat_action_finished.emit("active")
 	current_action = ""
@@ -1183,6 +1211,9 @@ func _configure_dragon_breakout_knockback(request: AttackRequest) -> void:
 func _update_facing_from_movement(move_direction: Vector2) -> void:
 	if absf(move_direction.x) > 0.1:
 		last_attack_direction = Vector2.LEFT if move_direction.x < 0.0 else Vector2.RIGHT
+
+func _current_basic_input(explicit_direction: Vector2 = Vector2.ZERO) -> Vector2:
+	return explicit_direction if explicit_direction.length_squared() > 0.01 else current_move_direction
 
 func _eight_way_direction(direction: Vector2, fallback: Vector2) -> Vector2:
 	if direction.length_squared() <= 0.01:

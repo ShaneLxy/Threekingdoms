@@ -19,6 +19,8 @@ const PLAYER_DEATH_FRAME_02_DURATION := 0.12
 const PLAYER_DEATH_FRAME_03_DURATION := 0.34
 const PLAYER_DEATH_FRAME_04_DURATION := 0.72
 const PLAYER_DEATH_CINEMATIC_DURATION := PLAYER_DEATH_FRAME_01_DURATION + PLAYER_DEATH_FRAME_02_DURATION + PLAYER_DEATH_FRAME_03_DURATION + PLAYER_DEATH_FRAME_04_DURATION
+const ZHANG_FEI_DEATH_FRAME_DURATIONS: Array[float] = [0.12, 0.16, 0.30, 0.72]
+const ZHANG_FEI_DEATH_CINEMATIC_DURATION := 1.30
 const SPEAR_VFX_HEIGHT_OFFSET := Vector2(0, -12)
 const SWEEP_VFX_HEIGHT_OFFSET := Vector2(0, -22)
 const FLASH_DURATION := 0.16
@@ -42,6 +44,16 @@ const GUAN_YU_WALK_LOOP_FRAME_DURATION := 0.10
 const GUAN_YU_DRAG_FRAME_DURATION := 0.09
 const GUAN_YU_DEATH_FRAME_DURATIONS: Array[float] = [0.14, 0.14, 0.18, 0.20, 0.72]
 const GUAN_YU_DEATH_CINEMATIC_DURATION := 1.38
+const ZHANG_FEI_SPRITE_SCALE := 1.0
+const ZHANG_FEI_WORLD_FOOT_OFFSET := Vector2(0, 15)
+const ZHANG_FEI_IDLE_FRAME_DURATION := 0.18
+const ZHANG_FEI_WALK_ENTRY_DURATION := 0.09
+const ZHANG_FEI_WALK_LOOP_FRAME_DURATION := 0.10
+const ZHANG_FEI_ULTIMATE_FRAME_DURATION := 0.085
+const WUSHUANG_READY_FRAME_DURATION := 0.08
+const WUSHUANG_READY_SCALE := 0.50
+const WUSHUANG_READY_OFFSET := Vector2(0, -22)
+const WUSHUANG_READY_SOURCE_CENTER := Vector2(194, 209)
 const ENEMY_SWORD_SPRITE_SCALE := 0.55
 const ENEMY_SWORD_SOURCE_FOOT_ANCHOR := Vector2(64, 116)
 const ENEMY_SWORD_IDLE_FRAME_DURATION := 0.18
@@ -82,6 +94,21 @@ const ENEMY_CROSSBOW_ATTACK_FOOT_ANCHORS := [
 	Vector2(64, 104), Vector2(64, 105), Vector2(64, 105), Vector2(64, 104),
 ]
 const ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS := [Vector2(64, 105), Vector2(64, 104), Vector2(64, 115), Vector2(64, 117)]
+const ENEMY_CAVALRY_SPRITE_SCALE := 0.62
+const ENEMY_CAVALRY_IDLE_FRAME_DURATION := 0.18
+const ENEMY_CAVALRY_WALK_FRAME_DURATION := 0.085
+const ENEMY_CAVALRY_CHARGE_FRAME_DURATION := 0.055
+const ENEMY_CAVALRY_IDLE_FOOT_ANCHORS := [
+	Vector2(64, 119), Vector2(64, 119), Vector2(64, 119), Vector2(64, 119), Vector2(64, 118),
+]
+const ENEMY_CAVALRY_WALK_FOOT_ANCHORS := [
+	Vector2(64, 116), Vector2(64, 116), Vector2(64, 115), Vector2(64, 117), Vector2(64, 116),
+	Vector2(64, 114), Vector2(64, 118), Vector2(64, 116), Vector2(64, 115), Vector2(64, 115),
+]
+const ENEMY_CAVALRY_ATTACK_FOOT_ANCHORS := [Vector2(64, 117), Vector2(64, 118)]
+const ENEMY_CAVALRY_DEATH_FOOT_ANCHORS := [
+	Vector2(64, 119), Vector2(64, 119), Vector2(64, 120), Vector2(64, 122), Vector2(64, 123), Vector2(64, 122),
+]
 # These values are calibrated from each source frame's opaque pixel height, not its canvas size.
 # They keep elites at 1.12x and Zhang He at 1.20x Zhao Yun's visible idle height.
 const ELITE_XIAHOU_EN_SPRITE_SCALE := 0.528
@@ -159,6 +186,15 @@ const PLAYER_DEATH_TEXTURES := [
 	preload("res://assets/art/characters/zhao_yun/sprites/death_right/zhaoyun-death-right-03.png"),
 	preload("res://assets/art/characters/zhao_yun/sprites/death_right/zhaoyun-death-right-04.png"),
 ]
+const ZHANG_FEI_DEATH_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/death_right/zhang-fei-death-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/death_right/zhang-fei-death-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/death_right/zhang-fei-death-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/death_right/zhang-fei-death-04.png"),
+]
+const ZHANG_FEI_DEATH_FOOT_ANCHORS := [
+	Vector2(49, 67), Vector2(49, 68), Vector2(49, 69), Vector2(49, 70),
+]
 const PLAYER_WALK_TEXTURES := [
 	preload("res://assets/art/characters/zhao_yun/sprites/walk_right/zhaoyun-walk-right-01.png"),
 	preload("res://assets/art/characters/zhao_yun/sprites/walk_right/zhaoyun-walk-right-02.png"),
@@ -209,6 +245,37 @@ const PLAYER_ATTACK_05_TEXTURES := [
 	preload("res://assets/art/characters/zhao_yun/sprites/attack_05_right/zhaoyun-attack-05-right-02.png"),
 ]
 const PLAYER_ULTIMATE_TEXTURE := preload("res://assets/art/characters/zhao_yun/sprites/ultimate_right/zhaoyun-ultimate-right-01.png")
+const ZHAO_YUN_ULTIMATE_EFFECT_TEXTURES := [
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-01.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-02.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-03.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-04.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-05.png"),
+]
+const ZHAO_YUN_ULTIMATE_EFFECT_FRAME_DURATION := 0.06
+const ZHAO_YUN_ULTIMATE_EFFECT_SCALE := 0.58
+const ZHAO_YUN_ULTIMATE_EFFECT_SOURCE_ANCHOR := Vector2(491.0, 180.0)
+const ZHAO_YUN_ULTIMATE_EFFECT_GUN_TIP_OFFSET := Vector2(0.0, -27.0)
+const WUSHUANG_READY_TEXTURES := [
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_15.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_16.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_17.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_18.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_19.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_20.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_21.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_22.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_23.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_24.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_25.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_26.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_27.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_28.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_29.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_30.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_31.png"),
+	preload("res://assets/art/effects/wushuang/eff_mechanical-in2_32.png"),
+]
 const FIREWHEEL_TEXTURE := preload("res://assets/art/characters/zhao_yun/effects/zhaoyun-firewheel.png")
 const GUAN_YU_IDLE_TEXTURES := [
 	preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-01.png"),
@@ -301,6 +368,59 @@ const GUAN_YU_DEATH_FOOT_ANCHORS := [
 	Vector2(64, 123),
 	Vector2(64, 121),
 	Vector2(64, 124),
+]
+const ZHANG_FEI_IDLE_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-03.png"),
+]
+const ZHANG_FEI_IDLE_FOOT_ANCHORS := [Vector2(49, 65), Vector2(48, 65), Vector2(49, 65)]
+const ZHANG_FEI_WALK_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-04.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-05.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-06.png"),
+]
+const ZHANG_FEI_WALK_FOOT_ANCHORS := [
+	Vector2(49, 65), Vector2(49, 65), Vector2(49, 64),
+	Vector2(49, 65), Vector2(49, 65), Vector2(49, 62),
+]
+const ZHANG_FEI_ATTACK_01_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_01_right/zhang-fei-attack-01-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_01_right/zhang-fei-attack-01-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_01_right/zhang-fei-attack-01-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_01_right/zhang-fei-attack-01-04.png"),
+]
+const ZHANG_FEI_ATTACK_01_FOOT_ANCHORS := [Vector2(49, 65), Vector2(44, 66), Vector2(44, 66), Vector2(44, 66)]
+const ZHANG_FEI_ATTACK_02_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-04.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-05.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_02_right/zhang-fei-attack-02-06.png"),
+]
+const ZHANG_FEI_ATTACK_02_FOOT_ANCHORS := [
+	Vector2(49, 65), Vector2(48, 65), Vector2(49, 65),
+	Vector2(49, 65), Vector2(49, 66), Vector2(48, 66),
+]
+const ZHANG_FEI_ATTACK_03_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-01.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-02.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-04.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-05.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-06.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-07.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-08.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/attack_03_right/zhang-fei-attack-03-09.png"),
+]
+const ZHANG_FEI_ATTACK_03_FOOT_ANCHORS := [
+	Vector2(49, 65), Vector2(50, 87), Vector2(49, 103),
+	Vector2(64, 89), Vector2(74, 65), Vector2(54, 99),
+	Vector2(51, 116), Vector2(49, 65), Vector2(49, 65),
 ]
 const CHANGBAN_GRASS_TEXTURE := preload("res://assets/art/environment/changban/grass-base-01.png")
 const CHANGBAN_DIRT_TEXTURE := preload("res://assets/art/environment/changban/dirt-base-01.png")
@@ -498,6 +618,37 @@ const ENEMY_CROSSBOW_DEATH_TEXTURES := [
 	preload("res://assets/art/enemies/crossbow/death_right/crossbow-death-right-03.png"),
 	preload("res://assets/art/enemies/crossbow/death_right/crossbow-death-right-04.png"),
 ]
+const ENEMY_CAVALRY_IDLE_TEXTURES := [
+	preload("res://assets/art/enemies/cavalry/idle_right/1.png"),
+	preload("res://assets/art/enemies/cavalry/idle_right/2.png"),
+	preload("res://assets/art/enemies/cavalry/idle_right/3.png"),
+	preload("res://assets/art/enemies/cavalry/idle_right/4.png"),
+	preload("res://assets/art/enemies/cavalry/idle_right/5.png"),
+]
+const ENEMY_CAVALRY_WALK_TEXTURES := [
+	preload("res://assets/art/enemies/cavalry/walk_right/1.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/2.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/3.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/4.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/5.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/6.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/7.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/8.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/9.png"),
+	preload("res://assets/art/enemies/cavalry/walk_right/10.png"),
+]
+const ENEMY_CAVALRY_ATTACK_TEXTURES := [
+	preload("res://assets/art/enemies/cavalry/attack_01_right/1.png"),
+	preload("res://assets/art/enemies/cavalry/attack_01_right/2.png"),
+]
+const ENEMY_CAVALRY_DEATH_TEXTURES := [
+	preload("res://assets/art/enemies/cavalry/death_right/1.png"),
+	preload("res://assets/art/enemies/cavalry/death_right/2.png"),
+	preload("res://assets/art/enemies/cavalry/death_right/3.png"),
+	preload("res://assets/art/enemies/cavalry/death_right/4.png"),
+	preload("res://assets/art/enemies/cavalry/death_right/5.png"),
+	preload("res://assets/art/enemies/cavalry/death_right/6.png"),
+]
 const ELITE_XIAHOU_EN_IDLE_TEXTURES := [
 	preload("res://assets/art/elites/xiahou_en/idle_right/xiahou-en-idle-01.png"),
 	preload("res://assets/art/elites/xiahou_en/idle_right/xiahou-en-idle-02.png"),
@@ -560,6 +711,7 @@ var weapon_clash_marks: Array[Dictionary] = []
 var stance_break_marks: Array[Dictionary] = []
 var shield_break_marks: Array[Dictionary] = []
 var ultimate_wave_marks: Array[Dictionary] = []
+var zhao_yun_ultimate_effect_marks: Array[Dictionary] = []
 var death_collision_marks: Array[Dictionary] = []
 var archer_projectiles: Array[Dictionary] = []
 var archer_impact_marks: Array[Dictionary] = []
@@ -576,6 +728,11 @@ var player_last_position := Vector2.ZERO
 var player_is_moving := false
 var guan_yu_was_moving := false
 var guan_yu_was_using_drag_motion := false
+var zhang_fei_was_moving := false
+var zhang_fei_ultimate_animation_time := 0.0
+var zhang_fei_is_casting_ultimate := false
+var wushuang_ready_animation_time := 0.0
+var wushuang_ready_was_active := false
 var player_faces_left := false
 var player_idle_time := 0.0
 var player_walk_time := 0.0
@@ -611,7 +768,7 @@ var battlefield_ground_layers: Array[Dictionary] = []
 
 func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_actor: HeroActor, boss_actor: BossActor, active_telegraphs: Array[Telegraph], loot_system = null, elite_actors: Array[EliteActor] = [], selected_battlefield_id: String = "changban") -> void:
 	bounds = world_bounds
-	battlefield_id = selected_battlefield_id if selected_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "hulao"] else "changban"
+	battlefield_id = selected_battlefield_id if selected_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao"] else "changban"
 	battlefield_layout_objects.clear()
 	battlefield_ground_layers.clear()
 	for raw_layer in BATTLEFIELD_LAYOUT.ground_layers_for(battlefield_id):
@@ -638,6 +795,11 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	player_is_moving = false
 	guan_yu_was_moving = false
 	guan_yu_was_using_drag_motion = false
+	zhang_fei_was_moving = false
+	zhang_fei_ultimate_animation_time = 0.0
+	zhang_fei_is_casting_ultimate = false
+	wushuang_ready_animation_time = 0.0
+	wushuang_ready_was_active = false
 	player_faces_left = false
 	player_idle_time = 0.0
 	player_walk_time = 0.0
@@ -654,6 +816,7 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	player_hit_flash_remaining = 0.0
 	player_hit_flash_strength = 0.0
 	player_hit_white_textures.clear()
+	zhao_yun_ultimate_effect_marks.clear()
 	player_death_cinematic_active = false
 	player_death_elapsed = 0.0
 	player_death_faces_left = false
@@ -696,9 +859,14 @@ func begin_player_death_cinematic(hero_id: String) -> void:
 	player_death_elapsed = 0.0
 	player_death_faces_left = player != null and player.last_attack_direction.x < 0.0
 	player_death_hero_id = hero_id
-	player_death_cinematic_duration = GUAN_YU_DEATH_CINEMATIC_DURATION if hero_id == "guan_yu" else PLAYER_DEATH_CINEMATIC_DURATION
+	player_death_cinematic_duration = GUAN_YU_DEATH_CINEMATIC_DURATION if hero_id == "guan_yu" else (ZHANG_FEI_DEATH_CINEMATIC_DURATION if hero_id == "zhang_fei" else PLAYER_DEATH_CINEMATIC_DURATION)
 	player_is_moving = false
 	guan_yu_was_moving = false
+	zhang_fei_was_moving = false
+	zhang_fei_ultimate_animation_time = 0.0
+	zhang_fei_is_casting_ultimate = false
+	wushuang_ready_animation_time = 0.0
+	wushuang_ready_was_active = false
 	player_is_playing_attack_01 = false
 	player_is_playing_attack_02 = false
 	player_is_playing_attack_03 = false
@@ -714,6 +882,7 @@ func begin_player_death_cinematic(hero_id: String) -> void:
 	stance_break_marks.clear()
 	shield_break_marks.clear()
 	ultimate_wave_marks.clear()
+	zhao_yun_ultimate_effect_marks.clear()
 	death_collision_marks.clear()
 	archer_projectiles.clear()
 	archer_impact_marks.clear()
@@ -742,14 +911,14 @@ func add_flash(request: AttackRequest) -> void:
 	if request.label == "穿阵挑刺":
 		return
 	# Keep a small visual seed on creation so the wind shape does not visibly reshuffle every frame.
-	var duration := FIREWHEEL_PROJECTILE_FLASH_DURATION if request.label == "乾坤掷轮" else (0.34 if request.label in ["拖刀刀浪", "青龙断浪", "武圣刀浪", "武圣震阵", "武圣拖刀震阵"] else (0.24 if request.label.begins_with("威震华夏") else FLASH_DURATION))
+	var duration := FIREWHEEL_PROJECTILE_FLASH_DURATION if request.label == "乾坤掷轮" else (0.34 if request.label in ["拖刀刀浪", "青龙断浪", "武圣刀浪", "武圣震阵", "武圣拖刀震阵", "丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵"] else (0.24 if request.label.begins_with("威震华夏") else FLASH_DURATION))
 	flashes.append({"request": _copy_request_for_visual(request), "remaining": duration, "duration": duration, "variant": randi_range(0, 5)})
 
 func add_pickup(at: Vector2) -> void:
 	pickup_marks.append({"position": at, "remaining": 0.45})
 
 func add_impact(at: Vector2, attack_label: String, hit_count: int) -> void:
-	var heavy_hit: bool = attack_label in ["穿阵挑刺", "破军", "破军收势", "七进七出", "七进七出·收势", "哪吒火轮", "拖刀断阵", "青龙断浪", "威震华夏·横江", "威震华夏·断岳", "威震华夏·斩将"]
+	var heavy_hit: bool = attack_label in ["穿阵挑刺", "破军", "破军收势", "七进七出", "七进七出·收势", "哪吒火轮", "拖刀断阵", "青龙断浪", "威震华夏·横江", "威震华夏·断岳", "威震华夏·斩将", "丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵"]
 	impact_marks.append({"position": at, "remaining": 0.18 if heavy_hit else 0.13, "label": attack_label, "hits": hit_count})
 	shake_remaining = maxf(shake_remaining, 0.13 if heavy_hit else 0.09)
 	var base_strength := 5.0 if heavy_hit else 2.8
@@ -824,7 +993,26 @@ func add_named_skill_shake(strength: float) -> void:
 	shake_strength = maxf(shake_strength, clampf(strength, 4.0, 13.0))
 
 func add_ultimate_dash_wave(at: Vector2, direction: Vector2, distance: float, segment: int) -> void:
-	ultimate_wave_marks.append({"position": at, "direction": direction.normalized(), "distance": distance, "segment": segment, "remaining": 0.48})
+	var normalized_direction := direction.normalized()
+	if normalized_direction.length_squared() <= 0.01:
+		normalized_direction = Vector2.RIGHT
+	ultimate_wave_marks.append({"position": at, "direction": normalized_direction, "distance": distance, "segment": segment, "remaining": 0.48})
+	if player == null or player.presentation_id() != "zhao_yun":
+		return
+	# A fresh burst accompanies each Seven Entries, Seven Exits dash without stacking opaque frames.
+	for index in range(zhao_yun_ultimate_effect_marks.size() - 1, -1, -1):
+		var previous_mark: Dictionary = zhao_yun_ultimate_effect_marks[index]
+		previous_mark["remaining"] = minf(float(previous_mark.get("remaining", 0.0)), 0.08)
+		zhao_yun_ultimate_effect_marks[index] = previous_mark
+	var duration := ZHAO_YUN_ULTIMATE_EFFECT_FRAME_DURATION * float(ZHAO_YUN_ULTIMATE_EFFECT_TEXTURES.size())
+	zhao_yun_ultimate_effect_marks.append({
+		"position": at,
+		"direction": normalized_direction,
+		"segment": player.ultimate_segment_index,
+		"elapsed": 0.0,
+		"remaining": duration,
+		"duration": duration,
+	})
 
 func add_death_collision(at: Vector2, direction: Vector2) -> void:
 	death_collision_marks.append({"position": at, "direction": direction.normalized(), "remaining": 0.22})
@@ -938,7 +1126,14 @@ func _on_hero_visual_effect_started(effect_id: String, origin: Vector2, directio
 	if effect_id == "firewheel_ring":
 		firewheel_rings.append({"position": origin, "direction": direction.normalized(), "remaining": travel_distance})
 	elif effect_id in ["guan_drag_wave", "guan_active_wave", "guan_wusheng_wave"]:
-		guan_blade_waves.append({"position": origin, "direction": direction.normalized(), "remaining": travel_distance, "kind": effect_id})
+		guan_blade_waves.append({
+			"position": origin,
+			"direction": direction.normalized(),
+			"remaining": travel_distance,
+			"initial_remaining": travel_distance,
+			"elapsed": 0.0,
+			"kind": effect_id,
+		})
 
 func tick_visuals(delta: float) -> void:
 	visual_time += delta
@@ -982,6 +1177,16 @@ func tick_visuals(delta: float) -> void:
 		ultimate_wave_marks[index].remaining -= delta
 		if ultimate_wave_marks[index].remaining <= 0.0:
 			ultimate_wave_marks.remove_at(index)
+	for index in range(zhao_yun_ultimate_effect_marks.size() - 1, -1, -1):
+		var effect_mark: Dictionary = zhao_yun_ultimate_effect_marks[index]
+		if player != null and player.presentation_id() == "zhao_yun" and player.ultimate_time > 0.0 and int(effect_mark.get("segment", -1)) == player.ultimate_segment_index:
+			effect_mark["position"] = player.position
+		effect_mark["elapsed"] = float(effect_mark.get("elapsed", 0.0)) + delta
+		effect_mark["remaining"] = float(effect_mark.get("remaining", 0.0)) - delta
+		if float(effect_mark.get("remaining", 0.0)) <= 0.0:
+			zhao_yun_ultimate_effect_marks.remove_at(index)
+		else:
+			zhao_yun_ultimate_effect_marks[index] = effect_mark
 	for index in range(death_collision_marks.size() - 1, -1, -1):
 		death_collision_marks[index].remaining -= delta
 		if death_collision_marks[index].remaining <= 0.0:
@@ -1035,6 +1240,7 @@ func tick_visuals(delta: float) -> void:
 		var travel_distance := minf(GUAN_BLADE_WAVE_SPEED * delta, remaining)
 		var direction: Vector2 = wave.get("direction", Vector2.RIGHT)
 		wave["position"] = (wave.get("position", Vector2.ZERO) as Vector2) + direction * travel_distance
+		wave["elapsed"] = float(wave.get("elapsed", 0.0)) + delta
 		remaining = maxf(0.0, remaining - travel_distance)
 		if remaining <= 0.0:
 			guan_blade_waves.remove_at(index)
@@ -1063,11 +1269,21 @@ func _tick_weather(delta: float) -> void:
 func _tick_player_animation(delta: float) -> void:
 	if player == null:
 		return
+	var ultimate_ready := player.is_ultimate_ready()
+	if ultimate_ready:
+		if not wushuang_ready_was_active:
+			wushuang_ready_animation_time = 0.0
+		else:
+			wushuang_ready_animation_time += delta
+	else:
+		wushuang_ready_animation_time = 0.0
+	wushuang_ready_was_active = ultimate_ready
 	var movement := player.position - player_last_position
 	var has_moved := movement.length_squared() > 0.25
 	var is_guan_yu := player.presentation_id() == "guan_yu"
+	var is_zhang_fei := player.presentation_id() == "zhang_fei"
 	var drag_charge_ready := _guan_yu_drag_charge_ready()
-	var can_render_standard_movement := not player.is_action_locked() and (player.ultimate_time <= 0.0 or is_guan_yu)
+	var can_render_standard_movement := not player.is_action_locked() and (player.ultimate_time <= 0.0 or is_guan_yu or is_zhang_fei)
 	# Use Guan Yu's actual hold state rather than the transient action label.  Trial-mode
 	# upgrade transitions may reset action labels while the held-input state is still active.
 	var can_render_drag_movement := is_guan_yu and player.is_drag_charging()
@@ -1077,6 +1293,10 @@ func _tick_player_animation(delta: float) -> void:
 	var uses_drag_motion := player_is_moving and is_guan_yu and (drag_charge_ready or player.is_wusheng_active())
 	var sprite_direction := player.path_dash_visual_direction() if player.is_path_dashing() else player.last_attack_direction
 	player_faces_left = sprite_direction.x < 0.0
+	var is_zhang_fei_ultimate := is_zhang_fei and player.current_action == "ultimate"
+	if is_zhang_fei_ultimate:
+		zhang_fei_ultimate_animation_time = 0.0 if not zhang_fei_is_casting_ultimate else zhang_fei_ultimate_animation_time + delta
+	zhang_fei_is_casting_ultimate = is_zhang_fei_ultimate
 	var is_attack_01 := player.current_action == "basic" and player.combo_stage == 1
 	if is_attack_01:
 		player_attack_01_time = 0.0 if not player_is_playing_attack_01 else player_attack_01_time + delta
@@ -1098,8 +1318,8 @@ func _tick_player_animation(delta: float) -> void:
 		player_attack_05_time = 0.0 if not player_is_playing_attack_05 else player_attack_05_time + delta
 	player_is_playing_attack_05 = is_attack_05
 	if player_is_moving:
-		var started_moving := is_guan_yu and not guan_yu_was_moving
-		if is_guan_yu and (started_moving or uses_drag_motion != guan_yu_was_using_drag_motion):
+		var started_moving := (is_guan_yu and not guan_yu_was_moving) or (is_zhang_fei and not zhang_fei_was_moving)
+		if (is_guan_yu and (started_moving or uses_drag_motion != guan_yu_was_using_drag_motion)) or (is_zhang_fei and started_moving):
 			player_walk_time = 0.0
 		else:
 			player_walk_time += delta
@@ -1107,6 +1327,7 @@ func _tick_player_animation(delta: float) -> void:
 		player_idle_time += delta
 	guan_yu_was_moving = player_is_moving if is_guan_yu else false
 	guan_yu_was_using_drag_motion = uses_drag_motion if is_guan_yu else false
+	zhang_fei_was_moving = player_is_moving if is_zhang_fei else false
 	player_last_position = player.position
 
 func _tick_enemy_animation(delta: float) -> void:
@@ -1134,6 +1355,7 @@ func _draw() -> void:
 	_draw_ultimate_waves()
 	_draw_boss()
 	_draw_player()
+	_draw_zhao_yun_ultimate_effects()
 	_draw_firewheel_rings()
 	_draw_guan_blade_waves()
 	_draw_archer_projectiles()
@@ -1151,16 +1373,18 @@ func _draw() -> void:
 	_draw_weather_front()
 
 func _draw_background() -> void:
+	var baked_scene := BATTLEFIELD_LAYOUT.has_baked_scene_for(battlefield_id)
 	draw_rect(bounds.grow(96.0), BATTLEFIELD_LAYOUT.ground_fill_color_for(battlefield_id))
 	_draw_auto_ground_layers()
-	if battlefield_id == "bowangpo" or battlefield_id == "bowangpo_story":
+	if not baked_scene and (battlefield_id == "bowangpo" or battlefield_id == "bowangpo_story"):
 		_draw_bowangpo_ember_decor()
 		for index in range(14):
 			var ember_x := bounds.position.x + fposmod(float(index) * 173.0 + visual_time * 22.0, bounds.size.x - 80.0) + 40.0
 			var ember_y := bounds.position.y + fposmod(float(index) * 89.0 - visual_time * (7.0 + float(index % 3) * 2.0), bounds.size.y - 180.0) + 90.0
 			var ember_alpha := 0.16 + float(index % 4) * 0.04
 			draw_rect(Rect2(Vector2(ember_x, ember_y), Vector2(2.0, 2.0)), Color(1.0, 0.58, 0.22, ember_alpha))
-	_draw_layout_objects()
+	if not baked_scene:
+		_draw_layout_objects()
 	_draw_weather_ground_tint()
 
 func _draw_auto_ground_layers() -> void:
@@ -1171,6 +1395,9 @@ func _draw_auto_ground_layers() -> void:
 		var tint := Color(str(layer.get("tint", "ffffff")))
 		tint.a = clampf(float(layer.get("opacity", 1.0)), 0.0, 1.0)
 		var role := str(layer.get("role", "blend"))
+		if role == "canvas":
+			draw_texture_rect(texture, bounds, false, tint)
+			continue
 		if role == "base":
 			_draw_mirrored_ground(texture, tint)
 			continue
@@ -1381,7 +1608,9 @@ func _draw_enemies() -> void:
 			continue
 		if not enemies.is_active(id):
 			continue
-		var at := enemies.positions[id]
+		var ground_at := enemies.positions[id]
+		var is_launched := enemies.is_enemy_launched(id)
+		var at := ground_at + enemies.launch_visual_offset(id)
 		var enemy_type := enemies.get_type(id)
 		var facing := enemies.get_facing_direction(id)
 		var color := _enemy_color(enemy_type)
@@ -1392,9 +1621,11 @@ func _draw_enemies() -> void:
 		color = color.lerp(Color.WHITE, hurt_ratio * 0.82)
 		var size := 20.0 if enemy_type == EnemySimulation.EnemyType.ELITE else (17.0 if enemy_type == EnemySimulation.EnemyType.CAVALRY else 12.0)
 		var uses_enemy_sprite := enemy_type == EnemySimulation.EnemyType.SWORD or enemy_type == EnemySimulation.EnemyType.SHIELD or enemy_type == EnemySimulation.EnemyType.ARCHER or enemy_type == EnemySimulation.EnemyType.HALBERD or enemy_type == EnemySimulation.EnemyType.SPEAR or enemy_type == EnemySimulation.EnemyType.CROSSBOW or enemy_type == EnemySimulation.EnemyType.BANNER or enemy_type == EnemySimulation.EnemyType.CAVALRY
-		var shadow_horizontal := 22.0 if uses_enemy_sprite else size * 1.05
-		var shadow_vertical := 6.5 if uses_enemy_sprite else size * 0.34
-		_draw_ground_shadow(at + Vector2(0, size * 0.55), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, 0.28))
+		var shadow_horizontal := 32.0 if enemy_type == EnemySimulation.EnemyType.CAVALRY else (22.0 if uses_enemy_sprite else size * 1.05)
+		var shadow_vertical := 7.5 if enemy_type == EnemySimulation.EnemyType.CAVALRY else (6.5 if uses_enemy_sprite else size * 0.34)
+		_draw_ground_shadow(ground_at + Vector2(0, size * 0.55), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, 0.28))
+		if is_launched:
+			_draw_death_launch_trail(at, facing, 0.86)
 		if is_being_displaced:
 			_draw_enemy_knockback_pose(enemy_type, at, facing, hurt_ratio, crowd_dim)
 		elif enemy_type == EnemySimulation.EnemyType.SWORD:
@@ -1412,7 +1643,7 @@ func _draw_enemies() -> void:
 		elif enemy_type == EnemySimulation.EnemyType.BANNER:
 			_draw_banner_enemy_proxy(at, facing, hurt_ratio, hit_strength, enemies.is_banner_commanding(id), crowd_dim)
 		elif enemy_type == EnemySimulation.EnemyType.CAVALRY:
-			_draw_cavalry_enemy_proxy(at, facing, hurt_ratio, hit_strength, enemies.get_attack_state(id), enemies.is_cavalry_charging(id), enemy_is_moving[id] == 1, crowd_dim)
+			_draw_cavalry_enemy_sprite(at, facing, hurt_ratio, hit_strength, enemies.get_attack_state(id), enemies.get_attack_remaining(id), enemies.is_cavalry_charging(id), enemy_is_moving[id] == 1, crowd_dim)
 		else:
 			var deform_x := 1.0 + hurt_ratio * (0.06 + hit_strength * 0.05)
 			var deform_y := 1.0 - hurt_ratio * (0.04 + hit_strength * 0.035)
@@ -1449,11 +1680,12 @@ func _draw_enemy_knockback_pose(enemy_type: int, at: Vector2, facing: Vector2, h
 	if enemy_type == EnemySimulation.EnemyType.CROSSBOW:
 		_draw_knockback_texture_pose(at, facing, ENEMY_CROSSBOW_DEATH_TEXTURES[0], ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS[0], ENEMY_CROSSBOW_SPRITE_SCALE, hurt_ratio, crowd_dim)
 		return
+	if enemy_type == EnemySimulation.EnemyType.CAVALRY:
+		_draw_knockback_texture_pose(at, facing, ENEMY_CAVALRY_DEATH_TEXTURES[0], ENEMY_CAVALRY_DEATH_FOOT_ANCHORS[0], ENEMY_CAVALRY_SPRITE_SCALE, hurt_ratio, crowd_dim)
+		return
 	var tilt := 0.10 * (-1.0 if facing.x < 0.0 else 1.0)
 	if enemy_type == EnemySimulation.EnemyType.BANNER:
 		_draw_banner_enemy_death_proxy(at, facing, tilt, 1.0)
-	elif enemy_type == EnemySimulation.EnemyType.CAVALRY:
-		_draw_cavalry_enemy_death_proxy(at, facing, tilt, 1.0)
 	else:
 		var body_color := _enemy_color(enemy_type).lerp(Color.WHITE, hurt_ratio * 0.72)
 		draw_set_transform(at, tilt, Vector2.ONE)
@@ -1470,7 +1702,8 @@ func _draw_knockback_texture_pose(at: Vector2, facing: Vector2, texture: Texture
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_enemy_death(id: int) -> void:
-	var at := enemies.positions[id]
+	var ground_at := enemies.positions[id]
+	var at := ground_at + enemies.launch_visual_offset(id)
 	var enemy_type := enemies.get_type(id)
 	var progress := enemies.death_animation_progress(id)
 	var fade_progress := enemies.death_fade_progress(id)
@@ -1478,8 +1711,8 @@ func _draw_enemy_death(id: int) -> void:
 	var facing := enemies.get_facing_direction(id)
 	var tilt := lerpf(0.10, 0.62, progress) * (-1.0 if facing.x < 0.0 else 1.0)
 	var shadow_scale := 1.0 + progress * 0.28
-	_draw_ground_shadow(at + Vector2(0, 15), 18.0 * shadow_scale, 5.8 * shadow_scale, Color(0.0, 0.0, 0.0, 0.24 * alpha))
-	if enemies.is_death_launched(id):
+	_draw_ground_shadow(ground_at + Vector2(0, 15), 18.0 * shadow_scale, 5.8 * shadow_scale, Color(0.0, 0.0, 0.0, 0.24 * alpha))
+	if enemies.is_death_launched(id) or enemies.is_enemy_launched(id):
 		_draw_death_launch_trail(at, facing, alpha)
 	if enemy_type == EnemySimulation.EnemyType.SWORD:
 		var death_frame := mini(int(progress * ENEMY_SWORD_DEATH_TEXTURES.size()), ENEMY_SWORD_DEATH_TEXTURES.size() - 1)
@@ -1527,11 +1760,15 @@ func _draw_enemy_death(id: int) -> void:
 		draw_texture(ENEMY_CROSSBOW_DEATH_TEXTURES[crossbow_death_frame], -ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS[crossbow_death_frame], Color(0.76, 0.80, 0.82, alpha))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
+	if enemy_type == EnemySimulation.EnemyType.CAVALRY:
+		var cavalry_death_frame := mini(int(progress * ENEMY_CAVALRY_DEATH_TEXTURES.size()), ENEMY_CAVALRY_DEATH_TEXTURES.size() - 1)
+		var cavalry_horizontal_scale := -ENEMY_CAVALRY_SPRITE_SCALE if facing.x < -0.05 else ENEMY_CAVALRY_SPRITE_SCALE
+		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(cavalry_horizontal_scale, ENEMY_CAVALRY_SPRITE_SCALE))
+		draw_texture(ENEMY_CAVALRY_DEATH_TEXTURES[cavalry_death_frame], -ENEMY_CAVALRY_DEATH_FOOT_ANCHORS[cavalry_death_frame], Color(0.76, 0.80, 0.82, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	if enemy_type == EnemySimulation.EnemyType.BANNER:
 		_draw_banner_enemy_death_proxy(at, facing, tilt, alpha)
-		return
-	if enemy_type == EnemySimulation.EnemyType.CAVALRY:
-		_draw_cavalry_enemy_death_proxy(at, facing, tilt, alpha)
 		return
 	var size := 12.0 if enemy_type != EnemySimulation.EnemyType.ELITE else 20.0
 	var color := _enemy_color(enemy_type)
@@ -1660,6 +1897,22 @@ func _draw_ultimate_waves() -> void:
 		var ring_center := origin + direction * (18.0 + float(segment % 2) * 9.0) + SPEAR_VFX_HEIGHT_OFFSET
 		_draw_ultimate_shock_ring(ring_center, direction, alpha)
 
+func _draw_zhao_yun_ultimate_effects() -> void:
+	if player == null or player.presentation_id() != "zhao_yun":
+		return
+	for mark in zhao_yun_ultimate_effect_marks:
+		var elapsed := float(mark.get("elapsed", 0.0))
+		var frame_index := mini(int(elapsed / ZHAO_YUN_ULTIMATE_EFFECT_FRAME_DURATION), ZHAO_YUN_ULTIMATE_EFFECT_TEXTURES.size() - 1)
+		var texture: Texture2D = ZHAO_YUN_ULTIMATE_EFFECT_TEXTURES[frame_index]
+		var duration := maxf(0.01, float(mark.get("duration", 0.01)))
+		var remaining := clampf(float(mark.get("remaining", 0.0)) / duration, 0.0, 1.0)
+		var fade_out := clampf(remaining * 5.0, 0.0, 1.0)
+		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
+		var anchor: Vector2 = mark.get("position", Vector2.ZERO) + ZHAO_YUN_ULTIMATE_EFFECT_GUN_TIP_OFFSET + direction * 44.0
+		draw_set_transform(anchor, direction.angle(), Vector2(ZHAO_YUN_ULTIMATE_EFFECT_SCALE, ZHAO_YUN_ULTIMATE_EFFECT_SCALE))
+		draw_texture(texture, -ZHAO_YUN_ULTIMATE_EFFECT_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, 0.46 * fade_out))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_death_collisions() -> void:
 	for mark in death_collision_marks:
 		var alpha := clampf(float(mark.get("remaining", 0.0)) / 0.22, 0.0, 1.0)
@@ -1694,10 +1947,10 @@ func _draw_player() -> void:
 		_draw_generic_hero_placeholder(at)
 		return
 	_draw_ground_shadow(at + Vector2(0, 14), 27.0, 7.5, Color(0.0, 0.0, 0.0, 0.34))
-	if player.is_ultimate_ready():
-		_draw_ultimate_ready_burst(at)
 	_draw_player_status_aura(at)
 	_draw_player_sprite(at)
+	if player.is_ultimate_ready():
+		_draw_ultimate_ready_burst(at)
 	if player.is_firewheel_active():
 		_draw_firewheel_flames(at)
 	_draw_player_hit_marker(at)
@@ -1715,50 +1968,93 @@ func _draw_generic_hero_placeholder(at: Vector2) -> void:
 	draw_arc(at + Vector2(0, 8), 24.0, 0.0, TAU, 16, Color("d9b66e"), 1.5)
 
 func _draw_prototype_hero(at: Vector2) -> void:
-	_draw_ground_shadow(at + Vector2(0, 15), 28.0, 8.0, Color(0.0, 0.0, 0.0, 0.36))
-	if player.is_ultimate_ready():
-		_draw_ultimate_ready_burst(at)
+	var body_at := at
+	var shadow_horizontal := 28.0
+	var shadow_vertical := 8.0
+	var shadow_alpha := 0.36
+	if player.presentation_id() == "zhang_fei":
+		var jump_height := float(player.call("zhang_fei_jump_visual_height")) if player.has_method("zhang_fei_jump_visual_height") else 0.0
+		var lift_ratio := clampf(jump_height / 82.0, 0.0, 1.0)
+		body_at -= Vector2(0.0, jump_height)
+		shadow_horizontal = lerpf(28.0, 18.0, lift_ratio)
+		shadow_vertical = lerpf(8.0, 4.5, lift_ratio)
+		shadow_alpha = lerpf(0.36, 0.20, lift_ratio)
+	_draw_ground_shadow(at + Vector2(0, 15), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, shadow_alpha))
 	match player.presentation_id():
 		"zhang_fei":
-			_draw_zhang_fei_body(at, 1.0)
+			_draw_zhang_fei_body(body_at, 1.0)
+			if player.is_zhang_fei_ultimate_active():
+				_draw_zhang_fei_ultimate_aura(body_at)
 			if player.has_breakout_guard():
-				_draw_zhang_fei_guard(at)
+				_draw_zhang_fei_guard(body_at)
 		"ma_chao":
 			_draw_ma_chao_afterimages(at)
 			_draw_ma_chao_body(at, 1.0)
 		"huang_zhong":
 			_draw_huang_zhong_body(at)
-	_draw_player_hit_marker(at)
+	if player.is_ultimate_ready():
+		_draw_ultimate_ready_burst(at)
+	_draw_player_hit_marker(body_at)
 
 func _prototype_facing_direction() -> Vector2:
 	var direction := player.last_attack_direction.normalized()
 	return direction if direction.length_squared() > 0.01 else Vector2.RIGHT
 
 func _draw_zhang_fei_body(at: Vector2, alpha: float) -> void:
-	var flash_ratio := _player_hit_flash_ratio() * player_hit_flash_strength if player_hit_flash_remaining > 0.0 and alpha > 0.99 else 0.0
-	var facing := _prototype_facing_direction()
-	var side := Vector2(-facing.y, facing.x)
-	var body_color := Color("4b3430").lerp(Color.WHITE, flash_ratio)
-	var armor_color := Color("92623e").lerp(Color.WHITE, flash_ratio)
-	var skin := Color("c58d68").lerp(Color.WHITE, flash_ratio)
-	var opacity := alpha
-	var body := PackedVector2Array([
-		at - side * 19.0 + Vector2(0, 13), at - side * 16.0 + Vector2(0, -13),
-		at + side * 15.0 + Vector2(0, -13), at + side * 21.0 + Vector2(0, 13),
-	])
-	draw_colored_polygon(body, Color(body_color.r, body_color.g, body_color.b, opacity))
-	draw_rect(Rect2(at + Vector2(-20, -1), Vector2(40, 6)), Color(armor_color.r, armor_color.g, armor_color.b, opacity))
-	draw_circle(at + Vector2(0, -27), 11.0, Color(skin.r, skin.g, skin.b, opacity))
-	draw_rect(Rect2(at + Vector2(-13, -38), Vector2(26, 8)), Color(0.12, 0.10, 0.09, opacity))
-	draw_line(at + Vector2(-15, 12), at + Vector2(-7, 21), Color(0.16, 0.15, 0.13, opacity), 7.0)
-	draw_line(at + Vector2(15, 12), at + Vector2(7, 21), Color(0.16, 0.15, 0.13, opacity), 7.0)
+	var texture: Texture2D = _current_zhang_fei_texture()
+	var source_anchor := _current_zhang_fei_source_foot_anchor()
+	var horizontal_scale := -ZHANG_FEI_SPRITE_SCALE if player_faces_left else ZHANG_FEI_SPRITE_SCALE
+	draw_set_transform(at + ZHANG_FEI_WORLD_FOOT_OFFSET, 0.0, Vector2(horizontal_scale, ZHANG_FEI_SPRITE_SCALE))
+	draw_texture(texture, -source_anchor, Color(1.0, 1.0, 1.0, alpha))
+	if player_hit_flash_remaining > 0.0 and alpha > 0.99:
+		var flash_texture := _player_white_flash_texture(texture)
+		var flash_ratio := _player_hit_flash_ratio() * player_hit_flash_strength
+		draw_texture(flash_texture, -source_anchor, Color(1.0, 1.0, 1.0, flash_ratio))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _current_zhang_fei_texture() -> Texture2D:
+	if player.current_action == "basic":
+		match player.combo_stage:
+			1:
+				return ZHANG_FEI_ATTACK_01_TEXTURES[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_01_TEXTURES.size())]
+			2:
+				return ZHANG_FEI_ATTACK_02_TEXTURES[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_02_TEXTURES.size())]
+			_:
+				return ZHANG_FEI_ATTACK_03_TEXTURES[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_03_TEXTURES.size())]
+	if player.current_action in ["active", "ultimate"]:
+		return ZHANG_FEI_ATTACK_03_TEXTURES[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_03_TEXTURES.size())]
+	if player_is_moving:
+		return ZHANG_FEI_WALK_TEXTURES[_zhang_fei_walk_frame_index()]
+	var idle_frame := int(player_idle_time / ZHANG_FEI_IDLE_FRAME_DURATION) % ZHANG_FEI_IDLE_TEXTURES.size()
+	return ZHANG_FEI_IDLE_TEXTURES[idle_frame]
+
+func _current_zhang_fei_source_foot_anchor() -> Vector2:
+	if player.current_action == "basic":
+		match player.combo_stage:
+			1:
+				return ZHANG_FEI_ATTACK_01_FOOT_ANCHORS[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_01_TEXTURES.size())]
+			2:
+				return ZHANG_FEI_ATTACK_02_FOOT_ANCHORS[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_02_TEXTURES.size())]
+			_:
+				return ZHANG_FEI_ATTACK_03_FOOT_ANCHORS[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_03_TEXTURES.size())]
+	if player.current_action in ["active", "ultimate"]:
+		return ZHANG_FEI_ATTACK_03_FOOT_ANCHORS[_zhang_fei_action_frame_index(ZHANG_FEI_ATTACK_03_TEXTURES.size())]
+	if player_is_moving:
+		return ZHANG_FEI_WALK_FOOT_ANCHORS[_zhang_fei_walk_frame_index()]
+	var idle_frame := int(player_idle_time / ZHANG_FEI_IDLE_FRAME_DURATION) % ZHANG_FEI_IDLE_FOOT_ANCHORS.size()
+	return ZHANG_FEI_IDLE_FOOT_ANCHORS[idle_frame]
+
+func _zhang_fei_action_frame_index(frame_count: int) -> int:
+	if player.current_action == "ultimate":
+		return mini(int(zhang_fei_ultimate_animation_time / ZHANG_FEI_ULTIMATE_FRAME_DURATION), frame_count - 1)
 	var action_progress := float(player.call("visual_action_progress")) if player.has_method("visual_action_progress") else 0.0
-	var spear_direction := facing.rotated(sin(action_progress * PI) * 0.54)
-	var hand := at + Vector2(0, -7)
-	draw_line(hand - spear_direction * 48.0, hand + spear_direction * 82.0, Color(0.46, 0.27, 0.16, opacity), 5.2)
-	var tip := hand + spear_direction * 88.0
-	var spear_head := PackedVector2Array([tip, tip - spear_direction * 17.0 + Vector2(-spear_direction.y, spear_direction.x) * 7.0, tip - spear_direction * 17.0 - Vector2(-spear_direction.y, spear_direction.x) * 7.0])
-	draw_colored_polygon(spear_head, Color(0.80, 0.83, 0.80, opacity))
+	return mini(int(action_progress * float(frame_count)), frame_count - 1)
+
+func _zhang_fei_walk_frame_index() -> int:
+	if player_walk_time < ZHANG_FEI_WALK_ENTRY_DURATION:
+		return 0
+	var loop_elapsed := player_walk_time - ZHANG_FEI_WALK_ENTRY_DURATION
+	return 1 + int(loop_elapsed / ZHANG_FEI_WALK_LOOP_FRAME_DURATION) % (ZHANG_FEI_WALK_TEXTURES.size() - 1)
 
 func _draw_zhang_fei_guard(at: Vector2) -> void:
 	var pulse := 0.66 + 0.24 * (sin(visual_time * 11.0) + 1.0) * 0.5
@@ -1766,6 +2062,16 @@ func _draw_zhang_fei_guard(at: Vector2) -> void:
 	for index in range(3):
 		var root := at + Vector2(-20.0 + float(index) * 20.0, -7.0)
 		draw_line(root, root + Vector2(0, -18), Color(1.0, 0.78, 0.36, pulse * 0.68), 2.0)
+
+func _draw_zhang_fei_ultimate_aura(at: Vector2) -> void:
+	var pulse := 0.64 + 0.22 * (sin(visual_time * 7.0) + 1.0) * 0.5
+	var center := at + Vector2(0, 9)
+	_draw_ellipse_arc(center, Vector2(43.0, 15.0), visual_time * 1.4, visual_time * 1.4 + 2.24, 16, Color(0.94, 0.34, 0.16, pulse * 0.80), 2.6)
+	_draw_ellipse_arc(center, Vector2(35.0, 11.0), -visual_time * 1.8 + PI, -visual_time * 1.8 + PI + 2.04, 14, Color(1.0, 0.74, 0.26, pulse * 0.72), 2.0)
+	for index in range(3):
+		var angle := visual_time * 1.8 + TAU * float(index) / 3.0
+		var root := center + Vector2.from_angle(angle) * 32.0
+		draw_line(root, root + Vector2(0, -12), Color(1.0, 0.69, 0.30, pulse * 0.64), 1.8)
 
 func _draw_ma_chao_afterimages(at: Vector2) -> void:
 	var momentum := player.momentum_ratio()
@@ -1840,11 +2146,11 @@ func _draw_huang_zhong_body(at: Vector2) -> void:
 
 func _draw_guan_yu(at: Vector2) -> void:
 	_draw_ground_shadow(at + Vector2(0, 15), 29.0, 8.0, Color(0.0, 0.0, 0.0, 0.38))
-	if player.is_ultimate_ready():
-		_draw_guan_ultimate_ready_marker(at)
 	if player.is_wusheng_active():
 		_draw_guan_wusheng_aura(at)
 	_draw_guan_yu_body(at)
+	if player.is_ultimate_ready():
+		_draw_ultimate_ready_burst(at)
 	if player.is_drag_charging():
 		_draw_guan_drag_charge(at)
 	_draw_player_hit_marker(at)
@@ -1950,12 +2256,6 @@ func _guan_yu_drag_charge_ready() -> bool:
 func _guan_yu_is_ultimate_casting() -> bool:
 	return player != null and player.has_method("is_ultimate_casting") and bool(player.call("is_ultimate_casting"))
 
-func _draw_guan_ultimate_ready_marker(at: Vector2) -> void:
-	var pulse := 0.70 + 0.20 * (sin(visual_time * 5.0) + 1.0) * 0.5
-	var center := at + Vector2(0, 12)
-	_draw_ellipse_arc(center, Vector2(31.0, 10.0), -visual_time * 0.6, -visual_time * 0.6 + 2.2, 10, Color(0.35, 0.92, 0.63, pulse * 0.76), 2.2)
-	_draw_ellipse_arc(center, Vector2(31.0, 10.0), -visual_time * 0.6 + PI, -visual_time * 0.6 + PI + 2.2, 10, Color(0.95, 0.76, 0.28, pulse * 0.80), 2.2)
-
 func _draw_player_status_aura(at: Vector2) -> void:
 	var has_dragon_shield := player.health_component.shield_charges > 0
 	var has_breakout_shield := player.has_breakout_guard()
@@ -2035,42 +2335,14 @@ func _draw_breakout_guard(at: Vector2) -> void:
 		draw_line(root, tip, Color(0.90, 1.0, 1.0, 0.86 * pulse), 1.2)
 
 func _draw_ultimate_ready_burst(at: Vector2) -> void:
-	var origin := at + Vector2(0, 12)
-	var directions := [
-		Vector2(-0.72, -0.70), Vector2(-0.36, -0.93), Vector2.UP,
-		Vector2(0.36, -0.93), Vector2(0.72, -0.70),
-	]
-	var base_lengths := [70.0, 85.0, 100.0, 85.0, 70.0]
-	var widths := [9.0, 10.0, 12.0, 10.0, 9.0]
-	var pulse := 0.78 + 0.18 * (sin(visual_time * 5.0) + 1.0) * 0.5
-	for index in range(directions.size()):
-		var direction: Vector2 = directions[index]
-		var flicker := sin(visual_time * 8.0 + float(index) * 1.37) * 3.0
-		var root := origin + Vector2(float(index - 2) * 3.0, 0)
-		var outer_points := _pixel_aura_spike_points(root, direction, base_lengths[index] + flicker, widths[index])
-		var core_points := _pixel_aura_spike_points(root + direction * 4.0, direction, base_lengths[index] * 0.62 + flicker * 0.4, widths[index] * 0.42)
-		draw_colored_polygon(outer_points, Color(0.94, 0.55, 0.10, 0.54 * pulse))
-		draw_polyline(outer_points, Color(1.0, 0.79, 0.30, 0.86 * pulse), 1.0, true)
-		draw_colored_polygon(core_points, Color(1.0, 0.88, 0.40, 0.58 * pulse))
-
-func _pixel_aura_spike_points(root: Vector2, direction: Vector2, length: float, width: float) -> PackedVector2Array:
-	var side := Vector2(-direction.y, direction.x)
-	var points := PackedVector2Array([
-		root - side * width,
-		root + direction * (length * 0.30) - side * width,
-		root + direction * (length * 0.30) - side * width * 0.62,
-		root + direction * (length * 0.58) - side * width * 0.62,
-		root + direction * (length * 0.58) - side * width * 0.30,
-		root + direction * length,
-		root + direction * (length * 0.58) + side * width * 0.30,
-		root + direction * (length * 0.58) + side * width * 0.62,
-		root + direction * (length * 0.30) + side * width * 0.62,
-		root + direction * (length * 0.30) + side * width,
-		root + side * width,
-	])
-	for index in range(points.size()):
-		points[index] = points[index].snapped(Vector2(2.0, 2.0))
-	return points
+	if WUSHUANG_READY_TEXTURES.is_empty():
+		return
+	var frame := int(wushuang_ready_animation_time / WUSHUANG_READY_FRAME_DURATION) % WUSHUANG_READY_TEXTURES.size()
+	var texture: Texture2D = WUSHUANG_READY_TEXTURES[frame]
+	var center := at + WUSHUANG_READY_OFFSET
+	draw_set_transform(center, 0.0, Vector2(WUSHUANG_READY_SCALE, WUSHUANG_READY_SCALE))
+	draw_texture(texture, -WUSHUANG_READY_SOURCE_CENTER, Color(1.0, 1.0, 1.0, 0.76))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_ground_shadow(center: Vector2, horizontal_radius: float, vertical_radius: float, color: Color) -> void:
 	draw_set_transform(center, 0.0, Vector2(horizontal_radius, vertical_radius))
@@ -2100,6 +2372,12 @@ func _draw_player_death(at: Vector2) -> void:
 		var guan_horizontal_scale := -GUAN_YU_SPRITE_SCALE if player_death_faces_left else GUAN_YU_SPRITE_SCALE
 		draw_set_transform(at + GUAN_YU_WORLD_FOOT_OFFSET, 0.0, Vector2(guan_horizontal_scale, GUAN_YU_SPRITE_SCALE))
 		draw_texture(GUAN_YU_DEATH_TEXTURES[frame_index], -GUAN_YU_DEATH_FOOT_ANCHORS[frame_index])
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	if player.presentation_id() == "zhang_fei":
+		var zhang_horizontal_scale := -ZHANG_FEI_SPRITE_SCALE if player_death_faces_left else ZHANG_FEI_SPRITE_SCALE
+		draw_set_transform(at + ZHANG_FEI_WORLD_FOOT_OFFSET, 0.0, Vector2(zhang_horizontal_scale, ZHANG_FEI_SPRITE_SCALE))
+		draw_texture(ZHANG_FEI_DEATH_TEXTURES[frame_index], -ZHANG_FEI_DEATH_FOOT_ANCHORS[frame_index])
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if player.presentation_id() != "zhao_yun":
@@ -2304,29 +2582,36 @@ func _draw_banner_enemy_proxy(at: Vector2, facing: Vector2, hurt_ratio: float, h
 		var pulse := 0.74 + 0.26 * (sin(visual_time * 15.0) + 1.0) * 0.5
 		_draw_ellipse_arc(at + Vector2(0.0, 13.0), Vector2(94.0 * pulse, 29.0 * pulse), 0.0, TAU, 16, Color(1.0, 0.80, 0.34, 0.72), 2.0)
 
-func _draw_cavalry_enemy_proxy(at: Vector2, facing: Vector2, hurt_ratio: float, hit_strength: float, attack_state: int, charging: bool, moving: bool, crowd_dim: float) -> void:
-	var forward := Vector2.RIGHT if facing.x >= 0.0 else Vector2.LEFT
-	var gallop := sin(visual_time * (18.0 if charging else (11.0 if moving else 4.0)))
-	var deform_x := 1.0 + hurt_ratio * (0.06 + hit_strength * 0.05)
-	var deform_y := 1.0 - hurt_ratio * (0.04 + hit_strength * 0.035)
-	var horse_color := Color("5d4435").lerp(Color.WHITE, hurt_ratio * 0.66).lerp(Color("252b32"), crowd_dim * 0.30)
-	var rider_color := Color("69444a").lerp(Color.WHITE, hurt_ratio * 0.76)
-	draw_set_transform(at + Vector2(0.0, 12.0 + gallop * (1.7 if charging else 0.7)), 0.0, Vector2(deform_x, deform_y))
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-23.0, -9.0), Vector2(-14.0, -21.0), Vector2(16.0, -19.0), Vector2(28.0, -8.0), Vector2(24.0, 4.0), Vector2(-22.0, 4.0),
-	]), horse_color)
-	draw_circle(Vector2(27.0 * forward.x, -17.0), 8.0, horse_color.lightened(0.08))
-	draw_line(Vector2(-14.0, 2.0), Vector2(-19.0, 13.0 + gallop * 2.0), Color("2b2725"), 3.0)
-	draw_line(Vector2(12.0, 2.0), Vector2(17.0, 13.0 - gallop * 2.0), Color("2b2725"), 3.0)
-	draw_rect(Rect2(-9.0, -42.0, 18.0, 24.0), rider_color)
-	draw_circle(Vector2(0.0, -49.0), 7.5, Color("d7b18a").lerp(Color.WHITE, hurt_ratio * 0.42))
-	draw_rect(Rect2(-10.0, -56.0, 20.0, 6.0), Color("302a2d"))
-	var lance_reach := 70.0 if attack_state == EnemySimulation.AttackState.WINDUP else 48.0
-	draw_line(Vector2(-forward.x * 12.0, -31.0), Vector2(forward.x * lance_reach, -31.0), Color("b9a26d"), 2.8)
-	var tip := Vector2(forward.x * (lance_reach + 8.0), -31.0)
-	draw_colored_polygon(PackedVector2Array([tip, tip - Vector2(forward.x * 9.0, -4.0), tip - Vector2(forward.x * 9.0, 4.0)]), Color("e6ecec"))
+func _draw_cavalry_enemy_sprite(at: Vector2, facing: Vector2, hurt_ratio: float, hit_strength: float, attack_state: int, attack_remaining: float, charging: bool, moving: bool, crowd_dim: float) -> void:
+	var idle_frame := int(visual_time / ENEMY_CAVALRY_IDLE_FRAME_DURATION) % ENEMY_CAVALRY_IDLE_TEXTURES.size()
+	var texture: Texture2D = ENEMY_CAVALRY_IDLE_TEXTURES[idle_frame]
+	var foot_anchor: Vector2 = ENEMY_CAVALRY_IDLE_FOOT_ANCHORS[idle_frame]
+	if attack_state == EnemySimulation.AttackState.WINDUP:
+		# The source has two attack poses: hold the first through the windup and cut to the thrust near impact.
+		var attack_frame := 0 if attack_remaining > 0.20 else 1
+		texture = ENEMY_CAVALRY_ATTACK_TEXTURES[attack_frame]
+		foot_anchor = ENEMY_CAVALRY_ATTACK_FOOT_ANCHORS[attack_frame]
+	elif attack_state == EnemySimulation.AttackState.RECOVER:
+		texture = ENEMY_CAVALRY_ATTACK_TEXTURES[ENEMY_CAVALRY_ATTACK_TEXTURES.size() - 1]
+		foot_anchor = ENEMY_CAVALRY_ATTACK_FOOT_ANCHORS[ENEMY_CAVALRY_ATTACK_FOOT_ANCHORS.size() - 1]
+	elif charging:
+		var charge_frame := int(visual_time / ENEMY_CAVALRY_CHARGE_FRAME_DURATION) % ENEMY_CAVALRY_WALK_TEXTURES.size()
+		texture = ENEMY_CAVALRY_WALK_TEXTURES[charge_frame]
+		foot_anchor = ENEMY_CAVALRY_WALK_FOOT_ANCHORS[charge_frame]
+	elif moving:
+		var walk_frame := int(visual_time / ENEMY_CAVALRY_WALK_FRAME_DURATION) % ENEMY_CAVALRY_WALK_TEXTURES.size()
+		texture = ENEMY_CAVALRY_WALK_TEXTURES[walk_frame]
+		foot_anchor = ENEMY_CAVALRY_WALK_FOOT_ANCHORS[walk_frame]
+	var horizontal_scale := -ENEMY_CAVALRY_SPRITE_SCALE if facing.x < -0.05 else ENEMY_CAVALRY_SPRITE_SCALE
+	var hurt_color := Color.WHITE.lerp(Color(0.72, 0.90, 1.0), hurt_ratio * 0.72)
+	var deform_x := horizontal_scale * (1.0 + hurt_ratio * (0.06 + hit_strength * 0.05))
+	var deform_y := ENEMY_CAVALRY_SPRITE_SCALE * (1.0 - hurt_ratio * (0.04 + hit_strength * 0.035))
+	draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(deform_x, deform_y))
+	draw_texture(texture, -foot_anchor, hurt_color)
+	_draw_crowd_muting_overlay(texture, foot_anchor, crowd_dim)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if charging:
+		var forward := Vector2.RIGHT if facing.x >= 0.0 else Vector2.LEFT
 		for index in range(3):
 			var dust := at - forward * (18.0 + float(index) * 12.0) + Vector2(0.0, 16.0 + float(index) * 2.0)
 			draw_circle(dust, 4.0 + float(index) * 1.4, Color(0.72, 0.67, 0.51, 0.16 - float(index) * 0.03))
@@ -2337,14 +2622,6 @@ func _draw_banner_enemy_death_proxy(at: Vector2, facing: Vector2, tilt: float, a
 	draw_rect(Rect2(-12.0, -9.0, 24.0, 17.0), Color(0.50, 0.23, 0.22, alpha))
 	draw_circle(Vector2(5.0, -11.0), 6.0, Color(0.78, 0.68, 0.56, alpha))
 	draw_line(-forward * 38.0 + Vector2(0.0, -2.0), forward * 26.0 + Vector2(0.0, -2.0), Color(0.50, 0.34, 0.18, alpha), 2.8)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-func _draw_cavalry_enemy_death_proxy(at: Vector2, facing: Vector2, tilt: float, alpha: float) -> void:
-	var forward := Vector2.RIGHT if facing.x >= 0.0 else Vector2.LEFT
-	draw_set_transform(at + Vector2(0.0, 13.0), tilt, Vector2.ONE)
-	draw_rect(Rect2(-25.0, -10.0, 48.0, 16.0), Color(0.32, 0.25, 0.20, alpha))
-	draw_circle(Vector2(25.0 * forward.x, -13.0), 7.0, Color(0.38, 0.30, 0.23, alpha))
-	draw_rect(Rect2(-8.0, -25.0, 16.0, 16.0), Color(0.39, 0.24, 0.27, alpha))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_banner_commanded_marker(at: Vector2, ratio: float) -> void:
@@ -2441,6 +2718,14 @@ func _copy_request_for_visual(source: AttackRequest) -> AttackRequest:
 	copy.empowered_knockback_active = source.empowered_knockback_active
 	copy.empowered_knockback_target_limit = source.empowered_knockback_target_limit
 	copy.empowered_knockback_multiplier = source.empowered_knockback_multiplier
+	copy.launches_enemies = source.launches_enemies
+	copy.launch_speed = source.launch_speed
+	copy.launch_duration = source.launch_duration
+	copy.launch_collision_damage_multiplier = source.launch_collision_damage_multiplier
+	copy.launch_collision_knockback = source.launch_collision_knockback
+	copy.launch_collision_max_targets = source.launch_collision_max_targets
+	copy.launch_relay_count = source.launch_relay_count
+	copy.launch_target_limit = source.launch_target_limit
 	copy.grants_special_target_dragon_progress = source.grants_special_target_dragon_progress
 	return copy
 
@@ -2493,6 +2778,13 @@ func _player_death_frame_index() -> int:
 			if elapsed < 0.0:
 				return index
 		return GUAN_YU_DEATH_FRAME_DURATIONS.size() - 1
+	if player_death_hero_id == "zhang_fei":
+		var zhang_elapsed := player_death_elapsed
+		for index in range(ZHANG_FEI_DEATH_FRAME_DURATIONS.size()):
+			zhang_elapsed -= ZHANG_FEI_DEATH_FRAME_DURATIONS[index]
+			if zhang_elapsed < 0.0:
+				return index
+		return ZHANG_FEI_DEATH_FRAME_DURATIONS.size() - 1
 	if player_death_elapsed < PLAYER_DEATH_FRAME_01_DURATION:
 		return 0
 	if player_death_elapsed < PLAYER_DEATH_FRAME_01_DURATION + PLAYER_DEATH_FRAME_02_DURATION:
@@ -3431,12 +3723,14 @@ func _draw_flashes() -> void:
 			"威震华夏·斩将":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(0.99, 0.80, 0.33, 0.98), 34.0, 5)
 				_draw_guan_blade_sweep(request, alpha * 0.64, progress * 0.86, variant + 3, Color(0.26, 0.96, 0.67, 0.92), 17.0, 4)
-			"蛇矛横扫", "横矛断阵", "据水断桥":
+			"扫阵横击", "蛇矛挑阵", "据水断桥·掀阵":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(0.94, 0.48, 0.22, 0.92), 16.0, 4)
-			"燕人震退", "当阳怒吼·横断", "当阳怒吼·断喝":
+			"丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵":
+				_draw_zhang_landing_shockwave(request, alpha, progress)
+			"断阵横掷", "万夫莫开·横扫":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(1.0, 0.66, 0.24, 0.96), 25.0, 5)
-			"当阳怒吼·震地":
-				_draw_ultimate_landing_burst(request, alpha, progress)
+			"万夫莫开·掀阵", "万夫莫开·断阵":
+				_draw_thrust_flash(request, alpha, progress, variant, 12.0, Color(1.0, 0.66, 0.24, 0.94))
 			"银枪点阵", "踏阵突刺", "西凉破阵", "银枪奔雷":
 				_draw_thrust_flash(request, alpha, progress, variant, 6.0, Color(0.74, 0.90, 1.0, 0.66))
 			"流星横挑":
@@ -3556,31 +3850,88 @@ func _draw_guan_blade_waves() -> void:
 		var direction: Vector2 = wave.get("direction", Vector2.RIGHT)
 		if direction.length_squared() <= 0.01:
 			direction = Vector2.RIGHT
-		var kind := str(wave.get("kind", "guan_drag_wave"))
-		var is_active := kind == "guan_active_wave"
-		var is_wusheng := kind == "guan_wusheng_wave"
-		var length := 88.0 if is_active else (78.0 if is_wusheng else 70.0)
-		var half_width := 37.0 if is_active else (32.0 if is_wusheng else 27.0)
-		var color := Color(0.38, 0.94, 0.62, 0.82) if is_wusheng else (Color(0.46, 0.86, 0.74, 0.82) if is_active else Color(0.72, 0.92, 0.64, 0.78))
-		var glow := Color(0.96, 0.79, 0.30, 0.92) if is_wusheng else Color(0.88, 1.0, 0.74, 0.90)
-		var perpendicular := Vector2(-direction.y, direction.x)
-		var tail := center - direction * length * 0.46
-		var tip := center + direction * length * 0.54
-		var blade := PackedVector2Array([
-			tail - perpendicular * half_width * 0.28,
-			center - perpendicular * half_width,
-			tip - perpendicular * half_width * 0.18,
-			tip + perpendicular * half_width * 0.18,
-			center + perpendicular * half_width,
-			tail + perpendicular * half_width * 0.28,
-		])
-		draw_colored_polygon(blade, Color(color.r, color.g, color.b, color.a * 0.42))
-		draw_line(tail + direction * 8.0, tip, glow, 3.2)
-		draw_line(center - perpendicular * half_width * 0.76, center + perpendicular * half_width * 0.76, Color(color.r, color.g, color.b, 0.70), 1.8)
-		for index in range(3):
-			var offset := (float(index) - 1.0) * half_width * 0.58
-			var shard_root := center + perpendicular * offset - direction * 9.0
-			draw_line(shard_root, shard_root + direction * (18.0 + float(index) * 4.0), Color(glow.r, glow.g, glow.b, 0.58), 1.5)
+		var initial_remaining := maxf(1.0, float(wave.get("initial_remaining", wave.get("remaining", 1.0))))
+		var remaining := clampf(float(wave.get("remaining", 0.0)), 0.0, initial_remaining)
+		var travel_progress := clampf(1.0 - remaining / initial_remaining, 0.0, 1.0)
+		var fade_in := clampf(travel_progress / 0.10, 0.0, 1.0)
+		var fade_out := 1.0 - clampf((travel_progress - 0.84) / 0.16, 0.0, 1.0)
+		var alpha := fade_in * fade_out
+		if alpha <= 0.01:
+			continue
+		_draw_guan_blade_wave_shape(center, direction.normalized(), str(wave.get("kind", "guan_drag_wave")), alpha, travel_progress)
+
+func _draw_guan_blade_wave_shape(center: Vector2, direction: Vector2, kind: String, alpha: float, travel_progress: float) -> void:
+	var is_active := kind == "guan_active_wave"
+	var is_wusheng := kind == "guan_wusheng_wave"
+	var length := 122.0 if is_wusheng else (112.0 if is_active else 94.0)
+	var half_width := 42.0 if is_wusheng else (37.0 if is_active else 30.0)
+	var jade := Color(0.12, 0.76, 0.54, alpha * (0.94 if is_wusheng else 0.84))
+	var jade_shadow := Color(0.035, 0.24, 0.20, alpha * 0.76)
+	var gold := Color(1.0, 0.78, 0.28, alpha * (0.98 if is_wusheng else 0.82))
+	var highlight := Color(0.74, 1.0, 0.78, alpha * 0.92)
+	var side := Vector2(-direction.y, direction.x)
+	var origin := center + direction * 7.0
+
+	# A single hard-edged crescent is reused for every wave count and rotated by direction.
+	var outer := PackedVector2Array([
+		origin - direction * length * 0.52 + side * half_width * 0.12,
+		origin - direction * length * 0.22 + side * half_width * 0.72,
+		origin + direction * length * 0.02 + side * half_width,
+		origin + direction * length * 0.25 + side * half_width * 0.70,
+		origin + direction * length * 0.52 + side * half_width * 0.14,
+		origin + direction * length * 0.58,
+		origin + direction * length * 0.45 - side * half_width * 0.18,
+		origin + direction * length * 0.23 - side * half_width * 0.69,
+		origin + direction * length * 0.01 - side * half_width,
+		origin - direction * length * 0.22 - side * half_width * 0.72,
+		origin - direction * length * 0.52 - side * half_width * 0.12,
+	])
+	outer.append(outer[0])
+	draw_colored_polygon(outer, Color(jade_shadow.r, jade_shadow.g, jade_shadow.b, jade_shadow.a * 0.56))
+	draw_colored_polygon(outer, Color(jade.r, jade.g, jade.b, jade.a * 0.34))
+	draw_polyline(outer, Color(gold.r, gold.g, gold.b, gold.a * 0.78), 2.6, true)
+
+	var core := PackedVector2Array([
+		origin - direction * length * 0.38 + side * half_width * 0.08,
+		origin - direction * length * 0.08 + side * half_width * 0.44,
+		origin + direction * length * 0.18 + side * half_width * 0.66,
+		origin + direction * length * 0.46 + side * half_width * 0.10,
+		origin + direction * length * 0.40 - side * half_width * 0.12,
+		origin + direction * length * 0.16 - side * half_width * 0.42,
+		origin - direction * length * 0.09 - side * half_width * 0.64,
+		origin - direction * length * 0.38 - side * half_width * 0.08,
+	])
+	core.append(core[0])
+	draw_colored_polygon(core, Color(jade.r, jade.g, jade.b, jade.a * 0.72))
+	draw_polyline(core, Color(highlight.r, highlight.g, highlight.b, highlight.a * 0.84), 2.0, true)
+
+	# Broken edge fragments sell weight without recreating the original water texture.
+	for index in range(3):
+		var shard_ratio := float(index) / 2.0
+		var shard_root := origin - direction * length * (0.28 - shard_ratio * 0.16) + side * (half_width * (0.54 + shard_ratio * 0.24))
+		var shard_tip := shard_root + direction * (12.0 + shard_ratio * 10.0) + side * (4.0 - shard_ratio * 8.0)
+		var shard := PackedVector2Array([shard_root - side * 2.4, shard_tip, shard_root + side * 2.4])
+		draw_colored_polygon(shard, Color(gold.r, gold.g, gold.b, gold.a * (0.46 - shard_ratio * 0.08)))
+
+	_draw_guan_ground_scars(origin, direction, side, length, half_width, alpha, travel_progress)
+
+func _draw_guan_ground_scars(origin: Vector2, direction: Vector2, side: Vector2, length: float, half_width: float, alpha: float, travel_progress: float) -> void:
+	var ground := origin + Vector2(0.0, 15.0)
+	var scar_length := length * (0.62 + travel_progress * 0.18)
+	var scar_width := maxf(1.4, half_width * 0.055)
+	var scar_shadow := Color(0.02, 0.12, 0.10, alpha * 0.52)
+	var scar_glow := Color(0.45, 0.96, 0.62, alpha * 0.68)
+	for index in range(3):
+		var lane := float(index) - 1.0
+		var lane_offset := side * lane * half_width * 0.38
+		var start := ground - direction * scar_length * 0.52 + lane_offset
+		var middle := ground - direction * scar_length * 0.06 + lane_offset + side * (2.0 if index == 0 else -2.0)
+		var finish := ground + direction * scar_length * 0.38 + lane_offset * 0.76
+		var points := PackedVector2Array([start, middle, finish])
+		draw_polyline(points, scar_shadow, scar_width + 2.2, true)
+		draw_polyline(points, scar_glow, scar_width, true)
+		if index != 1:
+			draw_line(middle - side * 3.0, middle + side * 3.0, Color(1.0, 0.78, 0.30, alpha * 0.46), 1.2)
 
 func _draw_firewheel_texture(center: Vector2, scale: float, rotation: float, color: Color) -> void:
 	draw_set_transform(center, rotation, Vector2(scale, scale))
@@ -3605,6 +3956,27 @@ func _draw_first_strike_shockwave(request: AttackRequest, alpha: float, progress
 	for index in range(4):
 		var start_angle := TAU * float(index) / 4.0 + progress * 0.24
 		draw_arc(request.origin, radius * 0.76, start_angle, start_angle + 0.46, 6, Color(0.66, 0.94, 1.0, alpha * 0.56), 1.6)
+
+func _draw_zhang_landing_shockwave(request: AttackRequest, alpha: float, progress: float) -> void:
+	var impact_ratio := clampf(progress / 0.26, 0.0, 1.0)
+	var radius := request.range * lerpf(0.24, 1.0, impact_ratio)
+	var pulse_alpha := alpha * (0.88 if progress < 0.20 else 0.62)
+	draw_circle(request.origin, radius * 0.22, Color(1.0, 0.70, 0.27, pulse_alpha * 0.36))
+	draw_arc(request.origin, radius * 0.42, 0.0, TAU, 24, Color(1.0, 0.90, 0.52, pulse_alpha * 0.82), 3.0)
+	draw_arc(request.origin, radius, 0.0, TAU, 36, Color(1.0, 0.48, 0.17, pulse_alpha * 0.92), 3.2)
+	for index in range(12):
+		var direction := Vector2.from_angle(TAU * float(index) / 12.0 + progress * 0.18)
+		var perpendicular := Vector2(-direction.y, direction.x)
+		var root := request.origin + direction * radius * 0.34
+		var tip := request.origin + direction * radius * (0.92 + float(index % 3) * 0.025)
+		var shard := PackedVector2Array([
+			root - perpendicular * (2.5 + progress * 3.0),
+			tip,
+			root + perpendicular * (2.5 + progress * 3.0),
+		])
+		draw_colored_polygon(shard, Color(1.0, 0.62, 0.22, pulse_alpha * (0.52 if index % 2 == 0 else 0.32)))
+		if index % 2 == 0:
+			draw_line(root, tip - direction * 5.0, Color(1.0, 0.92, 0.58, pulse_alpha * 0.76), 1.6)
 
 func _draw_breakout_gust(request: AttackRequest, alpha: float, progress: float) -> void:
 	var direction := request.direction

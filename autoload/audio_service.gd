@@ -19,7 +19,8 @@ const HERO_SKILL_STREAMS: Array[AudioStream] = [
 ]
 const HERO_FIREWHEEL_LOOP_STREAM: AudioStream = preload("res://assets/audio/hero/firewheel-loop.mp3")
 const HERO_ULTIMATE_START_STREAM: AudioStream = preload("res://assets/audio/hero/ultimate-power-up.wav")
-const BATTLE_BGM_STREAM: AudioStream = preload("res://assets/audio/battle/iron-siege-march.mp3")
+const TITLE_BGM_STREAM: AudioStream = preload("res://assets/audio/battle/iron-siege-march.mp3")
+const BATTLE_BGM_STREAM: AudioStream = preload("res://assets/audio/battle/red-banner-charge.mp3")
 const ENEMY_AMBIENCE_STREAMS: Array[AudioStream] = [
 	preload("res://assets/audio/enemies/ambient/enemy-voice-01.wav"),
 	preload("res://assets/audio/enemies/ambient/enemy-voice-02.wav"),
@@ -28,6 +29,8 @@ const SFX_PLAYER_COUNT := 12
 const MUSIC_BUS_NAME := &"Music"
 const SFX_BUS_NAME := &"SFX"
 const SILENT_VOLUME_DB := -80.0
+const MUSIC_PLAYER_VOLUME_DB := -9.0
+const MUSIC_CROSSFADE_DURATION := 0.85
 
 var master_volume_db := 0.0
 var music_volume := 1.0
@@ -37,7 +40,10 @@ var sfx_bus_index := -1
 var sfx_players: Array[AudioStreamPlayer] = []
 var sfx_cursor := 0
 var firewheel_loop_player: AudioStreamPlayer
+var title_bgm_player: AudioStreamPlayer
 var battle_bgm_player: AudioStreamPlayer
+var music_transition: Tween
+var title_bgm_enabled := false
 var battle_bgm_enabled := false
 
 func _ready() -> void:
@@ -53,12 +59,10 @@ func _ready() -> void:
 	firewheel_loop_player.stream = HERO_FIREWHEEL_LOOP_STREAM
 	firewheel_loop_player.volume_db = -6.0
 	add_child(firewheel_loop_player)
-	battle_bgm_player = AudioStreamPlayer.new()
-	battle_bgm_player.bus = MUSIC_BUS_NAME
-	battle_bgm_player.stream = BATTLE_BGM_STREAM
-	battle_bgm_player.volume_db = -9.0
+	title_bgm_player = _create_music_player(TITLE_BGM_STREAM)
+	title_bgm_player.finished.connect(_on_title_bgm_finished)
+	battle_bgm_player = _create_music_player(BATTLE_BGM_STREAM)
 	battle_bgm_player.finished.connect(_on_battle_bgm_finished)
-	add_child(battle_bgm_player)
 	set_music_volume(music_volume)
 	set_sfx_volume(sfx_volume)
 
@@ -118,18 +122,23 @@ func set_hero_firewheel_loop_paused(is_paused: bool) -> void:
 	if firewheel_loop_player != null:
 		firewheel_loop_player.stream_paused = is_paused
 
+func play_title_bgm() -> void:
+	title_bgm_enabled = true
+	battle_bgm_enabled = false
+	_switch_music_to(title_bgm_player, battle_bgm_player)
+
+func stop_title_bgm() -> void:
+	title_bgm_enabled = false
+	_stop_music_player(title_bgm_player)
+
 func play_battle_bgm() -> void:
-	if battle_bgm_player == null:
-		return
+	title_bgm_enabled = false
 	battle_bgm_enabled = true
-	battle_bgm_player.stream_paused = false
-	if not battle_bgm_player.playing:
-		battle_bgm_player.play()
+	_switch_music_to(battle_bgm_player, title_bgm_player)
 
 func stop_battle_bgm() -> void:
 	battle_bgm_enabled = false
-	if battle_bgm_player != null and battle_bgm_player.playing:
-		battle_bgm_player.stop()
+	_stop_music_player(battle_bgm_player)
 
 func set_battle_bgm_paused(is_paused: bool) -> void:
 	if battle_bgm_player != null:
@@ -140,7 +149,52 @@ func play_enemy_battle_voice() -> void:
 
 func _on_battle_bgm_finished() -> void:
 	if battle_bgm_enabled and battle_bgm_player != null:
+		battle_bgm_player.volume_db = MUSIC_PLAYER_VOLUME_DB
 		battle_bgm_player.play()
+
+func _on_title_bgm_finished() -> void:
+	if title_bgm_enabled and title_bgm_player != null:
+		title_bgm_player.volume_db = MUSIC_PLAYER_VOLUME_DB
+		title_bgm_player.play()
+
+func _create_music_player(stream: AudioStream) -> AudioStreamPlayer:
+	var player := AudioStreamPlayer.new()
+	player.bus = MUSIC_BUS_NAME
+	player.stream = stream
+	player.volume_db = MUSIC_PLAYER_VOLUME_DB
+	add_child(player)
+	return player
+
+func _switch_music_to(target: AudioStreamPlayer, other: AudioStreamPlayer) -> void:
+	if target == null:
+		return
+	if music_transition != null and music_transition.is_valid():
+		music_transition.kill()
+	if target.playing:
+		target.stream_paused = false
+		target.volume_db = MUSIC_PLAYER_VOLUME_DB
+		if other != null and other.playing:
+			other.stop()
+		return
+	target.volume_db = -80.0 if other != null and other.playing else MUSIC_PLAYER_VOLUME_DB
+	target.stream_paused = false
+	target.play()
+	if other == null or not other.playing:
+		target.volume_db = MUSIC_PLAYER_VOLUME_DB
+		return
+	music_transition = create_tween().set_parallel(true)
+	music_transition.tween_property(other, "volume_db", -80.0, MUSIC_CROSSFADE_DURATION)
+	music_transition.tween_property(target, "volume_db", MUSIC_PLAYER_VOLUME_DB, MUSIC_CROSSFADE_DURATION)
+	music_transition.chain().tween_callback(other.stop)
+
+func _stop_music_player(player: AudioStreamPlayer) -> void:
+	if player == null:
+		return
+	if music_transition != null and music_transition.is_valid():
+		music_transition.kill()
+	if player.playing:
+		player.stop()
+	player.volume_db = MUSIC_PLAYER_VOLUME_DB
 
 func _play_random(streams: Array[AudioStream], volume_db: float) -> void:
 	if streams.is_empty() or sfx_players.is_empty():

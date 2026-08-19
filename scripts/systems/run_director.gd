@@ -166,7 +166,7 @@ var han_hao_spawned := false
 func reset(world_bounds: Rect2, selected_mode: String = "story", selected_battlefield_id: String = "changban", selected_story_chapter: int = 1) -> void:
 	bounds = world_bounds
 	mode = selected_mode
-	battlefield_id = selected_battlefield_id if selected_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "hulao"] else "changban"
+	battlefield_id = selected_battlefield_id if selected_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao"] else "changban"
 	story_chapter = clampi(selected_story_chapter, 1, STORY_CHAPTERS.size())
 	duration = ENDLESS_DURATION if mode == "endless" else (STORY_DURATION if is_boss_trial() or is_bowangpo() else _story_duration())
 	elapsed = 0.0

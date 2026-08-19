@@ -2,7 +2,7 @@ class_name BattlefieldLayout
 extends RefCounted
 
 const EDITOR_SIZE := Vector2(1000.0, 568.0)
-const EDITOR_ORDER: Array[String] = ["xinye", "bowangpo", "changban", "hulao"]
+const EDITOR_ORDER: Array[String] = ["xinye", "bowangpo", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "changban", "hulao"]
 const EMBEDDED_MAP_DIRECTORY := "res://data/maps"
 
 const COMMON_ASSETS: Array[Dictionary] = [
@@ -68,12 +68,11 @@ const BATTLEFIELDS := {
 	"xinye": {
 		"title": "新野练兵",
 		"ground_fill": "29321a",
-		"ground_path": "res://assets/art/environment/xinye1/1.png",
+		"ground_path": "res://assets/art/environment/xinye1/ground-canvas.png",
 		"ground_layers": [
-			{"role": "base", "path": "res://assets/art/environment/xinye1/1.png", "opacity": 0.97},
-			{"role": "blend", "path": "res://assets/art/environment/changban/grass-dirt-base-01.png", "opacity": 0.12, "tint": "d8c78d"},
-			{"role": "patch", "path": "res://assets/art/environment/changban/dirt-base-01.png", "opacity": 0.17, "tint": "d4b878", "regions": [Rect2(0.12, 0.17, 0.46, 0.32), Rect2(0.47, 0.48, 0.42, 0.30)]},
+			{"role": "canvas", "path": "res://assets/art/environment/xinye1/ground-canvas.png", "opacity": 1.0},
 		],
+		"baked_scene": true,
 		"save_path": "user://map_editor/xinye1.json",
 		"assets": [
 			{"id": "platform", "label": "练兵台", "path": "res://assets/art/environment/xinye1/2.png", "default_scale": 1.0},
@@ -101,12 +100,11 @@ const BATTLEFIELDS := {
 	"bowangpo": {
 		"title": "博望坡火谷",
 		"ground_fill": "160f0c",
-		"ground_path": "res://assets/art/environment/bowangpo1/1.png",
+		"ground_path": "res://assets/art/environment/bowangpo1/ground-canvas.png",
 		"ground_layers": [
-			{"role": "base", "path": "res://assets/art/environment/bowangpo1/1.png", "opacity": 0.96, "tint": "e6dbc7"},
-			{"role": "blend", "path": "res://assets/art/environment/changban/dirt-base-01.png", "opacity": 0.07, "tint": "5a4430"},
-			{"role": "patch", "path": "res://assets/art/environment/changban/grass-dirt-base-01.png", "opacity": 0.05, "tint": "493d2b", "regions": [Rect2(0.08, 0.18, 0.38, 0.26), Rect2(0.57, 0.54, 0.34, 0.25)]},
+			{"role": "canvas", "path": "res://assets/art/environment/bowangpo1/ground-canvas.png", "opacity": 1.0},
 		],
+		"baked_scene": true,
 		"save_path": "user://map_editor/bowangpo.json",
 		"assets": [
 			{"id": "rock_platform", "label": "山岩台地", "path": "res://assets/art/environment/bowangpo1/2.png", "default_scale": 1.0},
@@ -131,33 +129,109 @@ const BATTLEFIELDS := {
 			{"x": 240.0, "y": 438.0, "w": 148.0, "h": 62.0},
 		],
 	},
-	"changban": {
-		"title": "长坂坡雪夜",
-		"ground_fill": "13130e",
-		"ground_path": "res://assets/art/environment/changban/grass-base-01.png",
+	"huoshaoxinye": {
+		"title": "火烧新野",
+		"ground_fill": "21140f",
+		"ground_path": "res://assets/art/environment/huoshaoxinye1/ground-canvas.png",
 		"ground_layers": [
-			{"role": "base", "path": "res://assets/art/environment/changban/grass-base-01.png", "opacity": 1.0},
-			{"role": "blend", "path": "res://assets/art/environment/changban/grass-dirt-base-01.png", "opacity": 0.16, "tint": "d1c283"},
-			{"role": "patch", "path": "res://assets/art/environment/changban/dirt-base-01.png", "opacity": 0.19, "tint": "d9bd7a", "regions": [Rect2(0.19, 0.27, 0.58, 0.39), Rect2(0.66, 0.08, 0.24, 0.21)]},
+			{"role": "canvas", "path": "res://assets/art/environment/huoshaoxinye1/ground-canvas.png", "opacity": 1.0},
 		],
-		"save_path": "user://map_editor/changban.json",
+		"baked_scene": true,
+		"save_path": "user://map_editor/huoshaoxinye.json",
 		"assets": [
-			{"id": "dirt_patch", "label": "泥土地块", "path": "res://assets/art/environment/changban/dirt-base-01.png", "default_scale": 1.0, "editor_visible": false},
-			{"id": "grass_dirt_patch", "label": "草泥过渡地", "path": "res://assets/art/environment/changban/grass-dirt-base-01.png", "default_scale": 1.0, "editor_visible": false},
-			{"id": "trampled_patch_01", "label": "践踏痕迹 A", "path": "res://assets/art/environment/changban/trampled-patch-01.png", "default_scale": 0.9, "editor_visible": false},
-			{"id": "trampled_patch_02", "label": "践踏痕迹 B", "path": "res://assets/art/environment/changban/trampled-patch-02.png", "default_scale": 0.9, "editor_visible": false},
-			{"id": "slope", "label": "山坡边界", "path": "res://assets/art/environment/changban/slope-chunk-01.png", "default_scale": 1.0},
+			{"id": "burnt_wall", "label": "烧毁木墙", "path": "res://assets/art/environment/huoshaoxinye1/burnt-wall.png", "default_scale": 0.74},
+			{"id": "burning_hut", "label": "燃烧营房", "path": "res://assets/art/environment/huoshaoxinye1/burning-hut.png", "default_scale": 0.70},
+			{"id": "overturned_cart", "label": "翻覆辎车", "path": "res://assets/art/environment/huoshaoxinye1/overturned-cart.png", "default_scale": 0.70},
 		],
 		"defaults": [
-			{"id": "trampled_patch_01", "position": Vector2(274.0, 412.0), "scale": 0.82, "obstacle": false},
-			{"id": "trampled_patch_02", "position": Vector2(580.0, 348.0), "scale": 0.74, "obstacle": false},
-			{"id": "trampled_patch_01", "position": Vector2(830.0, 420.0), "scale": 0.70, "obstacle": false},
-			{"id": "slope", "position": Vector2(84.0, 114.0), "scale": 0.88, "obstacle": true},
-			{"id": "slope", "position": Vector2(916.0, 446.0), "scale": 0.88, "obstacle": true},
+			{"id": "burnt_wall", "position": Vector2(152.0, 152.0), "scale": 0.72, "obstacle": false},
+			{"id": "burning_hut", "position": Vector2(822.0, 168.0), "scale": 0.66, "obstacle": false},
+			{"id": "overturned_cart", "position": Vector2(772.0, 448.0), "scale": 0.66, "obstacle": false},
 		],
 		"collision_zones": [
-			{"x": 0.0, "y": 54.0, "w": 180.0, "h": 124.0},
-			{"x": 820.0, "y": 382.0, "w": 180.0, "h": 124.0},
+			{"x": 74.0, "y": 88.0, "w": 208.0, "h": 86.0},
+			{"x": 736.0, "y": 96.0, "w": 168.0, "h": 82.0},
+			{"x": 700.0, "y": 412.0, "w": 160.0, "h": 68.0},
+		],
+	},
+	"xiangyangchetui": {
+		"title": "襄阳撤退",
+		"ground_fill": "2b2b22",
+		"ground_path": "res://assets/art/environment/xiangyangchetui1/ground-canvas.png",
+		"ground_layers": [
+			{"role": "canvas", "path": "res://assets/art/environment/xiangyangchetui1/ground-canvas.png", "opacity": 1.0},
+		],
+		"baked_scene": true,
+		"save_path": "user://map_editor/xiangyangchetui.json",
+		"assets": [
+			{"id": "riverside_wharf", "label": "江岸木码头", "path": "res://assets/art/environment/xiangyangchetui1/riverside-wharf.png", "default_scale": 0.76},
+			{"id": "small_boat", "label": "撤退小舟", "path": "res://assets/art/environment/xiangyangchetui1/small-boat.png", "default_scale": 0.92},
+			{"id": "covered_cart", "label": "篷布辎车组", "path": "res://assets/art/environment/xiangyangchetui1/covered-cart-center-v2.png", "default_scale": 0.70},
+			{"id": "river_posts", "label": "江岸木桩", "path": "res://assets/art/environment/xiangyangchetui1/river-posts-v2.png", "default_scale": 0.82},
+		],
+		"defaults": [
+			{"id": "riverside_wharf", "position": Vector2(166.0, 426.0), "scale": 0.76, "obstacle": false},
+			{"id": "small_boat", "position": Vector2(186.0, 194.0), "scale": 1.00, "obstacle": false},
+			{"id": "covered_cart", "position": Vector2(790.0, 170.0), "scale": 0.62, "obstacle": false},
+			{"id": "river_posts", "position": Vector2(800.0, 436.0), "scale": 0.74, "obstacle": false},
+		],
+		"collision_zones": [
+			{"x": 44.0, "y": 364.0, "w": 272.0, "h": 102.0},
+			{"x": 706.0, "y": 104.0, "w": 172.0, "h": 88.0},
+			{"x": 728.0, "y": 402.0, "w": 148.0, "h": 74.0},
+		],
+	},
+	"dangyangduanhou": {
+		"title": "当阳断后",
+		"ground_fill": "3a2918",
+		"ground_path": "res://assets/art/environment/dangyangduanhou/ground-canvas.png",
+		"ground_layers": [
+			{"role": "canvas", "path": "res://assets/art/environment/dangyangduanhou/ground-canvas.png", "opacity": 1.0},
+		],
+		"baked_scene": true,
+		"save_path": "user://map_editor/dangyangduanhou.json",
+		"assets": [
+			{"id": "supply_wreck", "label": "损毁辎重堆", "path": "res://assets/art/environment/dangyangduanhou/supply-wreck-left.png", "default_scale": 0.66},
+			{"id": "supply_wagon", "label": "辎重马车", "path": "res://assets/art/environment/dangyangduanhou/supply-wagon-right.png", "default_scale": 0.64},
+			{"id": "supply_crates", "label": "散落箱笼", "path": "res://assets/art/environment/dangyangduanhou/supply-crates.png", "default_scale": 0.78},
+		],
+		"defaults": [
+			{"id": "supply_wreck", "position": Vector2(164.0, 198.0), "scale": 0.56, "obstacle": false},
+			{"id": "supply_wagon", "position": Vector2(808.0, 190.0), "scale": 0.56, "obstacle": false},
+			{"id": "supply_crates", "position": Vector2(742.0, 458.0), "scale": 0.72, "obstacle": false},
+		],
+		"collision_zones": [
+			{"x": 52.0, "y": 132.0, "w": 220.0, "h": 116.0},
+			{"x": 716.0, "y": 116.0, "w": 192.0, "h": 104.0},
+			{"x": 680.0, "y": 422.0, "w": 162.0, "h": 68.0},
+		],
+	},
+	"changban": {
+		"title": "长坂坡雪夜",
+		"ground_fill": "111927",
+		"ground_path": "res://assets/art/environment/changbanpo/ground-canvas.png",
+		"ground_layers": [
+			{"role": "canvas", "path": "res://assets/art/environment/changbanpo/ground-canvas.png", "opacity": 1.0},
+		],
+		"baked_scene": true,
+		"save_path": "user://map_editor/changban_snow.json",
+		"assets": [
+			{"id": "snow_wreckage", "label": "雪地废弃辎车", "path": "res://assets/art/environment/changbanpo/snow-wreckage.png", "default_scale": 0.42},
+			{"id": "snow_camp", "label": "雪地残营", "path": "res://assets/art/environment/changbanpo/snow-camp.png", "default_scale": 0.42},
+			{"id": "snow_banner", "label": "覆雪残旗组", "path": "res://assets/art/environment/changbanpo/snow-banner-red-v2.png", "default_scale": 0.82},
+			{"id": "snow_wheel", "label": "覆雪车轮残骸", "path": "res://assets/art/environment/changbanpo/snow-wheel-v2.png", "default_scale": 0.82},
+			{"id": "snow_tracks", "label": "雪地践踏痕", "path": "res://assets/art/environment/changbanpo/snow-tracks-v2.png", "default_scale": 0.78},
+		],
+		"defaults": [
+			{"id": "snow_wreckage", "position": Vector2(178.0, 184.0), "scale": 0.38, "obstacle": false},
+			{"id": "snow_camp", "position": Vector2(816.0, 394.0), "scale": 0.38, "obstacle": false},
+			{"id": "snow_banner", "position": Vector2(208.0, 440.0), "scale": 0.72, "obstacle": false},
+			{"id": "snow_wheel", "position": Vector2(722.0, 168.0), "scale": 0.72, "obstacle": false},
+			{"id": "snow_tracks", "position": Vector2(506.0, 382.0), "scale": 0.70, "obstacle": false},
+		],
+		"collision_zones": [
+			{"x": 34.0, "y": 92.0, "w": 230.0, "h": 120.0},
+			{"x": 736.0, "y": 320.0, "w": 224.0, "h": 134.0},
 		],
 	},
 	"hulao": {
@@ -204,6 +278,9 @@ static func title_for(battlefield_id: String) -> String:
 static func ground_path_for(battlefield_id: String) -> String:
 	return str(definition_for(battlefield_id).get("ground_path", ""))
 
+static func has_baked_scene_for(battlefield_id: String) -> bool:
+	return bool(definition_for(battlefield_id).get("baked_scene", false))
+
 static func ground_fill_color_for(battlefield_id: String) -> Color:
 	return Color(str(definition_for(battlefield_id).get("ground_fill", "13130e")))
 
@@ -221,7 +298,11 @@ static func ground_layers_for(battlefield_id: String) -> Array[Dictionary]:
 	return layers
 
 static func ground_summary_for(battlefield_id: String) -> String:
-	var layer_count := ground_layers_for(battlefield_id).size()
+	var layers := ground_layers_for(battlefield_id)
+	for layer in layers:
+		if str(layer.get("role", "")) == "canvas":
+			return "固定基础地表画布"
+	var layer_count := layers.size()
 	return "自动组合（底层 + %d 层副地皮）" % maxi(0, layer_count - 1)
 
 static func save_path_for(battlefield_id: String) -> String:

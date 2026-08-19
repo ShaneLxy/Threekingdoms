@@ -44,6 +44,7 @@ var action_elapsed := 0.0
 var action_duration := 0.0
 var pending_attack: AttackRequest
 var has_buffered_basic := false
+var buffered_basic_direction := Vector2.ZERO
 var current_move_direction := Vector2.ZERO
 var active_direction := Vector2.RIGHT
 var basic_attack_direction := Vector2.RIGHT
@@ -121,6 +122,8 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	combo_stage = 0
 	combo_window = 0.0
 	active_cooldown = 0.0
+	active_charge_capacity = 1
+	active_charge_count = 1
 	ultimate_energy = 0.0
 	ultimate_time = 0.0
 	ultimate_state = UltimateState.INACTIVE
@@ -130,12 +133,14 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	ultimate_dash_direction = Vector2.RIGHT
 	last_attack_direction = Vector2.RIGHT
 	current_action = ""
+	clear_basic_attack_movement()
 	attack_lock_remaining = 0.0
 	hit_delay_remaining = 0.0
 	action_elapsed = 0.0
 	action_duration = 0.0
 	pending_attack = null
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
 	current_move_direction = Vector2.ZERO
 	active_direction = Vector2.RIGHT
 	basic_attack_direction = Vector2.RIGHT
@@ -181,7 +186,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 
 func tick(delta: float, move_direction: Vector2) -> void:
 	current_move_direction = move_direction
-	active_cooldown = maxf(0.0, active_cooldown - delta)
+	tick_active_charge_recovery(delta, _active_cooldown_for_current_state())
 	combo_window = maxf(0.0, combo_window - delta)
 	weapon_clash_remaining = maxf(0.0, weapon_clash_remaining - delta)
 	if weapon_clash_remaining <= 0.0:
@@ -206,7 +211,9 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		combo_stage = 0
 	if was_waiting_for_hit and hit_delay_remaining <= 0.0:
 		_release_pending_attack()
-	if ultimate_state == UltimateState.INACTIVE and not is_action_locked():
+	if current_action in ["basic", "drag_release"] and hit_delay_remaining <= 0.0 and is_action_locked():
+		tick_basic_attack_movement(delta, move_direction)
+	elif ultimate_state == UltimateState.INACTIVE and not is_action_locked():
 		_update_facing_from_movement(move_direction)
 		_move(move_direction, speed * delta)
 	elif ultimate_state == UltimateState.EMPOWERED and not is_action_locked():
@@ -262,6 +269,7 @@ func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 			# Input confirms the next stage, but its direction is read only when that
 			# stage starts so the active swing cannot be redirected mid-animation.
 			has_buffered_basic = true
+			buffered_basic_direction = _eight_way_direction(_current_basic_input(direction), last_attack_direction)
 			return true
 		return false
 	_lock_basic_attack_direction(_current_basic_input(direction))
@@ -272,7 +280,7 @@ func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_cooldown > 0.0:
+	if active_charge_count <= 0:
 		return false
 	if is_action_locked() and current_action not in ["basic", "drag_charge"]:
 		return false
@@ -282,7 +290,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 		_cancel_drag_charge()
 	active_direction = _eight_way_direction(direction, last_attack_direction)
 	_update_facing_from_movement(active_direction)
-	active_cooldown = _active_cooldown_for_current_state()
+	consume_active_charge(_active_cooldown_for_current_state())
 	active_slide_direction = active_direction
 	active_slide_remaining = ACTIVE_SLIDE_DISTANCE
 	active_slide_attack = AttackRequest.line(position, active_direction, ACTIVE_SLIDE_FRONT_REACH, 70.0, 0.62 + active_damage_bonus * 0.35, 80, "青龙破阵")
@@ -310,7 +318,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func can_use_active() -> bool:
-	return active_cooldown <= 0.0 and (not is_action_locked() or current_action in ["basic", "drag_charge"])
+	return active_charge_count > 0 and (not is_action_locked() or current_action in ["basic", "drag_charge"])
 
 func request_ultimate(direction: Vector2 = Vector2.ZERO) -> bool:
 	if ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE:
@@ -395,6 +403,7 @@ func apply_level_up_benefits() -> void:
 func apply_account_progress(profile: Dictionary) -> void:
 	_apply_military_strategy(profile)
 	active_cooldown_duration = maxf(4.8, active_cooldown_duration - military_active_cooldown_reduction)
+	reset_active_charges()
 	_basic_pierce_bonus_from_military()
 
 func _basic_pierce_bonus_from_military() -> void:
@@ -541,6 +550,8 @@ func visual_action_progress() -> float:
 func _begin_basic(stage: int) -> void:
 	combo_window = 0.74
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
+	begin_basic_attack_movement()
 	projectile_guard_blocks_remaining = _projectile_guard_block_limit()
 	_start_action("basic", BASIC_LOCKS[stage - 1])
 	hit_delay_remaining = BASIC_HIT_DELAYS[stage - 1]
@@ -575,6 +586,7 @@ func _begin_basic(stage: int) -> void:
 func _begin_drag_release() -> void:
 	combo_stage = 0
 	combo_window = 0.0
+	begin_basic_attack_movement()
 	projectile_guard_blocks_remaining = _projectile_guard_block_limit()
 	_start_action("drag_release", 0.64)
 	combat_action_started.emit("drag")
@@ -830,15 +842,20 @@ func _finish_action() -> void:
 	if current_action == "basic":
 		combat_action_finished.emit("basic_%d" % combo_stage)
 		if has_buffered_basic:
+			var next_direction := _current_basic_input()
+			if next_direction.length_squared() <= 0.01:
+				next_direction = buffered_basic_direction
 			has_buffered_basic = false
+			buffered_basic_direction = Vector2.ZERO
 			combo_stage = (combo_stage % BASIC_COMBO_STAGES) + 1
-			_lock_basic_attack_direction(current_move_direction)
+			_lock_basic_attack_direction(next_direction)
 			_begin_basic(combo_stage)
 			return
 	elif current_action == "active":
 		combat_action_finished.emit("active")
 	elif current_action == "drag_release":
 		combat_action_finished.emit("drag")
+	clear_basic_attack_movement()
 	current_action = ""
 	action_elapsed = 0.0
 	action_duration = 0.0
@@ -850,7 +867,9 @@ func _cancel_basic_for_skill() -> void:
 	attack_lock_remaining = 0.0
 	combo_window = 0.0
 	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
 	combo_stage = 0
+	clear_basic_attack_movement()
 	current_action = ""
 	action_elapsed = 0.0
 	action_duration = 0.0

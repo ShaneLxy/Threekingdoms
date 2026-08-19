@@ -1,0 +1,52 @@
+{
+  "collision_zones": [
+    {
+      "h": 92.0,
+      "w": 141.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "h": 168.0,
+      "w": 210.0,
+      "x": 790.0,
+      "y": 0.0
+    },
+    {
+      "h": 75.0,
+      "w": 136.0,
+      "x": 109.0,
+      "y": 55.0
+    }
+  ],
+  "map_id": "dangyangduanhou",
+  "objects": [
+    {
+      "id": "supply_wreck",
+      "obstacle": false,
+      "position": {
+        "x": 164.0,
+        "y": 198.0
+      },
+      "scale": 0.56
+    },
+    {
+      "id": "supply_wagon",
+      "obstacle": false,
+      "position": {
+        "x": 808.0,
+        "y": 190.0
+      },
+      "scale": 0.56
+    },
+    {
+      "id": "supply_crates",
+      "obstacle": false,
+      "position": {
+        "x": 742.0,
+        "y": 458.0
+      },
+      "scale": 0.72
+    }
+  ]
+}

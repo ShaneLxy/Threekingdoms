@@ -18,6 +18,7 @@ config/features=PackedStringArray("4.7", "Mobile")
 
 SaveService="*res://autoload/save_service.gd"
 AudioService="*res://autoload/audio_service.gd"
+LoadingOverlay="*res://autoload/loading_overlay.gd"
 SceneRouter="*res://autoload/scene_router.gd"
 
 [display]
