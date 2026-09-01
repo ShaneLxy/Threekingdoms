@@ -13,6 +13,8 @@ enum EnemyType { SWORD, HALBERD, ARCHER, SHIELD, ELITE, GUARD, SPEAR, CROSSBOW, 
 enum AttackState { APPROACH, WINDUP, RECOVER }
 enum DeathState { NONE, FALLING, LAUNCHED }
 enum EngagementLayer { ENGAGE, PRESSURE, ATMOSPHERE }
+enum DuelRole { NONE, SHIELD_RING, SPEAR_RING, RANGED_RING }
+enum DuelPhase { NONE, ASSEMBLING, SEALED }
 
 const CAPACITY := 400
 const DEATH_DISPLAY_DURATION := 0.72
@@ -41,8 +43,10 @@ const ATTACK_KIND_HALBERD_BRACE := "halberd_brace"
 const ATTACK_KIND_SPEAR_THRUST_1 := "spear_thrust_1"
 const ATTACK_KIND_SPEAR_THRUST_2 := "spear_thrust_2"
 const ATTACK_KIND_SPEAR_FORMATION := "spear_formation"
+const ATTACK_KIND_DUEL_SPEAR_THRUST := "duel_spear_thrust"
 const ATTACK_KIND_CROSSBOW_DIRECT := "crossbow_direct"
 const ATTACK_KIND_CROSSBOW_VOLLEY := "crossbow_volley"
+const ATTACK_KIND_DUEL_SHIELD_PUSH := "duel_shield_push"
 const ATTACK_KIND_BANNER_COMMAND := "banner_command"
 const ATTACK_KIND_CAVALRY_STAB := "cavalry_stab"
 const ATTACK_KIND_CAVALRY_CHARGE := "cavalry_charge"
@@ -69,9 +73,9 @@ const CAVALRY_CHARGE_COOLDOWN := 5.6
 const CAVALRY_CLASH_COOLDOWN := 2.4
 const CAVALRY_CLASH_HURT_DURATION := 0.22
 const CAVALRY_CLASH_KNOCKBACK := 560.0
-const HALBERD_SWEEP_RANGE := 130.0
-const HALBERD_BRACE_MIN_DISTANCE := 96.0
-const HALBERD_BRACE_MAX_DISTANCE := 174.0
+const HALBERD_SWEEP_RANGE := 68.0
+const HALBERD_BRACE_MIN_DISTANCE := 72.0
+const HALBERD_BRACE_MAX_DISTANCE := 110.0
 const HALBERD_BRACE_APPROACH_SPEED := 78.0
 const SPEAR_LINE_HALF_WIDTH := 36.0
 const SPEAR_FORMATION_MIN_MEMBERS := 3
@@ -81,6 +85,8 @@ const SPEAR_CLASH_HURT_DURATION := 0.24
 const SPEAR_CLASH_KNOCKBACK := 520.0
 const SPATIAL_CELL_SIZE := 64.0
 const MAX_SEPARATION_NEIGHBORS := 8
+const PRESSURE_SEPARATION_REFRESH_INTERVAL := 0.10
+const ATMOSPHERE_SEPARATION_REFRESH_INTERVAL := 0.24
 const LAYER_REFRESH_INTERVAL := 0.55
 const NAVIGATION_REPLAN_INTERVAL := 0.28
 const NAVIGATION_TARGET_SHIFT := 46.0
@@ -93,6 +99,26 @@ const ENGAGE_SPEAR_LIMIT := 4
 const ENGAGE_CROSSBOW_LIMIT := 3
 const ENGAGE_BANNER_LIMIT := 1
 const ENGAGE_CAVALRY_LIMIT := 3
+const DUEL_SHIELD_SLOTS := 36
+const DUEL_SPEAR_SLOTS := 24
+const DUEL_RANGED_SLOTS := 16
+const DUEL_SHIELD_RADIUS := Vector2(346.0, 229.0)
+const DUEL_SPEAR_RADIUS := Vector2(424.0, 282.0)
+const DUEL_RANGED_RADIUS := Vector2(510.0, 339.0)
+const DUEL_SOFT_BOUNDARY_RADIUS := Vector2(386.0, 257.0)
+const DUEL_PLAYER_MAX_OVERSTEP := 44.0
+const DUEL_SLOT_ARRIVAL_DISTANCE := 34.0
+const DUEL_SHIELD_SEAL_REQUIREMENT := 30
+const DUEL_SHIELD_PUSH_ATTACKERS := 2
+const DUEL_SPEAR_ATTACKERS := 1
+const DUEL_RANGED_ATTACKERS := 1
+const DUEL_FORMATION_DAMAGE_MULTIPLIER := 0.20
+const DUEL_ASSEMBLING_SHIELD_DAMAGE_MULTIPLIER := 0.35
+const DUEL_REINFORCEMENT_DELAY_MIN := 0.70
+const DUEL_REINFORCEMENT_DELAY_MAX := 1.15
+const DUEL_REINFORCEMENT_SPAWN_INTERVAL := 0.18
+const DUEL_RANGED_ATTACK_COOLDOWN_MIN := 4.2
+const DUEL_RANGED_ATTACK_COOLDOWN_MAX := 6.2
 const THREAT_HEALTH_MULTIPLIERS := [1.0, 1.35, 1.80, 2.35, 3.00, 3.70, 4.50, 5.40]
 const THREAT_DAMAGE_MULTIPLIERS := [1.0, 1.12, 1.28, 1.48, 1.72, 1.92, 2.14, 2.38]
 const THREAT_ARMOR_BONUSES := [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
@@ -110,6 +136,7 @@ var attack_states := PackedInt32Array()
 var attack_timers := PackedFloat32Array()
 var types := PackedInt32Array()
 var active := PackedByteArray()
+var tianji_lifted := PackedByteArray()
 var knockback_velocities: Array[Vector2] = []
 var recoil_timers := PackedFloat32Array()
 var recoil_velocities: Array[Vector2] = []
@@ -147,6 +174,10 @@ var spear_combo_stages := PackedByteArray()
 var spear_combo_timers := PackedFloat32Array()
 var command_aura_strengths := PackedFloat32Array()
 var command_surge_timers := PackedFloat32Array()
+var separation_vectors: Array[Vector2] = []
+var separation_refresh_timers := PackedFloat32Array()
+var duel_roles := PackedByteArray()
+var duel_slots := PackedInt32Array()
 var cavalry_charge_cooldowns := PackedFloat32Array()
 var cavalry_charge_distances := PackedFloat32Array()
 var cavalry_charge_directions: Array[Vector2] = []
@@ -159,6 +190,7 @@ var layer_refresh_remaining := 0.0
 var threat_tier := 0
 var battle_mode := "story"
 var battle_elapsed := 0.0
+var difficulty_ramp := 1.0
 var formation_time := 0.0
 var last_player_position := Vector2.ZERO
 var player_velocity := Vector2.ZERO
@@ -172,6 +204,13 @@ var navigation_targets: Array[Vector2] = []
 var navigation_replan_timers := PackedFloat32Array()
 var navigation_waypoint_active := PackedByteArray()
 var navigation_preferred_sides := PackedInt32Array()
+var duel_phase := DuelPhase.NONE
+var duel_center := Vector2.ZERO
+var duel_slot_refill_timers := PackedFloat32Array()
+var duel_fodder_death_ids: Dictionary = {}
+var duel_maintenance_remaining := 0.0
+var duel_reinforcement_spawn_remaining := 0.0
+var duel_ranged_attack_cooldown := 0.0
 
 func _ready() -> void:
 	positions.resize(CAPACITY)
@@ -186,6 +225,7 @@ func _ready() -> void:
 	attack_timers.resize(CAPACITY)
 	types.resize(CAPACITY)
 	active.resize(CAPACITY)
+	tianji_lifted.resize(CAPACITY)
 	knockback_velocities.resize(CAPACITY)
 	recoil_timers.resize(CAPACITY)
 	recoil_velocities.resize(CAPACITY)
@@ -223,6 +263,11 @@ func _ready() -> void:
 	spear_combo_timers.resize(CAPACITY)
 	command_aura_strengths.resize(CAPACITY)
 	command_surge_timers.resize(CAPACITY)
+	separation_vectors.resize(CAPACITY)
+	separation_refresh_timers.resize(CAPACITY)
+	duel_roles.resize(CAPACITY)
+	duel_slots.resize(CAPACITY)
+	duel_slot_refill_timers.resize(_duel_total_slot_count())
 	cavalry_charge_cooldowns.resize(CAPACITY)
 	cavalry_charge_distances.resize(CAPACITY)
 	cavalry_charge_directions.resize(CAPACITY)
@@ -237,6 +282,7 @@ func _ready() -> void:
 		damage_multipliers[id] = 1.0
 		attack_timers[id] = 0.0
 		boss_guard_flags[id] = 0
+		tianji_lifted[id] = 0
 		death_states[id] = DeathState.NONE
 		death_timers[id] = 0.0
 		death_velocities[id] = Vector2.ZERO
@@ -262,6 +308,10 @@ func _ready() -> void:
 		spear_combo_timers[id] = 0.0
 		command_aura_strengths[id] = 0.0
 		command_surge_timers[id] = 0.0
+		separation_vectors[id] = Vector2.ZERO
+		separation_refresh_timers[id] = 0.0
+		duel_roles[id] = DuelRole.NONE
+		duel_slots[id] = -1
 		cavalry_charge_cooldowns[id] = 0.0
 		cavalry_charge_distances[id] = 0.0
 		cavalry_charge_directions[id] = Vector2.ZERO
@@ -271,10 +321,14 @@ func _ready() -> void:
 func set_threat_tier(value: int) -> void:
 	threat_tier = clampi(value, 0, THREAT_HEALTH_MULTIPLIERS.size() - 1)
 
+func set_difficulty_ramp(value: float) -> void:
+	difficulty_ramp = clampf(value, 0.70, 1.20)
+
 func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	bounds = world_bounds
 	battle_mode = selected_mode
 	battle_elapsed = 0.0
+	difficulty_ramp = 1.0
 	formation_time = 0.0
 	last_player_position = world_bounds.get_center()
 	player_velocity = Vector2.ZERO
@@ -282,6 +336,14 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	archer_volley_cooldown = 0.0
 	spear_formation_cooldown = 0.0
 	crossbow_volley_cooldown = 0.0
+	duel_phase = DuelPhase.NONE
+	duel_center = world_bounds.get_center()
+	duel_maintenance_remaining = 0.0
+	duel_reinforcement_spawn_remaining = 0.0
+	duel_ranged_attack_cooldown = 0.0
+	duel_fodder_death_ids.clear()
+	for slot_index in range(duel_slot_refill_timers.size()):
+		duel_slot_refill_timers[slot_index] = 0.0
 	navigation_waypoints.resize(CAPACITY)
 	navigation_targets.resize(CAPACITY)
 	navigation_replan_timers.resize(CAPACITY)
@@ -294,6 +356,7 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	layer_refresh_remaining = 0.0
 	for id in range(CAPACITY):
 		active[id] = 0
+		tianji_lifted[id] = 0
 		hurt_timers[id] = 0.0
 		attack_states[id] = AttackState.APPROACH
 		attack_timers[id] = 0.0
@@ -327,6 +390,10 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 		spear_combo_timers[id] = 0.0
 		command_aura_strengths[id] = 0.0
 		command_surge_timers[id] = 0.0
+		separation_vectors[id] = Vector2.ZERO
+		separation_refresh_timers[id] = 0.0
+		duel_roles[id] = DuelRole.NONE
+		duel_slots[id] = -1
 		cavalry_charge_cooldowns[id] = 0.0
 		cavalry_charge_distances[id] = 0.0
 		cavalry_charge_directions[id] = Vector2.ZERO
@@ -355,19 +422,270 @@ func mark_navigation_blocked(id: int) -> void:
 func set_battle_elapsed(value: float) -> void:
 	battle_elapsed = maxf(0.0, value)
 
+func begin_duel_formation(center: Vector2) -> void:
+	clear_duel_formation()
+	duel_center = _clamp_duel_center(center)
+	duel_phase = DuelPhase.ASSEMBLING
+	_assign_duel_role_slots(DuelRole.SHIELD_RING, DUEL_SHIELD_SLOTS)
+	_assign_duel_role_slots(DuelRole.SPEAR_RING, DUEL_SPEAR_SLOTS)
+	_assign_duel_role_slots(DuelRole.RANGED_RING, DUEL_RANGED_SLOTS)
+	layer_refresh_remaining = 0.0
+	duel_maintenance_remaining = 0.0
+	duel_reinforcement_spawn_remaining = 0.0
+	duel_ranged_attack_cooldown = 0.0
+
+func clear_duel_formation() -> void:
+	duel_phase = DuelPhase.NONE
+	for id in range(CAPACITY):
+		duel_roles[id] = DuelRole.NONE
+		duel_slots[id] = -1
+	layer_refresh_remaining = 0.0
+	duel_maintenance_remaining = 0.0
+	duel_reinforcement_spawn_remaining = 0.0
+	duel_ranged_attack_cooldown = 0.0
+	duel_fodder_death_ids.clear()
+	for slot_index in range(duel_slot_refill_timers.size()):
+		duel_slot_refill_timers[slot_index] = 0.0
+
+func is_duel_formation_active() -> bool:
+	return duel_phase != DuelPhase.NONE
+
+func is_duel_formation_sealed() -> bool:
+	return duel_phase == DuelPhase.SEALED
+
+func duel_formation_center() -> Vector2:
+	return duel_center
+
+func is_duel_formation_member(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and active[id] == 1 and duel_roles[id] != DuelRole.NONE
+
+func is_duel_shield(id: int) -> bool:
+	return is_duel_formation_member(id) and duel_roles[id] == DuelRole.SHIELD_RING
+
+func duel_containment_radii() -> Vector2:
+	if not is_duel_formation_active():
+		return Vector2.ZERO
+	return DUEL_SHIELD_RADIUS
+
+func duel_soft_boundary_radii() -> Vector2:
+	if not is_duel_formation_active():
+		return Vector2.ZERO
+	return DUEL_SOFT_BOUNDARY_RADIUS
+
+func constrain_to_duel_formation(at: Vector2, margin: float = 12.0) -> Vector2:
+	if not is_duel_formation_active():
+		return at
+	var radii := duel_containment_radii() - Vector2.ONE * margin
+	radii.x = maxf(48.0, radii.x)
+	radii.y = maxf(48.0, radii.y)
+	var offset := at - duel_center
+	var normalized_distance := sqrt(pow(offset.x / radii.x, 2.0) + pow(offset.y / radii.y, 2.0))
+	if normalized_distance <= 1.0:
+		return at
+	return duel_center + offset / normalized_distance
+
+func apply_duel_player_boundary(origin: Vector2, candidate: Vector2) -> Vector2:
+	if not is_duel_formation_active():
+		return candidate
+	var radii := DUEL_SOFT_BOUNDARY_RADIUS
+	var origin_offset := origin - duel_center
+	var candidate_offset := candidate - duel_center
+	var origin_distance := _duel_normalized_distance(origin, radii)
+	var candidate_distance := _duel_normalized_distance(candidate, radii)
+	if candidate_distance <= 1.0:
+		return candidate
+	var resolved := candidate
+	var movement := candidate - origin
+	var radial_direction := candidate_offset.normalized()
+	if origin_distance > 1.0 and movement.dot(radial_direction) > 0.0:
+		resolved = origin + movement * 0.10
+	elif origin_distance <= 1.0:
+		var boundary_point := duel_center + candidate_offset / maxf(0.01, candidate_distance)
+		resolved = boundary_point + (candidate - boundary_point) * 0.10
+	var max_radii := radii + Vector2.ONE * DUEL_PLAYER_MAX_OVERSTEP
+	var resolved_distance := _duel_normalized_distance(resolved, max_radii)
+	if resolved_distance > 1.0:
+		var resolved_offset := resolved - duel_center
+		resolved = duel_center + resolved_offset / resolved_distance
+	return resolved
+
+func constrain_named_to_duel_formation(at: Vector2, margin: float = 32.0) -> Vector2:
+	if not is_duel_formation_active():
+		return at
+	var radii := DUEL_SHIELD_RADIUS - Vector2.ONE * margin
+	radii.x = maxf(96.0, radii.x)
+	radii.y = maxf(72.0, radii.y)
+	var offset := at - duel_center
+	var normalized_distance := _duel_normalized_distance(at, radii)
+	if normalized_distance <= 1.0:
+		return at
+	return duel_center + offset / normalized_distance
+
+func _duel_normalized_distance(at: Vector2, radii: Vector2) -> float:
+	var offset := at - duel_center
+	return sqrt(pow(offset.x / maxf(1.0, radii.x), 2.0) + pow(offset.y / maxf(1.0, radii.y), 2.0))
+
+func is_player_near_duel_boundary(at: Vector2, threshold: float = 0.68) -> bool:
+	if not is_duel_formation_active():
+		return false
+	var offset := at - duel_center
+	var normalized_distance := sqrt(pow(offset.x / DUEL_SHIELD_RADIUS.x, 2.0) + pow(offset.y / DUEL_SHIELD_RADIUS.y, 2.0))
+	return normalized_distance >= threshold
+
+func block_duel_shield_hit(id: int) -> void:
+	if not is_duel_shield(id):
+		return
+	hit_feedback_strengths[id] = maxf(hit_feedback_strengths[id], 0.72)
+	hit_feedback_durations[id] = maxf(hit_feedback_durations[id], 0.11)
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+
+func is_duel_formation_fodder(id: int) -> bool:
+	return is_duel_formation_member(id) and duel_roles[id] != DuelRole.SHIELD_RING
+
+func duel_damage_multiplier(id: int) -> float:
+	if not is_duel_formation_active():
+		return 1.0
+	if is_duel_shield(id):
+		# Shields can still be pressured while the ring is assembling.  They only
+		# become fully invulnerable once the formation has actually sealed.
+		return 0.0 if is_duel_formation_sealed() else DUEL_ASSEMBLING_SHIELD_DAMAGE_MULTIPLIER
+	return DUEL_FORMATION_DAMAGE_MULTIPLIER if types[id] != EnemyType.ELITE else 1.0
+
+func consume_duel_fodder_reward(id: int) -> bool:
+	if id < 0 or id >= CAPACITY:
+		return false
+	var was_fodder := bool(duel_fodder_death_ids.get(id, false))
+	duel_fodder_death_ids.erase(id)
+	return was_fodder
+
+func _assign_duel_role_slots(role: int, slot_count: int) -> void:
+	for slot in range(slot_count):
+		var assigned_id := _find_duel_member_for_slot(role, slot)
+		if assigned_id < 0:
+			assigned_id = spawn(_duel_reinforcement_type(role, slot), _duel_reinforcement_position(role, slot))
+		if assigned_id < 0:
+			continue
+		duel_roles[assigned_id] = role
+		duel_slots[assigned_id] = slot
+		decision_timers[assigned_id] = 0.0
+
+func _find_duel_member_for_slot(role: int, slot: int) -> int:
+	var desired_position := _duel_slot_position(role, slot)
+	var selected_id := -1
+	var selected_distance := INF
+	for id in range(CAPACITY):
+		if active[id] == 0 or duel_roles[id] != DuelRole.NONE or boss_guard_flags[id] == 1:
+			continue
+		if not _is_duel_role_type(role, types[id]):
+			continue
+		var distance := positions[id].distance_squared_to(desired_position)
+		if distance < selected_distance:
+			selected_id = id
+			selected_distance = distance
+	return selected_id
+
+func _is_duel_role_type(role: int, enemy_type: int) -> bool:
+	match role:
+		DuelRole.SHIELD_RING: return enemy_type == EnemyType.SHIELD
+		DuelRole.SPEAR_RING: return enemy_type == EnemyType.SPEAR
+		DuelRole.RANGED_RING: return enemy_type == EnemyType.ARCHER or enemy_type == EnemyType.CROSSBOW
+	return false
+
+func _duel_reinforcement_type(role: int, slot: int) -> int:
+	match role:
+		DuelRole.SHIELD_RING: return EnemyType.SHIELD
+		DuelRole.SPEAR_RING: return EnemyType.SPEAR
+		DuelRole.RANGED_RING: return EnemyType.CROSSBOW if slot % 2 == 0 else EnemyType.ARCHER
+	return EnemyType.SWORD
+
+func _duel_reinforcement_position(role: int, slot: int) -> Vector2:
+	var slot_position := _duel_slot_position(role, slot)
+	var outward := (slot_position - duel_center).normalized()
+	if outward.length_squared() <= 0.01:
+		outward = Vector2.RIGHT
+	return _clamp_point(duel_center + outward * 460.0)
+
+func _duel_slot_position(role: int, slot: int) -> Vector2:
+	var slot_count := _duel_slot_count(role)
+	if slot_count <= 0:
+		return duel_center
+	var angle := TAU * (float(slot) + 0.5) / float(slot_count)
+	var radii := _duel_role_radius(role)
+	return _clamp_point(duel_center + Vector2(cos(angle) * radii.x, sin(angle) * radii.y))
+
+func _clamp_duel_center(center: Vector2) -> Vector2:
+	var edge_margin := DUEL_RANGED_RADIUS + Vector2(12.0, 12.0)
+	return Vector2(
+		clampf(center.x, bounds.position.x + edge_margin.x, bounds.end.x - edge_margin.x),
+		clampf(center.y, bounds.position.y + edge_margin.y, bounds.end.y - edge_margin.y)
+	)
+
+func _duel_slot_count(role: int) -> int:
+	match role:
+		DuelRole.SHIELD_RING: return DUEL_SHIELD_SLOTS
+		DuelRole.SPEAR_RING: return DUEL_SPEAR_SLOTS
+		DuelRole.RANGED_RING: return DUEL_RANGED_SLOTS
+	return 0
+
+func _duel_total_slot_count() -> int:
+	return DUEL_SHIELD_SLOTS + DUEL_SPEAR_SLOTS + DUEL_RANGED_SLOTS
+
+func _duel_slot_key(role: int, slot: int) -> int:
+	match role:
+		DuelRole.SHIELD_RING:
+			return slot
+		DuelRole.SPEAR_RING:
+			return DUEL_SHIELD_SLOTS + slot
+		DuelRole.RANGED_RING:
+			return DUEL_SHIELD_SLOTS + DUEL_SPEAR_SLOTS + slot
+	return -1
+
+func _duel_member_for_slot(role: int, slot: int) -> int:
+	for id in range(CAPACITY):
+		if active[id] == 1 and duel_roles[id] == role and duel_slots[id] == slot:
+			return id
+	return -1
+
+func _duel_role_radius(role: int) -> Vector2:
+	match role:
+		DuelRole.SHIELD_RING: return DUEL_SHIELD_RADIUS
+		DuelRole.SPEAR_RING: return DUEL_SPEAR_RADIUS
+		DuelRole.RANGED_RING: return DUEL_RANGED_RADIUS
+	return Vector2.ZERO
+
+func _is_duel_member_in_position(id: int) -> bool:
+	if not is_duel_formation_member(id):
+		return false
+	return positions[id].distance_squared_to(_duel_slot_position(duel_roles[id], duel_slots[id])) <= DUEL_SLOT_ARRIVAL_DISTANCE * DUEL_SLOT_ARRIVAL_DISTANCE
+
+func _duel_shields_in_position() -> int:
+	if not is_duel_formation_active():
+		return 0
+	var count := 0
+	for id in range(CAPACITY):
+		if is_duel_shield(id) and _is_duel_member_in_position(id):
+			count += 1
+	return count
+
+func _refresh_duel_phase() -> void:
+	if duel_phase != DuelPhase.ASSEMBLING:
+		return
+	if _duel_shields_in_position() >= DUEL_SHIELD_SEAL_REQUIREMENT:
+		duel_phase = DuelPhase.SEALED
+
 func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	if free_ids.is_empty():
 		return -1
 	var id: int = free_ids.pop_back()
 	var stats: Dictionary = _stats(enemy_type)
-	var health_multiplier := _threat_health_multiplier()
+	var health_multiplier := _threat_health_multiplier() * difficulty_ramp
 	positions[id] = at
 	types[id] = enemy_type
 	hit_points[id] = float(stats.hp) * health_multiplier
 	max_hit_points[id] = hit_points[id]
-	armor[id] = float(stats.armor) + _threat_armor_bonus()
+	armor[id] = (float(stats.armor) + _threat_armor_bonus()) * difficulty_ramp
 	move_speeds[id] = stats.speed
-	damage_multipliers[id] = _threat_damage_multiplier()
+	damage_multipliers[id] = _threat_damage_multiplier() * difficulty_ramp
 	cooldowns[id] = randf_range(1.2, 1.8)
 	hurt_timers[id] = 0.0
 	attack_states[id] = AttackState.APPROACH
@@ -377,6 +695,7 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	recoil_velocities[id] = Vector2.ZERO
 	facing_directions[id] = Vector2.DOWN
 	boss_guard_flags[id] = 1 if is_boss_guard else 0
+	tianji_lifted[id] = 0
 	death_states[id] = DeathState.NONE
 	death_timers[id] = 0.0
 	death_velocities[id] = Vector2.ZERO
@@ -407,6 +726,10 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 	spear_combo_timers[id] = 0.0
 	command_aura_strengths[id] = 0.0
 	command_surge_timers[id] = 0.0
+	separation_vectors[id] = Vector2.ZERO
+	separation_refresh_timers[id] = 0.0
+	duel_roles[id] = DuelRole.NONE
+	duel_slots[id] = -1
 	cavalry_charge_cooldowns[id] = 1.4 + float(id % 4) * 0.15 if enemy_type == EnemyType.CAVALRY else 0.0
 	cavalry_charge_distances[id] = 0.0
 	cavalry_charge_directions[id] = Vector2.ZERO
@@ -424,6 +747,13 @@ func tick(delta: float, player_position: Vector2) -> void:
 	archer_volley_cooldown = maxf(0.0, archer_volley_cooldown - delta)
 	spear_formation_cooldown = maxf(0.0, spear_formation_cooldown - delta)
 	crossbow_volley_cooldown = maxf(0.0, crossbow_volley_cooldown - delta)
+	duel_ranged_attack_cooldown = maxf(0.0, duel_ranged_attack_cooldown - delta)
+	if is_duel_formation_active():
+		duel_maintenance_remaining = maxf(0.0, duel_maintenance_remaining - delta)
+		duel_reinforcement_spawn_remaining = maxf(0.0, duel_reinforcement_spawn_remaining - delta)
+		if duel_maintenance_remaining <= 0.0:
+			_maintain_duel_formation(delta)
+			duel_maintenance_remaining = 0.12
 	_refresh_banner_commands(delta)
 	layer_refresh_remaining = maxf(0.0, layer_refresh_remaining - delta)
 	if layer_refresh_remaining <= 0.0:
@@ -436,6 +766,8 @@ func tick(delta: float, player_position: Vector2) -> void:
 		if active[id] == 0:
 			if death_states[id] != DeathState.NONE:
 				_tick_dying(id, delta)
+			continue
+		if tianji_lifted[id] == 1:
 			continue
 		if launch_timers[id] > 0.0:
 			_tick_enemy_launch(id, delta)
@@ -498,7 +830,11 @@ func tick(delta: float, player_position: Vector2) -> void:
 		var formation_direction := to_formation_target.normalized() if to_formation_target.length_squared() > FORMATION_ARRIVAL_DISTANCE * FORMATION_ARRIVAL_DISTANCE else Vector2.ZERO
 		var formation_strength := clampf(to_formation_target.length() / 42.0, 0.0, 1.0)
 		var navigation_direction := _navigation_direction_for(id, formation_target)
-		var separation := _separation_vector(id)
+		separation_refresh_timers[id] = maxf(0.0, separation_refresh_timers[id] - delta)
+		if separation_refresh_timers[id] <= 0.0:
+			separation_vectors[id] = _separation_vector(id)
+			separation_refresh_timers[id] = _separation_refresh_interval(behavior_layers[id])
+		var separation := separation_vectors[id]
 		var move_intent := navigation_direction * formation_strength + separation * 1.35
 		if move_intent.length_squared() > 0.01:
 			var slow_multiplier := slow_multipliers[id] if slow_timers[id] > 0.0 else 1.0
@@ -517,10 +853,11 @@ func tick(delta: float, player_position: Vector2) -> void:
 			if attack_kind == ATTACK_KIND_CAVALRY_CHARGE:
 				_start_cavalry_charge(id, attack_target)
 			enemy_attack_requested.emit(id, positions[id], attack_target, types[id], _damage(types[id]) * damage_multipliers[id] * _command_damage_multiplier(id), attack_timers[id], attack_kind)
+	_refresh_duel_phase()
 
 func freeze_for_cinematic() -> void:
 	for id in range(CAPACITY):
-		if active[id] == 0:
+		if active[id] == 0 or tianji_lifted[id] == 1:
 			continue
 		attack_states[id] = AttackState.APPROACH
 		attack_timers[id] = 0.0
@@ -545,10 +882,66 @@ func freeze_for_cinematic() -> void:
 		cavalry_charge_directions[id] = Vector2.ZERO
 		command_surge_timers[id] = 0.0
 
+func unfreeze_for_cinematic() -> void:
+	for id in range(CAPACITY):
+		if active[id] == 0 or tianji_lifted[id] == 1:
+			continue
+		if attack_states[id] != AttackState.APPROACH:
+			attack_states[id] = AttackState.APPROACH
+			attack_timers[id] = 0.0
+		current_attack_kinds[id] = ""
+		decision_timers[id] = randf_range(0.05, 0.25)
+		attack_wait_times[id] = 0.0
+
+func defeat_for_victory_cinematic(maximum_count: int) -> int:
+	var defeated_count := 0
+	for id in range(CAPACITY):
+		if defeated_count >= maximum_count:
+			break
+		if active[id] == 0:
+			continue
+		_begin_victory_cinematic_death(id)
+		defeated_count += 1
+	return defeated_count
+
+func tick_cinematic_deaths(delta: float) -> void:
+	for id in range(CAPACITY):
+		if active[id] == 0 and death_states[id] != DeathState.NONE:
+			_tick_dying(id, delta)
+
+func _begin_victory_cinematic_death(id: int) -> void:
+	active[id] = 0
+	tianji_lifted[id] = 0
+	active_count = maxi(0, active_count - 1)
+	if boss_guard_flags[id] == 1:
+		boss_guard_flags[id] = 0
+		boss_guard_count = maxi(0, boss_guard_count - 1)
+	duel_roles[id] = DuelRole.NONE
+	duel_slots[id] = -1
+	attack_states[id] = AttackState.APPROACH
+	attack_timers[id] = 0.0
+	current_attack_kinds[id] = ""
+	knockback_velocities[id] = Vector2.ZERO
+	recoil_timers[id] = 0.0
+	recoil_velocities[id] = Vector2.ZERO
+	forced_displacement_timers[id] = 0.0
+	forced_displacement_velocities[id] = Vector2.ZERO
+	_clear_launch_state(id)
+	hurt_timers[id] = 0.0
+	hit_feedback_timers[id] = 0.0
+	hit_feedback_durations[id] = 0.0
+	hit_feedback_strengths[id] = 0.0
+	decision_timers[id] = INF
+	movement_targets[id] = positions[id]
+	death_states[id] = DeathState.FALLING
+	death_timers[id] = DEATH_DISPLAY_DURATION
+	death_velocities[id] = Vector2.ZERO
+	death_impact_charges[id] = 0
+
 func query(request: AttackRequest) -> Array[int]:
 	var results: Array[int] = []
 	for id in range(CAPACITY):
-		if active[id] == 0:
+		if active[id] == 0 or tianji_lifted[id] == 1:
 			continue
 		if request.one_hit_per_target and request.hit_targets.has(id):
 			continue
@@ -575,10 +968,15 @@ func apply_damage(id: int, value: float) -> bool:
 	return apply_hit(id, value, Vector2.ZERO, 0.0)
 
 func apply_knockback_only(id: int, direction: Vector2, knockback: float, ignore_knockback_resistance: bool = false, forced_displacement: float = 0.0, forced_displacement_duration: float = 0.0) -> void:
-	if id < 0 or id >= CAPACITY or active[id] == 0 or direction.length_squared() <= 0.01:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or tianji_lifted[id] == 1 or direction.length_squared() <= 0.01:
+		return
+	if is_duel_shield(id) and is_duel_formation_sealed():
+		block_duel_shield_hit(id)
 		return
 	var normalized_direction := direction.normalized()
 	var resistance := 1.0 if ignore_knockback_resistance else _knockback_resistance(types[id])
+	if is_duel_formation_fodder(id):
+		resistance *= 0.20
 	var duration := maxf(0.11, forced_displacement_duration)
 	var distance := maxf(forced_displacement, knockback * duration * 0.52)
 	distance *= resistance
@@ -593,7 +991,7 @@ func apply_knockback_only(id: int, direction: Vector2, knockback: float, ignore_
 	decision_timers[id] = 0.0
 
 func apply_slow(id: int, multiplier: float, duration: float) -> void:
-	if id < 0 or id >= CAPACITY or active[id] == 0 or duration <= 0.0:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or tianji_lifted[id] == 1 or duration <= 0.0:
 		return
 	slow_timers[id] = maxf(slow_timers[id], duration)
 	slow_multipliers[id] = minf(slow_multipliers[id], clampf(multiplier, 0.15, 1.0))
@@ -602,13 +1000,17 @@ func count_active_within(at: Vector2, radius: float) -> int:
 	var count := 0
 	var radius_squared := radius * radius
 	for id in range(CAPACITY):
-		if active[id] == 1 and positions[id].distance_squared_to(at) <= radius_squared:
+		if active[id] == 1 and tianji_lifted[id] == 0 and positions[id].distance_squared_to(at) <= radius_squared:
 			count += 1
 	return count
 
 func apply_hit(id: int, value: float, direction: Vector2, knockback: float, ignore_knockback_resistance: bool = false, forced_displacement: float = 0.0, forced_displacement_duration: float = 0.0) -> bool:
-	if id < 0 or id >= CAPACITY or active[id] == 0:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or tianji_lifted[id] == 1:
 		return false
+	if is_duel_shield(id) and is_duel_formation_sealed():
+		block_duel_shield_hit(id)
+		return false
+	value *= duel_damage_multiplier(id)
 	hit_points[id] -= value
 	if hit_points[id] > 0.0:
 		if attack_states[id] == AttackState.WINDUP:
@@ -634,6 +1036,38 @@ func apply_hit(id: int, value: float, direction: Vector2, knockback: float, igno
 		return false
 	_begin_death(id, direction)
 	return true
+
+func set_tianji_lifted(id: int, lifted: bool) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0:
+		return false
+	tianji_lifted[id] = 1 if lifted else 0
+	if lifted:
+		_cancel_attack(id, 0.0)
+		enemy_attack_cancelled.emit(id)
+		attack_turn_grants[id] = 0
+		attack_wait_times[id] = 0.0
+		knockback_velocities[id] = Vector2.ZERO
+		recoil_timers[id] = 0.0
+		recoil_velocities[id] = Vector2.ZERO
+		forced_displacement_timers[id] = 0.0
+		forced_displacement_velocities[id] = Vector2.ZERO
+		hurt_timers[id] = 0.0
+		movement_targets[id] = positions[id]
+		decision_timers[id] = INF
+	else:
+		movement_targets[id] = positions[id]
+		decision_timers[id] = 0.0
+	return true
+
+func update_tianji_position(id: int, at: Vector2) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or tianji_lifted[id] == 0:
+		return false
+	positions[id] = at
+	movement_targets[id] = at
+	return true
+
+func is_tianji_lifted(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and active[id] == 1 and tianji_lifted[id] == 1
 
 func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, collision_damage: float, collision_knockback: float, collision_targets: int, relay_count: int = 0) -> bool:
 	if id < 0 or id >= CAPACITY or (active[id] == 0 and death_states[id] == DeathState.NONE):
@@ -906,14 +1340,27 @@ func attack_telegraph_limit(enemy_type: int) -> int:
 
 func gold_reward(enemy_type: int) -> int:
 	match enemy_type:
-		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD, EnemyType.SPEAR, EnemyType.CROSSBOW, EnemyType.CAVALRY: return 2
-		EnemyType.BANNER: return 3
-		EnemyType.ELITE: return 40
-		_: return 1
+		EnemyType.BANNER: return 0
+		EnemyType.ELITE: return 60
+		EnemyType.SWORD, EnemyType.ARCHER:
+			return 1 if randf() <= 0.12 else 0
+		EnemyType.HALBERD, EnemyType.SHIELD, EnemyType.GUARD, EnemyType.SPEAR, EnemyType.CROSSBOW, EnemyType.CAVALRY:
+			return 2 if randf() <= 0.16 else 0
+		_: return 0
 
 func _begin_death(id: int, direction: Vector2) -> void:
 	var type := types[id]
 	var at := positions[id]
+	var duel_role := duel_roles[id]
+	var duel_slot := duel_slots[id]
+	tianji_lifted[id] = 0
+	if duel_role != DuelRole.NONE:
+		duel_fodder_death_ids[id] = true
+		var slot_key := _duel_slot_key(duel_role, duel_slot)
+		if slot_key >= 0 and slot_key < duel_slot_refill_timers.size():
+			duel_slot_refill_timers[slot_key] = randf_range(DUEL_REINFORCEMENT_DELAY_MIN, DUEL_REINFORCEMENT_DELAY_MAX)
+		duel_roles[id] = DuelRole.NONE
+		duel_slots[id] = -1
 	var preserves_launch := launch_timers[id] > 0.0
 	active[id] = 0
 	active_count -= 1
@@ -960,6 +1407,7 @@ func _apply_death_launch_collision(source_id: int, direction: Vector2) -> void:
 		return
 
 func _recycle_dead(id: int) -> void:
+	tianji_lifted[id] = 0
 	death_states[id] = DeathState.NONE
 	death_timers[id] = 0.0
 	death_velocities[id] = Vector2.ZERO
@@ -967,10 +1415,52 @@ func _recycle_dead(id: int) -> void:
 	_clear_launch_state(id)
 	free_ids.append(id)
 
+func _maintain_duel_formation(delta: float) -> void:
+	if not is_duel_formation_active() or free_ids.is_empty():
+		return
+	# Fill the open slots nearest the player's current approach first.  Each
+	# reinforcement still spawns on that slot's outward radial line, so the
+	# replacement visibly comes from the side of the actual gap.
+	var missing_slots: Array[Dictionary] = []
+	for role in [DuelRole.SHIELD_RING, DuelRole.SPEAR_RING, DuelRole.RANGED_RING]:
+		var slot_count := _duel_slot_count(role)
+		for slot in range(slot_count):
+			var slot_key := _duel_slot_key(role, slot)
+			if slot_key < 0 or slot_key >= duel_slot_refill_timers.size():
+				continue
+			if _duel_member_for_slot(role, slot) >= 0:
+				duel_slot_refill_timers[slot_key] = 0.0
+				continue
+			missing_slots.append({"role": role, "slot": slot, "key": slot_key})
+	missing_slots.sort_custom(func(first: Dictionary, second: Dictionary) -> bool:
+		var first_position := _duel_slot_position(int(first["role"]), int(first["slot"]))
+		var second_position := _duel_slot_position(int(second["role"]), int(second["slot"]))
+		return first_position.distance_squared_to(last_player_position) < second_position.distance_squared_to(last_player_position)
+	)
+	var spawned := 0
+	for missing in missing_slots:
+		if spawned >= 2 or duel_reinforcement_spawn_remaining > 0.0:
+			break
+		var role := int(missing["role"])
+		var slot := int(missing["slot"])
+		var slot_key := int(missing["key"])
+		if duel_slot_refill_timers[slot_key] > 0.0:
+			duel_slot_refill_timers[slot_key] = maxf(0.0, duel_slot_refill_timers[slot_key] - delta)
+			continue
+		var id := spawn(_duel_reinforcement_type(role, slot), _duel_reinforcement_position(role, slot))
+		if id < 0:
+			return
+		duel_roles[id] = role
+		duel_slots[id] = slot
+		decision_timers[id] = 0.0
+		duel_slot_refill_timers[slot_key] = 0.0
+		duel_reinforcement_spawn_remaining = DUEL_REINFORCEMENT_SPAWN_INTERVAL
+		spawned += 1
+
 func _rebuild_spatial_cells() -> void:
 	spatial_cells.clear()
 	for id in range(CAPACITY):
-		if active[id] == 0:
+		if active[id] == 0 or tianji_lifted[id] == 1:
 			continue
 		var cell := _spatial_cell_for(positions[id])
 		var members: Array = spatial_cells.get(cell, [])
@@ -985,7 +1475,7 @@ func _separation_vector(id: int) -> Vector2:
 		for offset_x in range(-1, 2):
 			var members: Array = spatial_cells.get(cell + Vector2i(offset_x, offset_y), [])
 			for other_id in members:
-				if other_id == id or active[other_id] == 0:
+				if other_id == id or active[other_id] == 0 or tianji_lifted[other_id] == 1:
 					continue
 				var offset := positions[id] - positions[other_id]
 				var distance := offset.length()
@@ -1006,7 +1496,19 @@ func _separation_vector(id: int) -> Vector2:
 		return Vector2.ZERO
 	return (separation / float(neighbor_count)).limit_length(1.0)
 
+func _separation_refresh_interval(layer: int) -> float:
+	match layer:
+		EngagementLayer.PRESSURE: return PRESSURE_SEPARATION_REFRESH_INTERVAL
+		EngagementLayer.ATMOSPHERE: return ATMOSPHERE_SEPARATION_REFRESH_INTERVAL
+		_: return 0.0
+
 func _assign_desired_behavior_layers(player_position: Vector2) -> void:
+	if is_duel_formation_active():
+		for id in range(CAPACITY):
+			if active[id] == 0 or tianji_lifted[id] == 1:
+				continue
+			desired_behavior_layers[id] = EngagementLayer.ENGAGE if duel_roles[id] != DuelRole.NONE else EngagementLayer.ATMOSPHERE
+		return
 	var melee_ids: Array[int] = []
 	var halberd_ids: Array[int] = []
 	var archer_ids: Array[int] = []
@@ -1015,9 +1517,12 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 	var crossbow_ids: Array[int] = []
 	var banner_ids: Array[int] = []
 	var cavalry_ids: Array[int] = []
+	var active_count := 0
+	var nearby_pressure_ids: Array[int] = []
 	for id in range(CAPACITY):
-		if active[id] == 0:
+		if active[id] == 0 or tianji_lifted[id] == 1:
 			continue
+		active_count += 1
 		desired_behavior_layers[id] = EngagementLayer.ATMOSPHERE
 		match types[id]:
 			EnemyType.ARCHER:
@@ -1045,15 +1550,32 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 	_assign_nearest_layer(banner_ids, ENGAGE_BANNER_LIMIT, player_position)
 	_assign_nearest_layer(cavalry_ids, _engage_cavalry_limit(), player_position)
 	for id in range(CAPACITY):
-		if active[id] == 0 or desired_behavior_layers[id] == EngagementLayer.ENGAGE:
+		if active[id] == 0 or tianji_lifted[id] == 1 or desired_behavior_layers[id] == EngagementLayer.ENGAGE:
 			continue
 		var pressure_radius := _desired_range(types[id]) + 205.0
 		if positions[id].distance_to(player_position) <= pressure_radius:
+			if types[id] in [EnemyType.SWORD, EnemyType.SHIELD, EnemyType.SPEAR, EnemyType.HALBERD, EnemyType.CAVALRY]:
+				nearby_pressure_ids.append(id)
+			else:
+				desired_behavior_layers[id] = EngagementLayer.PRESSURE
+	nearby_pressure_ids.sort_custom(func(first: int, second: int) -> bool:
+		return positions[first].distance_squared_to(player_position) < positions[second].distance_squared_to(player_position)
+	)
+	# Once the field is populated, rotate a few nearby pressure units into the
+	# frontline. This creates an encirclement without allowing every soldier to
+	# attack at once; attack-turn slots still control actual swings.
+	var extra_engage_budget := mini(4, maxi(0, int(floor(float(active_count - 12) / 12.0))))
+	if battle_mode == "story" and battle_elapsed < 180.0:
+		extra_engage_budget = mini(4, extra_engage_budget + 1)
+	for index in range(mini(extra_engage_budget, nearby_pressure_ids.size())):
+		desired_behavior_layers[nearby_pressure_ids[index]] = EngagementLayer.ENGAGE
+	for id in nearby_pressure_ids:
+		if desired_behavior_layers[id] == EngagementLayer.ATMOSPHERE:
 			desired_behavior_layers[id] = EngagementLayer.PRESSURE
 
 func _update_attack_wait_times(delta: float) -> void:
 	for id in range(CAPACITY):
-		if active[id] == 0:
+		if active[id] == 0 or tianji_lifted[id] == 1:
 			continue
 		if behavior_layers[id] == EngagementLayer.ENGAGE and attack_states[id] == AttackState.APPROACH and hurt_timers[id] <= 0.0:
 			attack_wait_times[id] = minf(8.0, attack_wait_times[id] + delta)
@@ -1076,7 +1598,7 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 	var cavalry_occupied := 0
 	for id in range(CAPACITY):
 		attack_turn_grants[id] = 0
-		if active[id] == 0 or behavior_layers[id] != EngagementLayer.ENGAGE:
+		if active[id] == 0 or tianji_lifted[id] == 1 or behavior_layers[id] != EngagementLayer.ENGAGE:
 			continue
 		var group := _attack_group_for_type(types[id])
 		if attack_states[id] != AttackState.APPROACH:
@@ -1097,7 +1619,10 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 				else:
 					halberd_occupied += 1
 			continue
-		if cooldowns[id] > 0.0 or positions[id].distance_to(player_position) > _attack_staging_range(types[id]):
+		var within_staging_range := positions[id].distance_to(player_position) <= _attack_staging_range(types[id])
+		if is_duel_formation_member(id):
+			within_staging_range = true
+		if cooldowns[id] > 0.0 or not within_staging_range:
 			continue
 		if group == "frontline":
 			frontline_candidates.append(id)
@@ -1120,6 +1645,7 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 	_assign_attack_group_grants(crossbow_candidates, maxi(0, _crossbow_attack_slots() - crossbow_occupied), player_position)
 	_assign_attack_group_grants(banner_candidates, maxi(0, _banner_attack_slots() - banner_occupied), player_position)
 	_assign_attack_group_grants(cavalry_candidates, maxi(0, _cavalry_attack_slots() - cavalry_occupied), player_position)
+	_limit_duel_formation_attack_turns()
 	for id in range(CAPACITY):
 		if active[id] == 1 and previous_grants[id] != attack_turn_grants[id]:
 			decision_timers[id] = 0.0
@@ -1150,6 +1676,37 @@ func _assign_attack_group_grants(candidates: Array[int], available_slots: int, p
 		granted += 1
 		if granted >= available_slots:
 			return
+
+func _limit_duel_formation_attack_turns() -> void:
+	if not is_duel_formation_active():
+		return
+	if duel_phase == DuelPhase.ASSEMBLING:
+		for id in range(CAPACITY):
+			if duel_roles[id] != DuelRole.NONE:
+				attack_turn_grants[id] = 0
+		return
+	var shield_grants := 0
+	var spear_grants := 0
+	var ranged_grants := 0
+	for id in range(CAPACITY):
+		if attack_turn_grants[id] == 0 or duel_roles[id] == DuelRole.NONE:
+			continue
+		match duel_roles[id]:
+			DuelRole.SHIELD_RING:
+				if shield_grants >= DUEL_SHIELD_PUSH_ATTACKERS:
+					attack_turn_grants[id] = 0
+				else:
+					shield_grants += 1
+			DuelRole.SPEAR_RING:
+				if spear_grants >= DUEL_SPEAR_ATTACKERS:
+					attack_turn_grants[id] = 0
+				else:
+					spear_grants += 1
+			DuelRole.RANGED_RING:
+				if ranged_grants >= DUEL_RANGED_ATTACKERS:
+					attack_turn_grants[id] = 0
+				else:
+					ranged_grants += 1
 
 func _attack_sector(id: int, player_position: Vector2) -> int:
 	var angle := (positions[id] - player_position).angle() + PI
@@ -1195,11 +1752,13 @@ func _refresh_movement_decision(id: int, player_position: Vector2) -> void:
 	behavior_layers[id] = layer
 	decision_cycles[id] += 1
 	var target := _formation_target(id, player_position, layer)
-	var patrol_radius := _patrol_radius(layer)
+	var patrol_radius := 0.0 if duel_roles[id] != DuelRole.NONE else _patrol_radius(layer)
 	var patrol_angle := deg_to_rad(float((id * 47 + decision_cycles[id] * 29) % 360))
 	patrol_offsets[id] = Vector2.from_angle(patrol_angle) * patrol_radius
 	movement_targets[id] = _clamp_point(target + patrol_offsets[id])
 	var facing_target := player_position if layer == EngagementLayer.ENGAGE else movement_targets[id]
+	if duel_roles[id] == DuelRole.SHIELD_RING:
+		facing_target = duel_center
 	var desired_facing := (facing_target - positions[id]).normalized()
 	if desired_facing.length_squared() > 0.01:
 		facing_directions[id] = desired_facing
@@ -1242,6 +1801,13 @@ func _collision_radius_for_navigation(enemy_type: int) -> float:
 			return 17.0
 
 func _formation_target(id: int, player_position: Vector2, layer: int) -> Vector2:
+	if is_duel_formation_active():
+		if duel_roles[id] != DuelRole.NONE:
+			return _duel_slot_position(duel_roles[id], duel_slots[id])
+		var reserve_direction := (positions[id] - duel_center).normalized()
+		if reserve_direction.length_squared() <= 0.01:
+			reserve_direction = Vector2.from_angle(float(id) * 0.618)
+		return duel_center + reserve_direction * 440.0
 	var enemy_type := types[id]
 	if enemy_type == EnemyType.SPEAR and layer == EngagementLayer.ENGAGE:
 		var side := -1.0 if positions[id].x < player_position.x else 1.0
@@ -1315,6 +1881,16 @@ func _attack_trigger_range(id: int, player_position: Vector2) -> float:
 	return _attack_range(types[id])
 
 func _can_trigger_attack(id: int, player_position: Vector2, distance: float) -> bool:
+	if is_duel_formation_active():
+		if duel_phase == DuelPhase.ASSEMBLING:
+			return false
+		match duel_roles[id]:
+			DuelRole.SHIELD_RING:
+				return is_player_near_duel_boundary(player_position, 0.84) and distance <= 118.0 and randf() <= 0.34
+			DuelRole.SPEAR_RING:
+				return is_player_near_duel_boundary(player_position, 0.82) and distance <= 240.0 and randf() <= 0.22
+			DuelRole.RANGED_RING:
+				return duel_phase == DuelPhase.SEALED and duel_ranged_attack_cooldown <= 0.0 and _is_duel_member_in_position(id) and distance <= DUEL_RANGED_RADIUS.x + 80.0
 	if types[id] != EnemyType.SPEAR and types[id] != EnemyType.CAVALRY:
 		return distance <= _attack_trigger_range(id, player_position)
 	var offset := player_position - positions[id]
@@ -1322,6 +1898,14 @@ func _can_trigger_attack(id: int, player_position: Vector2, distance: float) -> 
 	return absf(offset.x) <= _attack_range(types[id]) and absf(offset.y) <= half_width
 
 func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> String:
+	if is_duel_formation_active():
+		if duel_roles[id] == DuelRole.SHIELD_RING:
+			return ATTACK_KIND_DUEL_SHIELD_PUSH
+		if duel_roles[id] == DuelRole.SPEAR_RING:
+			return ATTACK_KIND_DUEL_SPEAR_THRUST
+		if duel_roles[id] == DuelRole.RANGED_RING:
+			duel_ranged_attack_cooldown = randf_range(DUEL_RANGED_ATTACK_COOLDOWN_MIN, DUEL_RANGED_ATTACK_COOLDOWN_MAX)
+			return ATTACK_KIND_CROSSBOW_DIRECT if types[id] == EnemyType.CROSSBOW else ATTACK_KIND_ARCHER_DIRECT
 	match types[id]:
 		EnemyType.ARCHER:
 			if _can_start_archer_volley():
@@ -1362,6 +1946,10 @@ func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> 
 
 func _attack_target_for_kind(id: int, attack_kind: String, player_position: Vector2) -> Vector2:
 	match attack_kind:
+		ATTACK_KIND_DUEL_SHIELD_PUSH:
+			return player_position
+		ATTACK_KIND_DUEL_SPEAR_THRUST:
+			return player_position
 		ATTACK_KIND_ARCHER_LEAD:
 			return _predicted_player_position(0.24)
 		ATTACK_KIND_ARCHER_VOLLEY:
@@ -1448,6 +2036,8 @@ func _player_is_rushing_toward(id: int, player_position: Vector2) -> bool:
 
 func _attack_windup_for_kind(enemy_type: int, attack_kind: String) -> float:
 	match attack_kind:
+		ATTACK_KIND_DUEL_SHIELD_PUSH: return 0.46
+		ATTACK_KIND_DUEL_SPEAR_THRUST: return 0.54
 		ATTACK_KIND_ARCHER_VOLLEY: return 0.96
 		ATTACK_KIND_CROSSBOW_VOLLEY: return 0.96
 		ATTACK_KIND_BANNER_COMMAND: return 0.68
@@ -1461,6 +2051,8 @@ func _attack_windup_for_kind(enemy_type: int, attack_kind: String) -> float:
 
 func _attack_cooldown_for_kind(enemy_type: int, attack_kind: String) -> float:
 	match attack_kind:
+		ATTACK_KIND_DUEL_SHIELD_PUSH: return 1.55
+		ATTACK_KIND_DUEL_SPEAR_THRUST: return 1.75
 		ATTACK_KIND_HALBERD_SWEEP: return 1.55
 		ATTACK_KIND_HALBERD_BRACE: return 2.25
 		ATTACK_KIND_SPEAR_THRUST_1: return 0.44
@@ -1477,10 +2069,10 @@ func _engage_melee_limit() -> int:
 		return ENGAGE_MELEE_LIMIT
 	if battle_mode == "story":
 		if battle_elapsed >= 120.0:
-			return ENGAGE_MELEE_LIMIT
+			return 12
 		if battle_elapsed >= 45.0:
-			return 9
-		return 8
+			return 10
+		return 9
 	return ENGAGE_MELEE_LIMIT
 
 func _engage_archer_limit() -> int:
@@ -1488,26 +2080,26 @@ func _engage_archer_limit() -> int:
 		return ENGAGE_ARCHER_LIMIT
 	if battle_mode == "story":
 		if battle_elapsed >= 130.0:
-			return ENGAGE_ARCHER_LIMIT
+			return 6
 		if battle_elapsed >= 70.0:
-			return 4
-		return 3
+			return 5
+		return 4
 	return ENGAGE_ARCHER_LIMIT
 
 func _engage_spear_limit() -> int:
 	if battle_mode == "endless":
 		return ENGAGE_SPEAR_LIMIT
-	return 3 if battle_elapsed < 240.0 else ENGAGE_SPEAR_LIMIT
+	return 4 if battle_elapsed < 240.0 else 5
 
 func _engage_crossbow_limit() -> int:
 	if battle_mode == "endless":
 		return ENGAGE_CROSSBOW_LIMIT
-	return 2 if battle_elapsed < 180.0 else ENGAGE_CROSSBOW_LIMIT
+	return 3 if battle_elapsed < 180.0 else 4
 
 func _engage_cavalry_limit() -> int:
 	if battle_mode == "endless":
 		return ENGAGE_CAVALRY_LIMIT
-	return 2 if battle_elapsed < 240.0 else ENGAGE_CAVALRY_LIMIT
+	return 3 if battle_elapsed < 240.0 else 4
 
 func _frontline_attack_slots() -> int:
 	if battle_mode == "endless":
@@ -1635,7 +2227,8 @@ func _request_hits_point(request: AttackRequest, point: Vector2) -> bool:
 		AttackRequest.Shape.CIRCLE:
 			return offset.length_squared() <= request.range * request.range
 		AttackRequest.Shape.FAN:
-			if offset.length_squared() > request.range * request.range:
+			var distance_squared := offset.length_squared()
+			if distance_squared < request.inner_radius * request.inner_radius or distance_squared > request.range * request.range:
 				return false
 			return absf(request.direction.angle_to(offset.normalized())) <= request.half_angle
 		AttackRequest.Shape.LINE:
@@ -1684,7 +2277,7 @@ func _desired_range(enemy_type: int) -> float:
 		EnemyType.CROSSBOW: return 276.0
 		EnemyType.BANNER: return 232.0
 		EnemyType.CAVALRY: return 152.0
-		EnemyType.HALBERD: return 120.0
+		EnemyType.HALBERD: return 68.0
 		EnemyType.ELITE: return 135.0
 		EnemyType.SPEAR: return 142.0
 		EnemyType.SHIELD: return 56.0
@@ -1696,9 +2289,9 @@ func _attack_range(enemy_type: int) -> float:
 		EnemyType.CROSSBOW: return 340.0
 		EnemyType.BANNER: return 252.0
 		EnemyType.CAVALRY: return 228.0
-		EnemyType.HALBERD: return 136.0
+		EnemyType.HALBERD: return 68.0
 		EnemyType.ELITE: return 155.0
-		EnemyType.SPEAR: return 190.0
+		EnemyType.SPEAR: return 170.0
 		EnemyType.SHIELD: return 64.0
 		_: return 50.0
 
@@ -1771,10 +2364,10 @@ func _ultimate_energy(enemy_type: int) -> float:
 
 func _hurt_duration(enemy_type: int) -> float:
 	match enemy_type:
-		EnemyType.ELITE: return 0.035
-		EnemyType.SHIELD: return 0.055
-		EnemyType.GUARD: return 0.07
-		_: return 0.10
+		EnemyType.ELITE: return 0.30
+		EnemyType.SHIELD: return 0.45
+		EnemyType.GUARD: return 0.45
+		_: return 0.68
 
 func _knockback_resistance(enemy_type: int) -> float:
 	match enemy_type:

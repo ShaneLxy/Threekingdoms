@@ -8,7 +8,7 @@ signal defeated(elite: EliteActor)
 enum Archetype { XIAHOU_EN, CHUNYU_DAO, XIAHOU_LAN, HAN_HAO }
 enum State { INACTIVE, APPROACH, WINDUP, DASH, RECOVER, REPOSITION }
 
-const HEALTH_LAYER_CAPACITY := 65.0
+const HEALTH_LAYER_CAPACITY := 120.0
 const XIAHOU_EN_DEATH_ANIMATION_DURATION := 0.56
 const CHUNYU_DAO_DEATH_ANIMATION_DURATION := 0.62
 const XIAHOU_LAN_DEATH_ANIMATION_DURATION := 0.58
@@ -44,9 +44,9 @@ const EARTH_BLADE_COOLDOWN := 9.2
 const OIL_FIRE_COOLDOWN := 10.5
 const COUNTERATTACK_DURATION := 4.0
 const COUNTERATTACK_DAMAGE_MULTIPLIER := 1.30
-const REPOSITION_COOLDOWN := 2.8
-const REPOSITION_DURATION := 0.42
-const REPOSITION_SPEED := 176.0
+const REPOSITION_COOLDOWN := 2.15
+const REPOSITION_DURATION := 0.52
+const REPOSITION_SPEED := 184.0
 const PLAYER_STATIONARY_SPEED := 34.0
 
 @onready var health_component: HealthComponent = %HealthComponent
@@ -94,6 +94,7 @@ var counterattack_action_multiplier := 1.0
 var slow_remaining := 0.0
 var slow_multiplier := 1.0
 var tactical_reposition_cooldown := 0.0
+var tactical_reposition_allowed := true
 var reposition_target := Vector2.ZERO
 var player_is_attacking := false
 var navigation_waypoint := Vector2.ZERO
@@ -148,12 +149,19 @@ func activate(new_archetype: Archetype, at: Vector2, new_threat_tier: int = 0) -
 	slow_remaining = 0.0
 	slow_multiplier = 1.0
 	tactical_reposition_cooldown = 0.0
+	tactical_reposition_allowed = true
 	reposition_target = position
 	navigation_waypoint = Vector2.ZERO
 	health_component.reset(max_health())
 
 func set_navigation_waypoint(value: Vector2) -> void:
 	navigation_waypoint = value
+
+func set_tactical_reposition_allowed(value: bool) -> void:
+	tactical_reposition_allowed = value
+
+func is_tactically_repositioning() -> bool:
+	return active and state == State.REPOSITION
 
 func tick(delta: float, player_position: Vector2, player_attacking: bool = false) -> void:
 	if dying:
@@ -176,9 +184,13 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 	knockback_visual_remaining = maxf(0.0, knockback_visual_remaining - delta)
 	var was_stance_broken := stance_break_remaining > 0.0
 	stance_break_remaining = maxf(0.0, stance_break_remaining - delta)
-	if was_stance_broken and stance_break_remaining <= 0.0:
-		stance = STANCE_MAX
-		stance_knockback_remaining = 0.0
+	if was_stance_broken:
+		# A broken stance visibly and mechanically rebuilds over its recovery window.
+		var recovery_ratio := 1.0 - stance_break_remaining / STANCE_BREAK_DURATION
+		stance = STANCE_MAX * pow(clampf(recovery_ratio, 0.0, 1.0), 1.25)
+		if stance_break_remaining <= 0.0:
+			stance = STANCE_MAX
+			stance_knockback_remaining = 0.0
 	if state == State.WINDUP:
 		attack_animation_elapsed += delta
 	match state:
@@ -397,19 +409,33 @@ func _player_is_stationary() -> bool:
 	return player_velocity.length() <= PLAYER_STATIONARY_SPEED
 
 func _should_reposition_after_combo(player_position: Vector2) -> bool:
-	if not combo_steps.is_empty() or tactical_reposition_cooldown > 0.0:
+	if not tactical_reposition_allowed or not combo_steps.is_empty() or tactical_reposition_cooldown > 0.0:
+		return false
+	if is_stance_broken():
 		return false
 	var distance := position.distance_to(player_position)
-	if distance > 260.0:
+	if distance < 84.0 or distance > 286.0:
 		return false
-	var chance := 0.22
+	# Tactical movement is evaluated only after a completed combo. It reads the
+	# player's visible position and smoothed velocity, never raw input intent.
+	var chance := 0.40
+	match archetype:
+		Archetype.XIAHOU_LAN:
+			chance += 0.10
+		Archetype.HAN_HAO:
+			chance -= 0.08
 	if _player_is_stationary():
-		chance += 0.24
+		chance += 0.20
 	if player_is_attacking:
-		chance += 0.22
+		chance += 0.18
 	if distance < 132.0:
-		chance += 0.10
-	return randf() < chance
+		chance += 0.12
+	var to_player := player_position - position
+	if to_player.length_squared() > 0.01 and player_velocity.dot(to_player.normalized()) > PLAYER_STATIONARY_SPEED * 1.8:
+		# A player actively creating distance should be pursued, not perfectly
+		# tracked by an immediate sidestep.
+		chance -= 0.16
+	return randf() < clampf(chance, 0.18, 0.78)
 
 func _begin_reposition(player_position: Vector2) -> void:
 	var to_player := player_position - position
@@ -418,10 +444,22 @@ func _begin_reposition(player_position: Vector2) -> void:
 	var radial := to_player.normalized()
 	var lateral := Vector2(-radial.y, radial.x)
 	var side := -1.0 if (action_index + int(get_instance_id())) % 2 == 0 else 1.0
-	var radial_offset := -24.0 if _player_is_stationary() else 18.0
+	var lateral_distance := 82.0
+	var radial_offset := -20.0 if _player_is_stationary() else 16.0
+	match archetype:
+		Archetype.CHUNYU_DAO:
+			lateral_distance = 76.0
+			radial_offset = -34.0 if player_is_attacking else -12.0
+		Archetype.XIAHOU_LAN:
+			lateral_distance = 104.0
+			radial_offset = 24.0
+		Archetype.HAN_HAO:
+			lateral_distance = 54.0
+			radial_offset = 30.0
 	if player_is_attacking:
-		radial_offset += 18.0
-	reposition_target = position + lateral * side * 68.0 + radial * radial_offset
+		radial_offset += 12.0
+	var lateral_jitter := lateral_distance * randf_range(0.82, 1.08)
+	reposition_target = position + lateral * side * lateral_jitter + radial * (radial_offset + randf_range(-10.0, 10.0))
 	tactical_reposition_cooldown = REPOSITION_COOLDOWN
 	state = State.REPOSITION
 	state_timer = REPOSITION_DURATION

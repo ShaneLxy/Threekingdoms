@@ -7,10 +7,10 @@ signal phase_changed(phase: int)
 signal skill_impact_requested(strength: float)
 signal defeated()
 
-enum State { APPROACH, WINDUP, DASH, RECOVER, PHASE_TRANSITION, REPOSITION }
-enum Archetype { ZHANG_HE, XIAHOU_DUN }
+enum State { APPROACH, WINDUP, DASH, RECOVER, VULNERABLE, PHASE_TRANSITION, REPOSITION, ULTIMATE_AIRBORNE, ULTIMATE_LANDING }
+enum Archetype { ZHANG_HE, XIAHOU_DUN, LV_BU }
 
-const HEALTH_LAYER_CAPACITY := 500.0
+const HEALTH_LAYER_CAPACITY := 750.0
 const BOSS_ENERGY_DAMAGE_PER_POINT := 50.0
 const BOSS_ENERGY_PER_PHASE_CAP := 10.0
 const ENGAGE_DELAY := 0.24
@@ -19,6 +19,10 @@ const BASE_ARMOR := 24.0
 const XIAHOU_DUN_BASE_HEALTH := 4400.0
 const XIAHOU_DUN_BASE_ARMOR := 28.0
 const XIAHOU_DUN_MOVE_SPEED := 88.0
+const LV_BU_BASE_HEALTH := 6200.0
+const LV_BU_BASE_ARMOR := 36.0
+const LV_BU_MOVE_SPEED := 150.0
+const LV_BU_PHASE_MOVE_SPEED_BONUS := 15.0
 const THREAT_HEALTH_MULTIPLIERS := [1.0, 1.35, 1.80, 2.35, 3.00]
 const THREAT_DAMAGE_MULTIPLIERS := [1.0, 1.12, 1.28, 1.48, 1.72]
 const STANCE_MAX := 160.0
@@ -38,15 +42,49 @@ const SUMMON_COOLDOWN := 8.0
 const FIRE_CHARGE_COOLDOWN := 7.8
 const FIRE_LINES_COOLDOWN := 9.6
 const ARROW_RAIN_COOLDOWN := 9.8
+const LV_BU_WHIRL_COOLDOWN := 7.2
+const LV_BU_CHARGE_COOLDOWN := 6.4
+const LV_BU_GLAIVE_RETURN_COOLDOWN := 8.6
+const LV_BU_SLOW_SWEEP_COOLDOWN := 5.8
+const LV_BU_RUSH_COOLDOWN := 8.4
+const LV_BU_HIGH_RISK_INTERVAL := 8.0
+const VULNERABLE_DEFAULT_STANCE_DAMAGE := 6.0
+const LV_BU_VULNERABLE_DURATION := 3.0
+const LV_BU_CHARGE_DURATION := 0.34
+const LV_BU_CHARGE_WINDUP := 0.82
+const LV_BU_CHARGE_RECOVERY := 1.32
+const LV_BU_WHIRL_WINDUP := 1.12
+const LV_BU_WHIRL_AIRBORNE_DURATION := 0.72
+const LV_BU_WHIRL_LANDING_DURATION := 0.34
+const LV_BU_WHIRL_TELEGRAPH_DURATION := LV_BU_WHIRL_WINDUP + LV_BU_WHIRL_AIRBORNE_DURATION + LV_BU_WHIRL_LANDING_DURATION
+const LV_BU_WHIRL_RECOVERY := 1.42
+const LV_BU_RETURN_OUTGOING_WINDUP := 0.42
+const LV_BU_RETURN_BACKSWING_WINDUP := 0.58
+const LV_BU_RETURN_RECOVERY := 1.24
+const LV_BU_SLOW_SWEEP_WINDUP := 0.78
+const LV_BU_SLOW_SWEEP_RECOVERY := 0.72
+const LV_BU_SLOW_SWEEP_RANGE := 236.0
+const LV_BU_SLOW_SWEEP_SLOW_MULTIPLIER := 0.58
+const LV_BU_SLOW_SWEEP_SLOW_DURATION := 1.20
+const LV_BU_RUSH_SEGMENT_COUNT := 3
+const LV_BU_RUSH_SEGMENT_WINDUP := 0.30
+const LV_BU_RUSH_SEGMENT_DURATION := 0.18
+const LV_BU_RUSH_RECOVERY := 0.88
+const LV_BU_RUSH_DISTANCE := 116.0
+const LV_BU_RUSH_SLOW_MULTIPLIER := 0.60
+const LV_BU_RUSH_SLOW_DURATION := 3.0
+const LV_BU_CHARGE_MIN_DISTANCE := 170.0
+const LV_BU_CHARGE_MAX_DISTANCE := 250.0
+const LV_BU_COMBO_LINK_RECOVERY := 0.10
 const IDEAL_ENGAGE_MIN_RANGE := 126.0
 const IDEAL_ENGAGE_MAX_RANGE := 194.0
 const HORIZONTAL_LANE_TOLERANCE := 42.0
 const CLOSE_QUARTERS_WHIRL_CHANCE := 0.28
 const COUNTERATTACK_DURATION := 4.0
 const COUNTERATTACK_DAMAGE_MULTIPLIER := 1.30
-const REPOSITION_COOLDOWN := 2.4
-const REPOSITION_DURATION := 0.48
-const REPOSITION_SPEED := 188.0
+const REPOSITION_COOLDOWN := 1.9
+const REPOSITION_DURATION := 0.58
+const REPOSITION_SPEED := 204.0
 const PLAYER_STATIONARY_SPEED := 34.0
 
 @onready var health_component: HealthComponent = %HealthComponent
@@ -84,23 +122,32 @@ var moving := false
 var stance := STANCE_MAX
 var stance_break_remaining := 0.0
 var stance_knockback_remaining := 0.0
+var hurt_remaining := 0.0
 var knockback_visual_remaining := 0.0
 var knockback_visual_duration := 0.0
 var knockback_visual_displacement := 0.0
 var knockback_visual_direction := Vector2.RIGHT
 var knockback_visual_intensity := 0.0
 var action_cooldowns: Dictionary = {}
+var lv_bu_high_risk_remaining := 0.0
 var high_risk_skill_allowed := true
 var cast_invulnerable := false
 var combo_steps: Array[String] = []
 var last_combo_id := ""
 var counterattack_remaining := 0.0
 var counterattack_action_multiplier := 1.0
+var vulnerable_remaining := 0.0
+var lv_bu_ultimate_target := Vector2.ZERO
+var lv_bu_ultimate_hit_player := false
+var lv_bu_rush_targets: Array[Vector2] = []
+var lv_bu_rush_directions: Array[Vector2] = []
+var lv_bu_rush_step := 0
 var movement_bounds := Rect2()
 var has_movement_bounds := false
 var slow_remaining := 0.0
 var slow_multiplier := 1.0
 var tactical_reposition_cooldown := 0.0
+var tactical_reposition_allowed := true
 var reposition_target := Vector2.ZERO
 var reposition_step := 0
 var player_is_attacking := false
@@ -153,20 +200,29 @@ func activate(at: Vector2, new_threat_tier: int = 0) -> void:
 	stance = STANCE_MAX
 	stance_break_remaining = 0.0
 	stance_knockback_remaining = 0.0
+	hurt_remaining = 0.0
 	knockback_visual_remaining = 0.0
 	knockback_visual_duration = 0.0
 	knockback_visual_displacement = 0.0
 	knockback_visual_direction = Vector2.RIGHT
 	knockback_visual_intensity = 0.0
 	action_cooldowns.clear()
+	lv_bu_high_risk_remaining = 0.0
 	high_risk_skill_allowed = true
 	combo_steps.clear()
 	last_combo_id = ""
 	counterattack_remaining = 0.0
 	counterattack_action_multiplier = 1.0
+	vulnerable_remaining = 0.0
+	lv_bu_ultimate_target = position
+	lv_bu_ultimate_hit_player = false
+	lv_bu_rush_targets.clear()
+	lv_bu_rush_directions.clear()
+	lv_bu_rush_step = 0
 	slow_remaining = 0.0
 	slow_multiplier = 1.0
 	tactical_reposition_cooldown = 0.0
+	tactical_reposition_allowed = true
 	reposition_target = position
 	reposition_step = 0
 	navigation_waypoint = Vector2.ZERO
@@ -174,6 +230,12 @@ func activate(at: Vector2, new_threat_tier: int = 0) -> void:
 
 func set_navigation_waypoint(value: Vector2) -> void:
 	navigation_waypoint = value
+
+func set_tactical_reposition_allowed(value: bool) -> void:
+	tactical_reposition_allowed = value
+
+func is_tactically_repositioning() -> bool:
+	return active and state == State.REPOSITION
 
 func tick(delta: float, player_position: Vector2, player_attacking: bool = false) -> void:
 	if dying:
@@ -188,22 +250,56 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 	_track_player_motion(delta, player_position)
 	player_is_attacking = player_attacking
 	_tick_action_cooldowns(delta)
+	lv_bu_high_risk_remaining = maxf(0.0, lv_bu_high_risk_remaining - delta)
 	tactical_reposition_cooldown = maxf(0.0, tactical_reposition_cooldown - delta)
 	counterattack_remaining = maxf(0.0, counterattack_remaining - delta)
 	slow_remaining = maxf(0.0, slow_remaining - delta)
+	hurt_remaining = maxf(0.0, hurt_remaining - delta)
 	if slow_remaining <= 0.0:
 		slow_multiplier = 1.0
 	var was_stance_broken := stance_break_remaining > 0.0
 	stance_break_remaining = maxf(0.0, stance_break_remaining - delta)
 	knockback_visual_remaining = maxf(0.0, knockback_visual_remaining - delta)
-	if was_stance_broken and stance_break_remaining <= 0.0:
-		stance = STANCE_MAX
-		stance_knockback_remaining = 0.0
-	if state == State.WINDUP:
+	if was_stance_broken:
+		# Keep the break state active while the stance bar rebuilds from zero.
+		var recovery_ratio := 1.0 - stance_break_remaining / STANCE_BREAK_DURATION
+		stance = STANCE_MAX * pow(clampf(recovery_ratio, 0.0, 1.0), 1.25)
+		if stance_break_remaining <= 0.0:
+			stance = STANCE_MAX
+			stance_knockback_remaining = 0.0
+	if state in [State.WINDUP, State.ULTIMATE_AIRBORNE, State.ULTIMATE_LANDING]:
 		action_animation_elapsed += delta
+	if state == State.VULNERABLE:
+		vulnerable_remaining = maxf(0.0, vulnerable_remaining - delta)
+		state_timer = vulnerable_remaining
+		moving = false
+		if vulnerable_remaining <= 0.0:
+			state = State.APPROACH
+			state_timer = ENGAGE_DELAY
+			current_action = ""
+		return
 	if _begin_phase_transition_if_needed():
 		return
 	match state:
+		State.ULTIMATE_AIRBORNE:
+			state_timer = maxf(0.0, state_timer - delta)
+			moving = false
+			if state_timer <= 0.0:
+				position = _clamp_to_movement_bounds(lv_bu_ultimate_target)
+				state = State.ULTIMATE_LANDING
+				state_timer = LV_BU_WHIRL_LANDING_DURATION
+				action_animation_elapsed = 0.0
+				pending_shake_strength = 18.0
+				_emit_skill_impact()
+		State.ULTIMATE_LANDING:
+			state_timer = maxf(0.0, state_timer - delta)
+			moving = false
+			position = _clamp_to_movement_bounds(lv_bu_ultimate_target)
+			if state_timer <= 0.0:
+				if lv_bu_ultimate_hit_player:
+					_enter_recovery(LV_BU_WHIRL_RECOVERY)
+				else:
+					_enter_vulnerable()
 		State.PHASE_TRANSITION:
 			state_timer = maxf(0.0, state_timer - delta)
 			if state_timer <= 0.0:
@@ -220,7 +316,9 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 		State.RECOVER:
 			state_timer = maxf(0.0, state_timer - delta)
 			if state_timer <= 0.0:
-				if _should_reposition_after_combo(player_position):
+				if _should_continue_lv_bu_combo():
+					_issue_lv_bu_action(player_position)
+				elif _should_reposition_after_combo(player_position):
 					_begin_reposition(player_position)
 				else:
 					state = State.APPROACH
@@ -268,15 +366,40 @@ func freeze_for_cinematic() -> void:
 	knockback_visual_direction = Vector2.RIGHT
 	knockback_visual_intensity = 0.0
 	combo_steps.clear()
+	lv_bu_ultimate_hit_player = false
+	lv_bu_rush_targets.clear()
+	lv_bu_rush_directions.clear()
+	lv_bu_rush_step = 0
+	vulnerable_remaining = 0.0
+	lv_bu_high_risk_remaining = 0.0
 	reposition_target = position
 
-func receive_player_hit(amount: float) -> Dictionary:
+func receive_player_hit(amount: float, vulnerable_stance_damage: float = 0.0) -> Dictionary:
 	if not active:
 		return {"damage": 0.0, "stance_broken": false}
-	if cast_invulnerable:
+	if cast_invulnerable and not is_vulnerable():
 		return {"damage": 0.0, "stance_broken": false, "invulnerable": true}
 	var actual := amount * (STANCE_BREAK_DAMAGE_MULTIPLIER if is_stance_broken() else 1.0)
-	return {"damage": health_component.take_damage(actual), "stance_broken": false}
+	hurt_remaining = 0.14
+	var dealt := health_component.take_damage(actual)
+	var stance_broken_now := false
+	if dealt > 0.0 and is_vulnerable() and vulnerable_stance_damage > 0.0:
+		stance_broken_now = add_stance_damage(vulnerable_stance_damage)
+	return {"damage": dealt, "stance_broken": stance_broken_now}
+
+func record_ultimate_hit_player() -> void:
+	if archetype != Archetype.LV_BU or current_action != "lvbu_whirl":
+		return
+	lv_bu_ultimate_hit_player = true
+	# The scene resolves telegraphs after ticking named actors. If the landing
+	# timer ended in the same frame, the miss path may already have entered
+	# vulnerable; convert that state back into the intended post-hit recovery.
+	if state == State.VULNERABLE:
+		vulnerable_remaining = 0.0
+		state = State.RECOVER
+		state_timer = LV_BU_WHIRL_RECOVERY
+		moving = false
+		lv_bu_ultimate_hit_player = false
 
 func apply_slow(multiplier: float, duration: float) -> void:
 	if not active or duration <= 0.0:
@@ -292,8 +415,17 @@ func add_stance_damage(amount: float) -> bool:
 		return false
 	stance_break_remaining = STANCE_BREAK_DURATION
 	stance_knockback_remaining = STANCE_BREAK_KNOCKBACK_BUDGET
+	# A successful stance break ends the current string and guarantees a
+	# genuine retaliation window instead of allowing queued follow-up hits.
+	combo_steps.clear()
 	counterattack_remaining = 0.0
 	counterattack_action_multiplier = 1.0
+	if state == State.VULNERABLE:
+		vulnerable_remaining = 0.0
+		state_timer = STANCE_BREAK_DURATION
+		state = State.RECOVER
+		current_action = ""
+		moving = false
 	return true
 
 func apply_stance_break_knockback(direction: Vector2, force: float, forced_displacement: float = 0.0) -> float:
@@ -345,6 +477,7 @@ func interrupt_action_for_knockback() -> bool:
 	if not active or state not in [State.WINDUP, State.DASH]:
 		return false
 	thrust_sequence.clear()
+	combo_steps.clear()
 	thrust_sequence_direction = facing_direction
 	pending_dash_target = Vector2.ZERO
 	pending_dash_duration = 0.0
@@ -387,11 +520,21 @@ func health_ratio() -> float:
 	return health_component.current / maxf(1.0, health_component.maximum)
 
 func max_health() -> float:
-	var base_health := XIAHOU_DUN_BASE_HEALTH if archetype == Archetype.XIAHOU_DUN else BASE_HEALTH
+	var base_health := BASE_HEALTH
+	if archetype == Archetype.XIAHOU_DUN:
+		base_health = XIAHOU_DUN_BASE_HEALTH
+	elif archetype == Archetype.LV_BU:
+		base_health = LV_BU_BASE_HEALTH
 	return base_health * float(THREAT_HEALTH_MULTIPLIERS[threat_tier])
 
 func is_recovering() -> bool:
 	return state == State.RECOVER
+
+func is_vulnerable() -> bool:
+	return active and state == State.VULNERABLE and vulnerable_remaining > 0.0
+
+func vulnerable_ratio() -> float:
+	return clampf(vulnerable_remaining / LV_BU_VULNERABLE_DURATION, 0.0, 1.0)
 
 func is_moving() -> bool:
 	return active and moving
@@ -409,19 +552,29 @@ func _player_is_stationary() -> bool:
 	return player_velocity.length() <= PLAYER_STATIONARY_SPEED
 
 func _should_reposition_after_combo(player_position: Vector2) -> bool:
-	if not combo_steps.is_empty() or tactical_reposition_cooldown > 0.0:
+	if not tactical_reposition_allowed or not combo_steps.is_empty() or tactical_reposition_cooldown > 0.0:
+		return false
+	if is_stance_broken():
 		return false
 	var distance := position.distance_to(player_position)
-	if distance > 300.0:
+	if distance < 96.0 or distance > 330.0:
 		return false
-	var chance := 0.20 + float(phase - 1) * 0.05
+	# Bosses choose a route only between completed attack strings. This keeps
+	# their movement readable and avoids reacting to the player's raw inputs.
+	var chance := 0.38 + float(phase - 1) * 0.10
 	if _player_is_stationary():
-		chance += 0.22
+		chance += 0.18
 	if player_is_attacking:
-		chance += 0.20
+		chance += 0.16
 	if distance < IDEAL_ENGAGE_MIN_RANGE:
 		chance += 0.12
-	return randf() < chance
+	var to_player := player_position - position
+	if to_player.length_squared() > 0.01 and player_velocity.dot(to_player.normalized()) > PLAYER_STATIONARY_SPEED * 1.8:
+		chance -= 0.14
+	return randf() < clampf(chance, 0.22, 0.84)
+
+func _should_continue_lv_bu_combo() -> bool:
+	return archetype == Archetype.LV_BU and not combo_steps.is_empty() and not is_stance_broken()
 
 func _begin_reposition(player_position: Vector2) -> void:
 	var to_player := player_position - position
@@ -430,10 +583,16 @@ func _begin_reposition(player_position: Vector2) -> void:
 	var radial := to_player.normalized()
 	var lateral := Vector2(-radial.y, radial.x)
 	var side := -1.0 if reposition_step % 2 == 0 else 1.0
-	var radial_offset := -36.0 if _player_is_stationary() else 22.0
+	var lateral_distance := 96.0 + float(phase - 1) * 12.0
+	var radial_offset := -42.0 if _player_is_stationary() else 18.0
+	if archetype == Archetype.XIAHOU_DUN:
+		# Xiahou Dun advances behind his guard instead of making wide flanks.
+		lateral_distance *= 0.68
+		radial_offset += 16.0
 	if player_is_attacking:
-		radial_offset += 20.0
-	reposition_target = _clamp_to_movement_bounds(position + lateral * side * 82.0 + radial * radial_offset)
+		radial_offset += 14.0
+	var lateral_jitter := lateral_distance * randf_range(0.84, 1.10)
+	reposition_target = _clamp_to_movement_bounds(position + lateral * side * lateral_jitter + radial * (radial_offset + randf_range(-12.0, 12.0)))
 	tactical_reposition_cooldown = REPOSITION_COOLDOWN
 	reposition_step += 1
 	state = State.REPOSITION
@@ -441,7 +600,7 @@ func _begin_reposition(player_position: Vector2) -> void:
 	moving = true
 
 func is_high_risk_action_active() -> bool:
-	return active and state in [State.WINDUP, State.DASH] and _is_high_risk_action(current_action)
+	return active and state in [State.WINDUP, State.DASH, State.ULTIMATE_AIRBORNE, State.ULTIMATE_LANDING] and _is_high_risk_action(current_action)
 
 func is_cast_invulnerable() -> bool:
 	return active and cast_invulnerable
@@ -455,21 +614,46 @@ func has_counterattack() -> bool:
 	return active and counterattack_remaining > 0.0
 
 func attack_animation_progress() -> float:
-	if state != State.WINDUP or state_timer <= 0.0:
+	if state not in [State.WINDUP, State.ULTIMATE_LANDING] or state_timer <= 0.0:
 		return 1.0
 	return clampf(action_animation_elapsed / maxf(0.01, action_animation_elapsed + state_timer), 0.0, 1.0)
 
+func is_ultimate_airborne() -> bool:
+	return active and state == State.ULTIMATE_AIRBORNE and state_timer > 0.0
+
+func is_ultimate_landing() -> bool:
+	return active and state == State.ULTIMATE_LANDING and state_timer > 0.0
+
+func ultimate_target() -> Vector2:
+	return lv_bu_ultimate_target
+
+func ultimate_airborne_progress() -> float:
+	return clampf(1.0 - state_timer / LV_BU_WHIRL_AIRBORNE_DURATION, 0.0, 1.0) if state == State.ULTIMATE_AIRBORNE else 0.0
+
+func ultimate_landing_progress() -> float:
+	return clampf(1.0 - state_timer / LV_BU_WHIRL_LANDING_DURATION, 0.0, 1.0) if state == State.ULTIMATE_LANDING else 0.0
+
 func display_name() -> String:
-	return "夏侯惇" if archetype == Archetype.XIAHOU_DUN else "张郃"
+	match archetype:
+		Archetype.XIAHOU_DUN: return "夏侯惇"
+		Archetype.LV_BU: return "吕布"
+	return "张郃"
 
 func weapon_title() -> String:
-	return "重枪" if archetype == Archetype.XIAHOU_DUN else "雁翎枪"
+	match archetype:
+		Archetype.XIAHOU_DUN: return "重枪"
+		Archetype.LV_BU: return "方天画戟"
+	return "雁翎枪"
 
 func health_layer_capacity() -> float:
 	return HEALTH_LAYER_CAPACITY
 
 func armor() -> float:
-	var base_armor := XIAHOU_DUN_BASE_ARMOR if archetype == Archetype.XIAHOU_DUN else BASE_ARMOR
+	var base_armor := BASE_ARMOR
+	if archetype == Archetype.XIAHOU_DUN:
+		base_armor = XIAHOU_DUN_BASE_ARMOR
+	elif archetype == Archetype.LV_BU:
+		base_armor = LV_BU_BASE_ARMOR
 	return base_armor + float(threat_tier) * 2.0
 
 func _approach_player(delta: float, player_position: Vector2) -> bool:
@@ -486,6 +670,11 @@ func _approach_player(delta: float, player_position: Vector2) -> bool:
 		ideal_max_range = 184.0
 		phase_speed_bonus = float(phase - 1) * 7.0
 		walk_speed = XIAHOU_DUN_MOVE_SPEED + phase_speed_bonus
+	elif archetype == Archetype.LV_BU:
+		ideal_min_range = 132.0
+		ideal_max_range = 214.0
+		phase_speed_bonus = float(phase - 1) * LV_BU_PHASE_MOVE_SPEED_BONUS
+		walk_speed = LV_BU_MOVE_SPEED + phase_speed_bonus
 	if navigation_waypoint.length_squared() > 0.01:
 		var to_waypoint := navigation_waypoint - position
 		if to_waypoint.length() > 14.0:
@@ -505,14 +694,21 @@ func _approach_player(delta: float, player_position: Vector2) -> bool:
 		moving = true
 		return false
 	if horizontal_distance < ideal_min_range:
-		if archetype == Archetype.ZHANG_HE:
+		if archetype in [Archetype.ZHANG_HE, Archetype.LV_BU]:
 			return true
-		position = _clamp_to_movement_bounds(position - direction * walk_speed * 0.66 * slow_multiplier * delta)
-		moving = true
-		return false
+		# Xiahou Dun should not continually retreat when the player closes in.
+		# Keep the attack lane stable and only make a short separation step when
+		# the two bodies are actually overlapping.
+		if horizontal_distance < ideal_min_range * 0.68:
+			position = _clamp_to_movement_bounds(position - direction * walk_speed * 0.28 * slow_multiplier * delta)
+			moving = true
+			return false
+		return true
 	return true
 
 func _begin_phase_transition_if_needed() -> bool:
+	if state in [State.VULNERABLE, State.ULTIMATE_AIRBORNE, State.ULTIMATE_LANDING]:
+		return false
 	var new_phase := 1
 	if health_ratio() <= 0.35:
 		new_phase = 3
@@ -535,6 +731,9 @@ func _begin_phase_transition_if_needed() -> bool:
 func _issue_next_action(player_position: Vector2) -> void:
 	if archetype == Archetype.XIAHOU_DUN:
 		_issue_xiahou_dun_action(player_position)
+		return
+	if archetype == Archetype.LV_BU:
+		_issue_lv_bu_action(player_position)
 		return
 	if _is_zhang_he_in_close_quarters(player_position):
 		combo_steps.clear()
@@ -662,6 +861,153 @@ func _issue_xiahou_dun_action(player_position: Vector2) -> void:
 	if phase == 3 and action != "fire_lines":
 		pending_recovery *= 0.86
 
+func _issue_lv_bu_action(player_position: Vector2) -> void:
+	if combo_steps.is_empty():
+		_queue_lv_bu_combo(player_position)
+	var action: String = str(combo_steps.pop_front())
+	_start_action_cooldown(action)
+	if _is_lv_bu_unblockable_action(action):
+		lv_bu_high_risk_remaining = LV_BU_HIGH_RISK_INTERVAL
+		_prepare_counterattack_for(action)
+	elif action == "lvbu_rush":
+		lv_bu_high_risk_remaining = LV_BU_HIGH_RISK_INTERVAL
+	current_action = action
+	action_animation_elapsed = 0.0
+	facing_direction = _direction_to(player_position)
+	state = State.WINDUP
+	moving = false
+	pending_dash_target = Vector2.ZERO
+	pending_dash_duration = 0.0
+	pending_dash_recovery = 0.0
+	pending_dash_active = false
+	pending_shake_strength = 0.0
+	match action:
+		"lvbu_charge":
+			var predicted_target := _clamp_to_movement_bounds(_predicted_player_position(0.28))
+			var charge_direction := _direction_to(predicted_target)
+			var charge_distance := clampf(position.distance_to(predicted_target) - 72.0, LV_BU_CHARGE_MIN_DISTANCE, LV_BU_CHARGE_MAX_DISTANCE)
+			facing_direction = charge_direction
+			pending_dash_target = _clamp_to_movement_bounds(position + charge_direction * charge_distance)
+			pending_dash_duration = LV_BU_CHARGE_DURATION
+			pending_dash_recovery = _lv_bu_recovery_duration(LV_BU_CHARGE_RECOVERY)
+			pending_dash_active = true
+			_emit_unblockable_telegraph(Telegraph.line(position, charge_direction, charge_distance + 72.0, 64.0, LV_BU_CHARGE_WINDUP, _threat_damage(78.0), "boss"))
+			state_timer = LV_BU_CHARGE_WINDUP
+			pending_shake_strength = 14.0
+		"lvbu_thrust":
+			_emit_attack_telegraph(Telegraph.line(position, facing_direction, 344.0, 44.0, 0.68, _threat_damage(44.0), "boss"), Telegraph.ClashKind.BASIC)
+			state_timer = 0.68
+			pending_recovery = _lv_bu_recovery_duration(0.72)
+			pending_shake_strength = 9.0
+		"lvbu_sweep":
+			_emit_attack_telegraph(Telegraph.fan(position, facing_direction, 214.0, deg_to_rad(148.0), 0.84, _threat_damage(38.0), "boss"), Telegraph.ClashKind.BASIC)
+			state_timer = 0.84
+			pending_recovery = _lv_bu_recovery_duration(0.82)
+			pending_shake_strength = 10.0
+		"lvbu_slow_sweep":
+			var slow_sweep := Telegraph.fan(position, facing_direction, LV_BU_SLOW_SWEEP_RANGE, deg_to_rad(112.0), LV_BU_SLOW_SWEEP_WINDUP, _threat_damage(34.0), "boss")
+			slow_sweep.movement_slow_multiplier = LV_BU_SLOW_SWEEP_SLOW_MULTIPLIER
+			slow_sweep.movement_slow_duration = LV_BU_SLOW_SWEEP_SLOW_DURATION
+			_emit_attack_telegraph(slow_sweep, Telegraph.ClashKind.BASIC)
+			state_timer = LV_BU_SLOW_SWEEP_WINDUP
+			pending_recovery = _lv_bu_recovery_duration(LV_BU_SLOW_SWEEP_RECOVERY)
+			pending_shake_strength = 11.0
+		"lvbu_rush":
+			_prepare_lv_bu_rush(player_position)
+		"lvbu_whirl":
+			lv_bu_ultimate_hit_player = false
+			lv_bu_ultimate_target = _clamp_to_movement_bounds(_predicted_player_position(0.52))
+			var skyfall_telegraph := Telegraph.circle(lv_bu_ultimate_target, 212.0, LV_BU_WHIRL_TELEGRAPH_DURATION, _threat_damage(88.0), "boss")
+			skyfall_telegraph.visual_kind = "lvbu_skyfall"
+			skyfall_telegraph.movement_slow_multiplier = 0.52
+			skyfall_telegraph.movement_slow_duration = 1.35
+			_emit_unblockable_telegraph(skyfall_telegraph)
+			state_timer = LV_BU_WHIRL_WINDUP
+			pending_recovery = LV_BU_WHIRL_RECOVERY
+			pending_shake_strength = 6.0
+		"lvbu_glaive_return":
+			# The outgoing swing can be clashed. Its red reverse sweep must be dodged.
+			thrust_sequence = [0.0, PI]
+			thrust_sequence_direction = facing_direction
+			state_timer = 0.62
+			pending_recovery = _lv_bu_recovery_duration(LV_BU_RETURN_RECOVERY)
+			pending_shake_strength = 12.0
+	# The fast phase only shortens safe, clashable strings. Heavy red attacks
+	# keep their recovery so a successful dodge always creates an attack window.
+	if phase == 3 and action not in ["lvbu_whirl", "lvbu_glaive_return"]:
+		pending_recovery *= 0.82
+
+func _queue_lv_bu_combo(player_position: Vector2) -> void:
+	# Attack 1 -> attack 2 -> attack 3 is Lu Bu's readable core string. The
+	# player can clash the first two blows, then must dodge the red finisher.
+	var options: Array[String] = ["two_strike"]
+	if _is_action_ready("lvbu_slow_sweep"):
+		options.append("slow_strike")
+	var distance_to_player := position.distance_to(player_position)
+	if _can_use_lv_bu_high_risk("lvbu_whirl"):
+		options.append("warlord_three_strike")
+	if phase >= 2 and _can_use_lv_bu_high_risk("lvbu_glaive_return"):
+		options.append("glaive_return")
+		if player_is_attacking or _player_is_stationary():
+			options.append("glaive_return")
+	if high_risk_skill_allowed and _can_use_lv_bu_high_risk("lvbu_charge") and distance_to_player >= LV_BU_CHARGE_MIN_DISTANCE:
+		options.append("charge_three_strike")
+		if player_is_attacking or distance_to_player >= IDEAL_ENGAGE_MAX_RANGE + 24.0:
+			options.append("charge_three_strike")
+	if phase >= 2 and high_risk_skill_allowed and _can_use_lv_bu_high_risk("lvbu_whirl"):
+		options.append("sweep_whirl")
+		if player_is_attacking or _player_is_stationary():
+			options.append("sweep_whirl")
+	if phase >= 2 and high_risk_skill_allowed and _is_action_ready("lvbu_slow_sweep") and _can_use_lv_bu_high_risk("lvbu_whirl"):
+		options.append("slow_skyfall")
+		if player_is_attacking or _player_is_stationary():
+			options.append("slow_skyfall")
+	if phase >= 2 and high_risk_skill_allowed and _is_action_ready("lvbu_slow_sweep") and _can_use_lv_bu_high_risk("lvbu_rush"):
+		options.append("slow_rush")
+		if player_is_attacking or _player_is_stationary():
+			options.append("slow_rush")
+	# Make Red Hare's three-step dash a readable pressure option in its own
+	# right. It is favored when the hero is at medium range or retreating, while
+	# remaining subject to the same high-risk interval and cooldown as before.
+	if phase >= 2 and high_risk_skill_allowed and _can_use_lv_bu_high_risk("lvbu_rush") and distance_to_player >= IDEAL_ENGAGE_MIN_RANGE + 18.0:
+		options.append("rush")
+		if distance_to_player >= IDEAL_ENGAGE_MAX_RANGE or player_velocity.length() > 170.0:
+			options.append("rush")
+	if phase >= 3 and _can_use_lv_bu_high_risk("lvbu_whirl"):
+		# The final phase increases pattern variety, rather than deleting the
+		# finisher's recovery or chaining attacks indefinitely.
+		options.append("warlord_three_strike")
+	while options.size() > 1 and options.has(last_combo_id):
+		options.erase(last_combo_id)
+	var combo_id: String = str(options.pick_random())
+	last_combo_id = combo_id
+	match combo_id:
+		"charge_three_strike":
+			combo_steps = ["lvbu_charge", "lvbu_thrust", "lvbu_sweep"]
+		"warlord_three_strike":
+			combo_steps = ["lvbu_thrust", "lvbu_sweep", "lvbu_whirl"]
+		"sweep_whirl":
+			combo_steps = ["lvbu_sweep", "lvbu_whirl"]
+		"slow_skyfall":
+			combo_steps = ["lvbu_slow_sweep", "lvbu_whirl"]
+		"slow_rush":
+			combo_steps = ["lvbu_slow_sweep", "lvbu_rush"]
+		"rush":
+			combo_steps = ["lvbu_rush"]
+		"glaive_return":
+			combo_steps = ["lvbu_glaive_return"]
+		"slow_strike":
+			combo_steps = ["lvbu_slow_sweep", "lvbu_thrust"]
+		_:
+			combo_steps = ["lvbu_thrust", "lvbu_sweep"]
+
+func _lv_bu_recovery_duration(base_duration: float) -> float:
+	# Only the gaps inside a preselected string are shortened. The final hit
+	# retains its full recovery, creating a stable attack opportunity.
+	if not combo_steps.is_empty():
+		return minf(base_duration, LV_BU_COMBO_LINK_RECOVERY)
+	return base_duration
+
 func _queue_xiahou_dun_combo() -> void:
 	var options: Array[String] = ["command_chain", "heavy_chain"]
 	if _is_action_ready("fire_charge") and high_risk_skill_allowed:
@@ -753,13 +1099,19 @@ func _prepare_counterattack_for(action: String) -> void:
 	counterattack_remaining = 0.0
 
 func _is_counterattack_eligible(action: String) -> bool:
-	return action in ["sweep", "thrust", "pursuit", "command_sweep", "command_thrust"]
+	return action in ["sweep", "thrust", "pursuit", "command_sweep", "command_thrust", "lvbu_charge", "lvbu_thrust", "lvbu_sweep", "lvbu_slow_sweep", "lvbu_rush", "lvbu_glaive_return"]
 
 func _is_special_action(action: String) -> bool:
-	return action in ["pursuit", "spear_wall", "whirl", "three_thrust", "arrow_rain", "summon", "fire_charge", "fire_lines"]
+	return action in ["pursuit", "spear_wall", "whirl", "three_thrust", "arrow_rain", "summon", "fire_charge", "fire_lines", "lvbu_charge", "lvbu_whirl", "lvbu_rush", "lvbu_glaive_return"]
 
 func _is_high_risk_action(action: String) -> bool:
-	return action in ["pursuit", "spear_wall", "whirl", "three_thrust", "arrow_rain", "fire_charge", "fire_lines"]
+	return action in ["pursuit", "spear_wall", "whirl", "three_thrust", "arrow_rain", "summon", "fire_charge", "fire_lines", "lvbu_charge", "lvbu_whirl", "lvbu_rush", "lvbu_glaive_return"]
+
+func _is_lv_bu_unblockable_action(action: String) -> bool:
+	return archetype == Archetype.LV_BU and action in ["lvbu_charge", "lvbu_whirl", "lvbu_glaive_return"]
+
+func _can_use_lv_bu_high_risk(action: String) -> bool:
+	return high_risk_skill_allowed and _is_action_ready(action) and lv_bu_high_risk_remaining <= 0.0
 
 func _is_action_ready(action: String) -> bool:
 	return float(action_cooldowns.get(action, 0.0)) <= 0.0
@@ -779,6 +1131,11 @@ func _action_cooldown_duration(action: String) -> float:
 		"fire_charge": return FIRE_CHARGE_COOLDOWN
 		"fire_lines": return FIRE_LINES_COOLDOWN
 		"arrow_rain": return ARROW_RAIN_COOLDOWN
+		"lvbu_charge": return LV_BU_CHARGE_COOLDOWN
+		"lvbu_whirl": return LV_BU_WHIRL_COOLDOWN
+		"lvbu_glaive_return": return LV_BU_GLAIVE_RETURN_COOLDOWN
+		"lvbu_slow_sweep": return LV_BU_SLOW_SWEEP_COOLDOWN
+		"lvbu_rush": return LV_BU_RUSH_COOLDOWN
 		_: return 0.0
 
 func _tick_action_cooldowns(delta: float) -> void:
@@ -793,8 +1150,33 @@ func _finish_windup() -> void:
 	if not thrust_sequence.is_empty():
 		var angle: float = float(thrust_sequence.pop_front())
 		facing_direction = thrust_sequence_direction
-		_emit_unblockable_telegraph(Telegraph.line(position, facing_direction.rotated(angle), 300.0, 36.0, 0.34, _threat_damage(16.0), "boss"))
-		state_timer = 0.34
+		var strike_direction := facing_direction.rotated(angle)
+		if current_action == "lvbu_glaive_return":
+			var strike_origin := position
+			var is_return_swing := absf(angle) > PI * 0.5
+			# The second telegraph begins at the glaive's forward endpoint and
+			# travels back through the same lane, creating a genuine return hit.
+			if is_return_swing:
+				strike_origin = position + facing_direction * 278.0
+				_emit_unblockable_telegraph(Telegraph.line(strike_origin, strike_direction, 278.0, 60.0, LV_BU_RETURN_BACKSWING_WINDUP, _threat_damage(72.0), "boss"))
+				state_timer = LV_BU_RETURN_BACKSWING_WINDUP
+			else:
+				_emit_attack_telegraph(Telegraph.line(strike_origin, strike_direction, 278.0, 54.0, LV_BU_RETURN_OUTGOING_WINDUP, _threat_damage(34.0), "boss"), Telegraph.ClashKind.BASIC)
+				state_timer = LV_BU_RETURN_OUTGOING_WINDUP
+		else:
+			_emit_unblockable_telegraph(Telegraph.line(position, strike_direction, 300.0, 36.0, 0.34, _threat_damage(16.0), "boss"))
+			state_timer = 0.34
+		_emit_skill_impact()
+		return
+	if current_action == "lvbu_whirl":
+		# The body leaves the arena during the leap; the locked landing telegraph
+		# remains active so the warning and the eventual damage share one target.
+		cast_invulnerable = true
+		state = State.ULTIMATE_AIRBORNE
+		state_timer = LV_BU_WHIRL_AIRBORNE_DURATION
+		action_animation_elapsed = 0.0
+		moving = false
+		pending_recovery = 0.0
 		_emit_skill_impact()
 		return
 	if pending_dash_active:
@@ -806,9 +1188,36 @@ func _finish_windup() -> void:
 	_enter_recovery(pending_recovery)
 
 func _enter_recovery(duration: float) -> void:
+	var ultimate_hit_player := current_action == "lvbu_whirl" and lv_bu_ultimate_hit_player
+	if _is_lv_bu_unblockable_action(current_action) and not ultimate_hit_player:
+		_enter_vulnerable()
+		return
+	if ultimate_hit_player:
+		lv_bu_ultimate_hit_player = false
 	state = State.RECOVER
 	state_timer = duration
 	moving = false
+
+func _enter_vulnerable() -> void:
+	state = State.VULNERABLE
+	vulnerable_remaining = LV_BU_VULNERABLE_DURATION
+	state_timer = vulnerable_remaining
+	moving = false
+	thrust_sequence.clear()
+	combo_steps.clear()
+	pending_dash_target = Vector2.ZERO
+	pending_dash_duration = 0.0
+	pending_dash_recovery = 0.0
+	pending_dash_active = false
+	dash_target = position
+	dash_speed = 0.0
+	dash_recovery = 0.0
+	pending_recovery = 0.0
+	cast_invulnerable = false
+	if current_action != "lvbu_whirl":
+		current_action = ""
+	action_animation_elapsed = 0.0
+	counterattack_remaining = 0.0
 
 func _begin_dash() -> void:
 	dash_target = _clamp_to_movement_bounds(pending_dash_target)
@@ -825,7 +1234,51 @@ func _tick_dash(delta: float) -> void:
 	if state_timer > 0.0 and position.distance_squared_to(dash_target) > 1.0:
 		return
 	position = _clamp_to_movement_bounds(dash_target)
+	if current_action == "lvbu_rush":
+		lv_bu_rush_step += 1
+		if lv_bu_rush_step < lv_bu_rush_targets.size():
+			_prepare_lv_bu_rush_segment()
+			return
+		_enter_recovery(_lv_bu_recovery_duration(LV_BU_RUSH_RECOVERY))
+		return
 	_enter_recovery(dash_recovery)
+
+func _prepare_lv_bu_rush(player_position: Vector2 = Vector2.ZERO) -> void:
+	lv_bu_rush_targets.clear()
+	lv_bu_rush_directions.clear()
+	lv_bu_rush_step = 0
+	var base_direction := _direction_to(_predicted_player_position(0.22) if player_position == Vector2.ZERO else player_position)
+	var origin := position
+	var turns := [-0.28, 0.20, -0.12]
+	for index in range(LV_BU_RUSH_SEGMENT_COUNT):
+		var direction := base_direction.rotated(float(turns[index])).normalized()
+		if index > 0:
+			direction = _direction_to(_predicted_player_position(0.12)).rotated(float(turns[index]) * 0.55).normalized()
+		lv_bu_rush_directions.append(direction)
+		var distance := LV_BU_RUSH_DISTANCE + float(phase - 2) * 10.0 - float(index) * 8.0
+		var target := _clamp_to_movement_bounds(origin + direction * distance)
+		lv_bu_rush_targets.append(target)
+		origin = target
+	_prepare_lv_bu_rush_segment()
+
+func _prepare_lv_bu_rush_segment() -> void:
+	if lv_bu_rush_step >= lv_bu_rush_targets.size():
+		return
+	var direction: Vector2 = lv_bu_rush_directions[lv_bu_rush_step]
+	action_animation_elapsed = 0.0
+	facing_direction = direction
+	pending_dash_target = lv_bu_rush_targets[lv_bu_rush_step]
+	pending_dash_duration = LV_BU_RUSH_SEGMENT_DURATION
+	pending_dash_recovery = 0.0
+	pending_dash_active = true
+	var distance := position.distance_to(pending_dash_target)
+	var telegraph := Telegraph.line(position, direction, distance + 62.0, 54.0, LV_BU_RUSH_SEGMENT_WINDUP, _threat_damage(26.0), "boss")
+	telegraph.movement_slow_multiplier = LV_BU_RUSH_SLOW_MULTIPLIER
+	telegraph.movement_slow_duration = LV_BU_RUSH_SLOW_DURATION
+	_emit_attack_telegraph(telegraph, Telegraph.ClashKind.BASIC)
+	state = State.WINDUP
+	state_timer = LV_BU_RUSH_SEGMENT_WINDUP
+	pending_shake_strength = 8.0
 
 func _track_player_motion(delta: float, player_position: Vector2) -> void:
 	if has_player_position:

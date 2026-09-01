@@ -11,7 +11,12 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 	for id in hits:
 		if request.excluded_enemy_ids.has(id):
 			continue
-		var damage := CombatMath.final_damage(hero_attack, request.multiplier, hero_bonus, enemies.get_armor(id))
+		if enemies.is_duel_formation_sealed() and enemies.is_duel_shield(id):
+			enemies.block_duel_shield_hit(id)
+			if request.one_hit_per_target:
+				request.hit_targets[id] = true
+			continue
+		var damage := CombatMath.final_damage(hero_attack, request.damage_multiplier_at(enemies.positions[id]), hero_bonus, enemies.get_armor(id))
 		if enemies.get_type(id) == EnemySimulation.EnemyType.SHIELD:
 			var attacker_direction := (request.origin - enemies.positions[id]).normalized()
 			if enemies.get_facing_direction(id).dot(attacker_direction) >= 0.35:
@@ -52,6 +57,11 @@ func _resolve_displacement_only(request: AttackRequest, hits: Array[int], enemie
 	for id in hits:
 		if request.excluded_enemy_ids.has(id):
 			continue
+		if enemies.is_duel_formation_sealed() and enemies.is_duel_shield(id):
+			enemies.block_duel_shield_hit(id)
+			if request.one_hit_per_target:
+				request.hit_targets[id] = true
+			continue
 		var knockback_direction := request.direction
 		if request.shape == AttackRequest.Shape.CIRCLE or request.fan_knockback:
 			knockback_direction = enemies.positions[id] - request.origin
@@ -91,7 +101,8 @@ func request_hits_point(request: AttackRequest, point: Vector2) -> bool:
 		AttackRequest.Shape.CIRCLE:
 			return offset.length_squared() <= request.range * request.range
 		AttackRequest.Shape.FAN:
-			return offset.length_squared() <= request.range * request.range and absf(request.direction.angle_to(offset.normalized())) <= request.half_angle
+			var distance_squared := offset.length_squared()
+			return distance_squared >= request.inner_radius * request.inner_radius and distance_squared <= request.range * request.range and absf(request.direction.angle_to(offset.normalized())) <= request.half_angle
 		AttackRequest.Shape.LINE:
 			var projected := offset.dot(request.direction)
 			return projected >= 0.0 and projected <= request.range and absf(offset.cross(request.direction)) <= request.width * 0.5

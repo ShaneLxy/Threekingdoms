@@ -27,6 +27,7 @@
 - [博望坡曹军将领](enemies/bowangpo-commanders.md)：夏侯兰、韩浩与夏侯惇的首轮战斗原型。
 - [精英：夏侯恩](bosses/xiahou-en.md)：偃月刀精英的扇面压迫与反击窗口。
 - [Boss：张郃](bosses/zhang-he.md)：雁翎枪三阶段战斗、招式与场地约束。
+- 吕布作为名将斗阵最终领主与无尽模式终局领主接入战斗；剧情模式不安排吕布。
 - [第一章：长坂坡·单骑救主](levels/chapter-01-changban.md)：10 分钟剧情关卡垂直切片。
 - [第一章战场布局](levels/chapter-01-layout.md)：单一开放战场、边界、出生点与 Boss 场地规则。
 - [战场地图路线图](levels/map-roadmap.md)：博望坡、乌巢与虎牢关的后续地图方向。

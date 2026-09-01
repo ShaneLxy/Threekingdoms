@@ -11,6 +11,21 @@ const PLAYER_ATTACK_02_FRAME_DURATION := 0.08
 const PLAYER_ATTACK_03_FRAME_DURATION := 0.08
 const PLAYER_ATTACK_04_FRAME_DURATION := 0.08
 const PLAYER_ATTACK_05_FRAME_DURATION := 0.15
+const PLAYER_GUARD_FRAME_DURATION := 0.15
+const GUAN_YU_GUARD_FRAME_DURATION := 0.10
+const ZHANG_FEI_GUARD_FRAME_DURATION := 0.10
+const ZHANG_FEI_GUARD_FRAMES := [1, 3, 8]
+const GUARD_SHIELD_FRAME_DURATION := 0.075
+const GUARD_SHIELD_SCALE := 0.46
+const GUARD_SHIELD_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/guard/guard-01.png"),
+	preload("res://assets/art/effects/guard/guard-02.png"),
+	preload("res://assets/art/effects/guard/guard-03.png"),
+	preload("res://assets/art/effects/guard/guard-04.png"),
+]
+const LOOT_COIN_TEXTURE: Texture2D = preload("res://assets/art/ui/coin.png")
+const LOOT_COIN_SOURCE_RECT := Rect2(38.0, 56.0, 334.0, 296.0)
+const LOOT_COIN_DISPLAY_SIZE := Vector2(16.0, 15.0)
 const PLAYER_ATTACK_04_SOURCE_FOOT_ANCHOR := Vector2(64, 82)
 const PLAYER_ATTACK_05_FOOT_ANCHORS := [Vector2(64, 100), Vector2(64, 87)]
 const PLAYER_DEATH_SOURCE_FOOT_ANCHOR := Vector2(64, 86)
@@ -30,9 +45,239 @@ const FIREWHEEL_PROJECTILE_FLASH_DURATION := 0.38
 const FIREWHEEL_RING_SPEED := 420.0
 const FIREWHEEL_RING_RADIUS := 68.0
 const GUAN_BLADE_WAVE_SPEED := 520.0
+const GUAN_KNIFE_WAVE_SOURCE_ANCHOR := Vector2(24.0, 204.0)
+const GUAN_KNIFE_WAVE_FRAME_DURATION := 0.040
+const GUAN_KNIFE_WAVE_FADE_DURATION := GUAN_KNIFE_WAVE_FRAME_DURATION * 3.0
+const GUAN_KNIFE_WAVE_EXPANSION_DURATION := 0.40
+const GUAN_KNIFE_WAVE_INFINITE_HOLD_DURATION := 0.16
+const GUAN_KNIFE_WAVE_EXPANSION_FRAMES: Array[int] = [0, 1, 2, 4, 5, 7, 9, 10, 11, 13]
+const GUAN_KNIFE_WAVE_FADE_FRAMES: Array[int] = [14, 15, 17]
+const GUAN_KNIFE_WAVE_FIT_PADDING := 24.0
+const GUAN_KNIFE_WUSHENG_FIXED_SCALE := 1.24
+const GUAN_KNIFE_WAVE_TEXTURES := {
+	0: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_00.png"),
+	1: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_01.png"),
+	2: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_02.png"),
+	4: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_04.png"),
+	5: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_05.png"),
+	7: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_07.png"),
+	9: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_09.png"),
+	10: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_10.png"),
+	11: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_11.png"),
+	13: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_13.png"),
+	14: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_14.png"),
+	15: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_15.png"),
+	17: preload("res://assets/art/characters/guan_yu/effects/knife_wave_cyan_gold/067 MYNSZD E53216_17.png"),
+}
 const ENEMY_MOVE_ANIMATION_HOLD := 0.12
+const BOSS_TRIAL_ARENA_BOUNDS := BattlefieldLayout.BOSS_TRIAL_ARENA_BOUNDS
+const TRIAL_ATMOSPHERE_ATTACK_INTERVAL := 3.20
+const TRIAL_ATMOSPHERE_ATTACK_DURATION := 0.52
+const TRIAL_ATMOSPHERE_GUARD_SCALE := 0.52
+const TRIAL_ATMOSPHERE_POSITIONS: Array[Dictionary] = [
+	{"position": Vector2(305.0, 188.0), "shield": true, "phase": 0.00},
+	{"position": Vector2(453.0, 176.0), "shield": false, "phase": 0.62},
+	{"position": Vector2(627.0, 169.0), "shield": true, "phase": 1.24},
+	{"position": Vector2(810.0, 169.0), "shield": false, "phase": 1.86},
+	{"position": Vector2(993.0, 176.0), "shield": true, "phase": 2.48},
+	{"position": Vector2(1184.0, 188.0), "shield": false, "phase": 3.10},
+	{"position": Vector2(305.0, 810.0), "shield": false, "phase": 1.58},
+	{"position": Vector2(470.0, 824.0), "shield": true, "phase": 2.20},
+	{"position": Vector2(662.0, 831.0), "shield": false, "phase": 2.82},
+	{"position": Vector2(862.0, 831.0), "shield": true, "phase": 3.44},
+	{"position": Vector2(1054.0, 824.0), "shield": false, "phase": 4.06},
+	{"position": Vector2(1219.0, 810.0), "shield": true, "phase": 4.68},
+	{"position": Vector2(239.0, 305.0), "shield": true, "phase": 0.94},
+	{"position": Vector2(225.0, 496.0), "shield": false, "phase": 2.34},
+	{"position": Vector2(230.0, 688.0), "shield": true, "phase": 3.74},
+	{"position": Vector2(1435.0, 305.0), "shield": false, "phase": 1.34},
+	{"position": Vector2(1447.0, 496.0), "shield": true, "phase": 2.74},
+	{"position": Vector2(1442.0, 688.0), "shield": false, "phase": 4.14},
+]
 const TIANJI_ARROW_VOLLEY_RADIUS := 230.0
-const TIANJI_ARROW_VOLLEY_ARROW_COUNT := 13
+const TIANJI_ARROW_VOLLEY_ARROW_COUNT := 18
+const VICTORY_ARROW_SALVO_ARROW_COUNT := 28
+const TIANJI_ARROW_FLIGHT_DURATION := 0.40
+const TIANJI_ARROW_LODGED_DURATION := 0.92
+const TIANJI_ARROW_MAX_VOLLEY_MARKS := 4
+const TIANJI_ARROW_TEXTURE_SCALE := 0.70
+const TIANJI_ARROW_SOURCE_EXPOSED := Rect2(25.0, 27.0, 53.0, 12.0)
+const TIANJI_ARROW_SOURCE_ANCHOR := Vector2(64.0, 32.0)
+const TIANJI_ARROW_TRAIL_LENGTH := 86.0
+const TIANJI_ARROW_SKY_ENTRY_OFFSET := 42.0
+const TIANJI_LIGHTNING_FRAME_DURATION := 0.05
+const TIANJI_LIGHTNING_SOURCE_IMPACT_ANCHOR := Vector2(930.0, 895.0)
+const TIANJI_LIGHTNING_SOURCE_ENTRY_ANCHOR := Vector2(930.0, 164.0)
+const TIANJI_LIGHTNING_SKY_EDGE_OFFSET := 6.0
+const TIANJI_LIGHTNING_TEXTURES := {
+	"1": preload("res://assets/art/effects/tianji/lightning/1.png"),
+	"1-2": preload("res://assets/art/effects/tianji/lightning/1-2.png"),
+	"1-3": preload("res://assets/art/effects/tianji/lightning/1-3.png"),
+	"1-4": preload("res://assets/art/effects/tianji/lightning/1-4.png"),
+	"1-5": preload("res://assets/art/effects/tianji/lightning/1-5.png"),
+	"1-5-1": preload("res://assets/art/effects/tianji/lightning/1-5-1.png"),
+	"2": preload("res://assets/art/effects/tianji/lightning/2.png"),
+	"3": preload("res://assets/art/effects/tianji/lightning/3.png"),
+	"4": preload("res://assets/art/effects/tianji/lightning/4.png"),
+	"5": preload("res://assets/art/effects/tianji/lightning/5.png"),
+}
+const TIANJI_LIGHTNING_FRAME_SEQUENCES := {
+	1: ["1", "2", "3", "4", "5"],
+	2: ["1", "1-2", "2", "3", "4", "5"],
+	3: ["1", "1-3", "2", "3", "4", "5"],
+	4: ["1", "1-4", "1-2", "2", "3", "4", "5"],
+	5: ["1", "1-5", "1-5-1", "1-2", "2", "3", "4", "5"],
+}
+const TIANJI_WIND_FORMATION_FRAME_DURATION := 0.030
+const TIANJI_WIND_CORE_FRAME_DURATION := 0.050
+const TIANJI_WIND_COLLAPSE_FRAME_DURATION := 0.045
+const TIANJI_WIND_SOURCE_ANCHOR := Vector2(126.0, 261.0)
+const TIANJI_WIND_FORMATION_FRAMES: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+const TIANJI_WIND_CORE_FRAMES: Array[int] = [9, 10, 11, 12, 13]
+const TIANJI_WIND_COLLAPSE_FRAMES: Array[int] = [14, 15, 16, 17, 18, 19, 20, 21, 22]
+const TIANJI_WIND_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_00.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_01.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_02.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_03.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_04.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_05.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_06.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_07.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_08.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_09.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_10.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_11.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_12.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_13.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_14.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_15.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_16.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_17.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_18.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_19.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_20.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_21.png"),
+	preload("res://assets/art/effects/tianji/wind/eff_tornado-in_22.png"),
+]
+const TIANJI_WATER_FORMATION_FRAME_DURATION := 0.045
+const TIANJI_WATER_PEAK_FRAME_DURATION := 0.065
+const TIANJI_WATER_COLLAPSE_FRAME_DURATION := 0.075
+const TIANJI_WATER_SOURCE_ANCHOR := Vector2(466.0, 1008.0)
+const TIANJI_WATER_LAYER_SIZE_RATIOS: Array[float] = [1.0, 0.84, 0.74, 0.90, 1.06]
+const TIANJI_WATER_LAYER_Y_RATIOS: Array[float] = [0.0, -0.12, 0.10, -0.06, 0.16]
+const TIANJI_WATER_LAYER_ALPHAS: Array[float] = [1.0, 0.64, 0.52, 0.70, 0.46]
+const TIANJI_WATER_LAYER_FRAME_OFFSETS: Array[int] = [0, 2, 4, 1, 3]
+const TIANJI_WATER_LAYER_SPEEDS: Array[float] = [1.0, 1.08, 0.92, 1.04, 0.96]
+const TIANJI_WATER_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_03.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_04.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_05.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_06.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_07.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_08.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_09.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_10.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_11.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_12.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_13.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_14.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_15.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_16.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_17.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_18.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_19.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_20.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_21.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_22.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_23.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_24.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_25.png"),
+	preload("res://assets/art/effects/tianji/water_no_rainbow/action-action1_26.png"),
+]
+const TIANJI_FIRE_RAIN_FRAME_DURATION := 0.060
+const TIANJI_FIRE_RAIN_FINAL_FRAME_DURATION := 0.085
+const TIANJI_FIRE_RAIN_FINAL_FLIGHT_DURATION := 0.46
+const TIANJI_FIRE_RAIN_FINAL_LANDING_FRAME := 9
+const TIANJI_FIRE_RAIN_MAX_MARKS := 24
+const TIANJI_FIRE_RAIN_METEOR_SCALE := 0.84
+const TIANJI_FIRE_RAIN_FINAL_SCALE := 1.52
+const TIANJI_FIRE_RAIN_FINAL_ANCHOR_RATIO := Vector2(0.66, 0.66)
+const TIANJI_FIRE_RAIN_SKY_MARGIN := 18.0
+const TIANJI_FIRE_RAIN_METEOR_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_00.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_01.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_02.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_03.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_04.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_05.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_06.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_07.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_08.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_09.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_10.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_11.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_12.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_13.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_14.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_15.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_16.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_17.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_18.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_19.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_20.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_21.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_22.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_23.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_24.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_25.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_26.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_27.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_28.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_29.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_30.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_31.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_32.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_33.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_34.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_35.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_36.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_37.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_38.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_39.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_40.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_41.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_42.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_43.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_44.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_45.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor/062 MYNSZD E53209_46.png")
+]
+const TIANJI_FIRE_RAIN_FINAL_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_00.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_01.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_02.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_03.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_04.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_05.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_06.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_07.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_08.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_09.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_10.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_11.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_12.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_13.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_14.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_15.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_16.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_17.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_18.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_19.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_20.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_21.png"),
+	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_22.png")
+]
 const PLAYER_ULTIMATE_SOURCE_FOOT_ANCHOR := Vector2(64, 108)
 const GUAN_YU_SPRITE_SCALE := 0.75
 const GUAN_YU_SOURCE_FOOT_ANCHOR := Vector2(64, 86)
@@ -46,10 +291,27 @@ const GUAN_YU_DEATH_FRAME_DURATIONS: Array[float] = [0.14, 0.14, 0.18, 0.20, 0.7
 const GUAN_YU_DEATH_CINEMATIC_DURATION := 1.38
 const ZHANG_FEI_SPRITE_SCALE := 1.0
 const ZHANG_FEI_WORLD_FOOT_OFFSET := Vector2(0, 15)
-const ZHANG_FEI_IDLE_FRAME_DURATION := 0.18
+const ZHANG_FEI_IDLE_FRAME_DURATION := 0.14
 const ZHANG_FEI_WALK_ENTRY_DURATION := 0.09
 const ZHANG_FEI_WALK_LOOP_FRAME_DURATION := 0.10
 const ZHANG_FEI_ULTIMATE_FRAME_DURATION := 0.085
+const ZHANG_FEI_LANDING_FRAME_DURATIONS: Array[float] = [0.20, 0.10]
+const ZHANG_FEI_LANDING_SOURCE_ANCHOR := Vector2(288.0, 338.0)
+const ZHANG_FEI_LANDING_TEXTURES := [
+	preload("res://assets/art/characters/zhang_fei/effects/landing/zhang-fei-landing-01.png"),
+	preload("res://assets/art/characters/zhang_fei/effects/landing/zhang-fei-landing-02.png"),
+]
+const WUSHUANG_IMPACT_FRAME_DURATION := 0.06
+const WUSHUANG_IMPACT_SOURCE_ANCHOR := Vector2(420.0, 388.0)
+const WUSHUANG_IMPACT_TEXTURES := [
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-01.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-02.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-03.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-04.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-05.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-06.png"),
+	preload("res://assets/art/effects/wushuang/impact_wave/impact-wave-07.png"),
+]
 const WUSHUANG_READY_FRAME_DURATION := 0.08
 const WUSHUANG_READY_SCALE := 0.50
 const WUSHUANG_READY_OFFSET := Vector2(0, -22)
@@ -123,6 +385,7 @@ const ELITE_CHUNYU_DAO_WALK_FOOT_ANCHORS := [Vector2(64, 121), Vector2(64, 120),
 const ELITE_CHUNYU_DAO_ATTACK_FOOT_ANCHORS := [Vector2(64, 156), Vector2(105, 120), Vector2(64, 120), Vector2(105, 120)]
 const ELITE_CHUNYU_DAO_DEATH_FOOT_ANCHORS := [Vector2(64, 118), Vector2(64, 117), Vector2(64, 120)]
 const BOSS_ZHANG_HE_SPRITE_SCALE := 0.571
+const NAMED_SPRITE_OUTLINE_WIDTH := 0.0
 const BOSS_ZHANG_HE_SOURCE_FOOT_ANCHOR := Vector2(64, 112)
 const BOSS_ZHANG_HE_IDLE_FRAME_DURATION := 0.20
 const BOSS_ZHANG_HE_WALK_FRAME_DURATION := 0.10
@@ -161,6 +424,208 @@ const BOSS_ZHANG_HE_THRUST_SEQUENCE := [2, 1, 0]
 const BOSS_ZHANG_HE_SWEEP_SEQUENCE := [5, 4, 3, 5]
 const BOSS_ZHANG_HE_SUPPORT_SEQUENCE := [3, 4, 5]
 const BOSS_ZHANG_HE_WHIRL_SEQUENCE := [6, 7, 8, 9, 10]
+const BOSS_XIAHOU_DUN_SPRITE_SCALE := 0.80
+const BOSS_XIAHOU_DUN_IDLE_FRAME_DURATION := 0.20
+const BOSS_XIAHOU_DUN_WALK_FRAME_DURATION := 0.10
+const BOSS_XIAHOU_DUN_ATTACK_FRAME_DURATION := 0.09
+const BOSS_XIAHOU_DUN_DEATH_FRAME_DURATION := 0.16
+const BOSS_XIAHOU_DUN_IDLE_FOOT_ANCHORS := [
+	Vector2(64, 93), Vector2(64, 94), Vector2(64, 94), Vector2(64, 94),
+	Vector2(64, 93), Vector2(64, 93), Vector2(64, 94),
+]
+const BOSS_XIAHOU_DUN_WALK_FOOT_ANCHORS := [
+	Vector2(64, 94), Vector2(64, 93), Vector2(64, 94), Vector2(64, 94),
+	Vector2(64, 94), Vector2(64, 94), Vector2(64, 93),
+]
+const BOSS_XIAHOU_DUN_ATTACK_1_FOOT_ANCHORS := [Vector2(64, 94), Vector2(64, 93), Vector2(64, 95)]
+const BOSS_XIAHOU_DUN_ATTACK_2_FOOT_ANCHORS := [
+	Vector2(64, 94), Vector2(64, 94), Vector2(64, 94), Vector2(64, 94), Vector2(64, 85),
+]
+const BOSS_XIAHOU_DUN_ATTACK_3_FOOT_ANCHORS := [
+	Vector2(64, 94), Vector2(64, 123), Vector2(64, 115), Vector2(64, 108), Vector2(64, 95),
+	Vector2(64, 124), Vector2(64, 94), Vector2(64, 94), Vector2(64, 124),
+]
+const BOSS_XIAHOU_DUN_ATTACK_4_FOOT_ANCHORS := [Vector2(64, 94), Vector2(64, 120), Vector2(64, 94), Vector2(64, 124)]
+const BOSS_XIAHOU_DUN_DEATH_FOOT_ANCHORS := [
+	Vector2(64, 94), Vector2(64, 94), Vector2(64, 94), Vector2(64, 95), Vector2(64, 95),
+]
+const BOSS_XIAHOU_DUN_IDLE_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/4.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/5.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/6.png"),
+	preload("res://assets/art/bosses/xiahou_dun/idle_right/7.png"),
+]
+const BOSS_XIAHOU_DUN_WALK_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/4.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/5.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/6.png"),
+	preload("res://assets/art/bosses/xiahou_dun/walk_right/7.png"),
+]
+const BOSS_XIAHOU_DUN_ATTACK_1_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/attack_1_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_1_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_1_right/3.png"),
+]
+const BOSS_XIAHOU_DUN_ATTACK_2_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/attack_2_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_2_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_2_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_2_right/4.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_2_right/5.png"),
+]
+const BOSS_XIAHOU_DUN_ATTACK_3_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/4.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/5.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/6.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/7.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/8.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_3_right/9.png"),
+]
+const BOSS_XIAHOU_DUN_ATTACK_4_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/attack_4_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_4_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_4_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/attack_4_right/4.png"),
+]
+const BOSS_XIAHOU_DUN_DEATH_TEXTURES := [
+	preload("res://assets/art/bosses/xiahou_dun/death_right/1.png"),
+	preload("res://assets/art/bosses/xiahou_dun/death_right/2.png"),
+	preload("res://assets/art/bosses/xiahou_dun/death_right/3.png"),
+	preload("res://assets/art/bosses/xiahou_dun/death_right/4.png"),
+	preload("res://assets/art/bosses/xiahou_dun/death_right/5.png"),
+]
+const BOSS_XIAHOU_DUN_ACTION_1_SEQUENCE := [
+	{"textures": BOSS_XIAHOU_DUN_ATTACK_1_TEXTURES, "anchors": BOSS_XIAHOU_DUN_ATTACK_1_FOOT_ANCHORS},
+]
+const BOSS_XIAHOU_DUN_ACTION_2_SEQUENCE := [
+	{"textures": BOSS_XIAHOU_DUN_ATTACK_2_TEXTURES, "anchors": BOSS_XIAHOU_DUN_ATTACK_2_FOOT_ANCHORS},
+]
+const BOSS_XIAHOU_DUN_ACTION_3_SEQUENCE := [
+	{"textures": BOSS_XIAHOU_DUN_ATTACK_3_TEXTURES, "anchors": BOSS_XIAHOU_DUN_ATTACK_3_FOOT_ANCHORS},
+]
+const BOSS_XIAHOU_DUN_ACTION_34_SEQUENCE := [
+	{"textures": BOSS_XIAHOU_DUN_ATTACK_3_TEXTURES, "anchors": BOSS_XIAHOU_DUN_ATTACK_3_FOOT_ANCHORS},
+	{"textures": BOSS_XIAHOU_DUN_ATTACK_4_TEXTURES, "anchors": BOSS_XIAHOU_DUN_ATTACK_4_FOOT_ANCHORS},
+]
+const BOSS_LV_BU_SPRITE_SCALE := 1.22
+const BOSS_LV_BU_IDLE_FRAME_DURATION := 0.18
+const BOSS_LV_BU_WALK_FRAME_DURATION := 0.085
+const BOSS_LV_BU_ATTACK_FRAME_DURATION := 0.085
+const BOSS_LV_BU_DEATH_FRAME_DURATION := 0.16
+const BOSS_LV_BU_IDLE_FOOT_ANCHORS := [
+	Vector2(64, 66), Vector2(64, 65), Vector2(64, 65), Vector2(64, 65), Vector2(64, 66),
+	Vector2(64, 65), Vector2(64, 65), Vector2(64, 66), Vector2(64, 65), Vector2(64, 65), Vector2(64, 66),
+]
+const BOSS_LV_BU_WALK_FOOT_ANCHORS := [
+	Vector2(64, 66), Vector2(64, 65), Vector2(64, 65), Vector2(64, 64), Vector2(64, 65), Vector2(64, 66), Vector2(64, 65),
+]
+const BOSS_LV_BU_ATTACK_1_FOOT_ANCHORS := [
+	Vector2(64, 66), Vector2(64, 64), Vector2(64, 51), Vector2(64, 51), Vector2(64, 51), Vector2(64, 57), Vector2(64, 66),
+]
+const BOSS_LV_BU_ATTACK_2_FOOT_ANCHORS := [
+	Vector2(64, 76), Vector2(64, 88), Vector2(64, 76), Vector2(64, 124), Vector2(64, 124), Vector2(64, 91), Vector2(64, 66),
+]
+const BOSS_LV_BU_ATTACK_3_FOOT_ANCHORS := [
+	Vector2(64, 124), Vector2(64, 124), Vector2(64, 76), Vector2(64, 88), Vector2(64, 76), Vector2(64, 124), Vector2(64, 69), Vector2(64, 66),
+]
+# Lv Bu's source action frames have substantially different crops. These values
+# normalize the visible body height to the idle pose without shrinking extended
+# weapon arcs. Weapon tips are source-space sockets for attack VFX attachment.
+const BOSS_LV_BU_ATTACK_1_FRAME_SCALES := [1.00, 1.03, 1.28, 1.22, 1.24, 1.12, 1.00]
+const BOSS_LV_BU_ATTACK_2_FRAME_SCALES := [0.98, 0.96, 0.98, 0.82, 0.80, 0.96, 1.00]
+const BOSS_LV_BU_ATTACK_3_FRAME_SCALES := [1.00, 1.00, 1.04, 1.02, 1.04, 1.00, 1.04, 1.04]
+const BOSS_LV_BU_ATTACK_1_WEAPON_TIPS := [
+	Vector2(123, 27), Vector2(125, 27), Vector2(120, 25), Vector2(127, 31), Vector2(120, 29), Vector2(116, 28), Vector2(126, 28),
+]
+const BOSS_LV_BU_ATTACK_2_WEAPON_TIPS := [
+	Vector2(84, 73), Vector2(104, 85), Vector2(124, 54), Vector2(97, 14), Vector2(78, 6), Vector2(112, 12), Vector2(125, 30),
+]
+const BOSS_LV_BU_ATTACK_3_WEAPON_TIPS := [
+	Vector2(97, 14), Vector2(78, 6), Vector2(84, 73), Vector2(104, 85), Vector2(124, 54), Vector2(115, 20), Vector2(112, 14), Vector2(125, 28),
+]
+const BOSS_LV_BU_DEFAULT_WEAPON_TIP := Vector2(123, 28)
+const BOSS_LV_BU_DEATH_FOOT_ANCHORS := [Vector2(64, 66), Vector2(64, 71), Vector2(64, 68), Vector2(64, 69), Vector2(64, 70)]
+const BOSS_LV_BU_IDLE_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/idle_right/1.png"), preload("res://assets/art/bosses/lvbu/idle_right/2.png"),
+	preload("res://assets/art/bosses/lvbu/idle_right/3.png"), preload("res://assets/art/bosses/lvbu/idle_right/4.png"),
+	preload("res://assets/art/bosses/lvbu/idle_right/5.png"), preload("res://assets/art/bosses/lvbu/idle_right/6.png"),
+	preload("res://assets/art/bosses/lvbu/idle_right/7.png"), preload("res://assets/art/bosses/lvbu/idle_right/8.png"),
+	preload("res://assets/art/bosses/lvbu/idle_right/9.png"), preload("res://assets/art/bosses/lvbu/idle_right/10.png"),
+	preload("res://assets/art/bosses/lvbu/idle_right/11.png"),
+]
+const BOSS_LV_BU_WALK_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/walk_right/1.png"), preload("res://assets/art/bosses/lvbu/walk_right/2.png"),
+	preload("res://assets/art/bosses/lvbu/walk_right/3.png"), preload("res://assets/art/bosses/lvbu/walk_right/4.png"),
+	preload("res://assets/art/bosses/lvbu/walk_right/5.png"), preload("res://assets/art/bosses/lvbu/walk_right/6.png"),
+	preload("res://assets/art/bosses/lvbu/walk_right/7.png"),
+]
+const BOSS_LV_BU_ATTACK_1_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/attack_1_right/1.png"), preload("res://assets/art/bosses/lvbu/attack_1_right/2.png"),
+	preload("res://assets/art/bosses/lvbu/attack_1_right/3.png"), preload("res://assets/art/bosses/lvbu/attack_1_right/4.png"),
+	preload("res://assets/art/bosses/lvbu/attack_1_right/9.png"), preload("res://assets/art/bosses/lvbu/attack_1_right/11.png"),
+	preload("res://assets/art/bosses/lvbu/attack_1_right/12.png"),
+]
+const BOSS_LV_BU_ATTACK_2_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/attack_2_right/13.png"), preload("res://assets/art/bosses/lvbu/attack_2_right/14.png"),
+	preload("res://assets/art/bosses/lvbu/attack_2_right/15.png"), preload("res://assets/art/bosses/lvbu/attack_2_right/16.png"),
+	preload("res://assets/art/bosses/lvbu/attack_2_right/17.png"), preload("res://assets/art/bosses/lvbu/attack_2_right/18.png"),
+	preload("res://assets/art/bosses/lvbu/attack_2_right/19.png"),
+]
+const BOSS_LV_BU_ATTACK_3_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/attack_3_right/1.png"), preload("res://assets/art/bosses/lvbu/attack_3_right/2.png"),
+	preload("res://assets/art/bosses/lvbu/attack_3_right/3.png"), preload("res://assets/art/bosses/lvbu/attack_3_right/4.png"),
+	preload("res://assets/art/bosses/lvbu/attack_3_right/5.png"), preload("res://assets/art/bosses/lvbu/attack_3_right/6.png"),
+	preload("res://assets/art/bosses/lvbu/attack_3_right/7.png"), preload("res://assets/art/bosses/lvbu/attack_3_right/8.png"),
+]
+const LV_BU_ATTACK_VFX_FRAME_DURATION := 0.055
+# Both source sheets place the impact near the right-hand side of the canvas;
+# anchoring there keeps the strike rooted at the boss while the effect rotates
+# with his facing direction.
+const LV_BU_ATTACK_1_VFX_SOURCE_ANCHOR := Vector2(448.0, 500.0)
+const LV_BU_ATTACK_2_VFX_SOURCE_ANCHOR := Vector2(500.0, 500.0)
+const LV_BU_ATTACK_1_VFX_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_00.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_01.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_02.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_03.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_04.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_05.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_06.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_07.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_08.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_1/action-action1_09.png"),
+]
+const LV_BU_ATTACK_2_VFX_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_00.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_01.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_02.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_03.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_04.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_05.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_06.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_07.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_08.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_09.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_10.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_11.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_12.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_13.png"),
+	preload("res://assets/art/bosses/lvbu/effects/attack_2/action-action2_14.png"),
+]
+const BOSS_LV_BU_DEATH_TEXTURES := [
+	preload("res://assets/art/bosses/lvbu/death_right/1.png"), preload("res://assets/art/bosses/lvbu/death_right/2.png"),
+	preload("res://assets/art/bosses/lvbu/death_right/3.png"), preload("res://assets/art/bosses/lvbu/death_right/5.png"),
+	preload("res://assets/art/bosses/lvbu/death_right/6.png"),
+]
 const MAX_ELITE_CORPSES := 12
 const ARCHER_PROJECTILE_LAUNCH_RATIO := 0.25
 const ARCHER_PROJECTILE_ARC_HEIGHT := 44.0
@@ -373,8 +838,14 @@ const ZHANG_FEI_IDLE_TEXTURES := [
 	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-01.png"),
 	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-02.png"),
 	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-03.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-04.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-05.png"),
+	preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-06.png"),
 ]
-const ZHANG_FEI_IDLE_FOOT_ANCHORS := [Vector2(49, 65), Vector2(48, 65), Vector2(49, 65)]
+const ZHANG_FEI_IDLE_FOOT_ANCHORS := [
+	Vector2(49, 65), Vector2(49, 65), Vector2(49, 65),
+	Vector2(49, 65), Vector2(49, 65), Vector2(49, 65),
+]
 const ZHANG_FEI_WALK_TEXTURES := [
 	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-01.png"),
 	preload("res://assets/art/characters/zhang_fei/sprites/walk_right/zhang-fei-walk-02.png"),
@@ -421,60 +892,6 @@ const ZHANG_FEI_ATTACK_03_FOOT_ANCHORS := [
 	Vector2(49, 65), Vector2(50, 87), Vector2(49, 103),
 	Vector2(64, 89), Vector2(74, 65), Vector2(54, 99),
 	Vector2(51, 116), Vector2(49, 65), Vector2(49, 65),
-]
-const CHANGBAN_GRASS_TEXTURE := preload("res://assets/art/environment/changban/grass-base-01.png")
-const CHANGBAN_DIRT_TEXTURE := preload("res://assets/art/environment/changban/dirt-base-01.png")
-const CHANGBAN_GRASS_DIRT_TEXTURE := preload("res://assets/art/environment/changban/grass-dirt-base-01.png")
-const CHANGBAN_TRAMPLED_PATCH_01 := preload("res://assets/art/environment/changban/trampled-patch-01.png")
-const CHANGBAN_TRAMPLED_PATCH_02 := preload("res://assets/art/environment/changban/trampled-patch-02.png")
-const CHANGBAN_SLOPE_TEXTURE := preload("res://assets/art/environment/changban/slope-chunk-01.png")
-const XINYE_GROUND_TEXTURE := preload("res://assets/art/environment/xinye1/1.png")
-const XINYE_TRAINING_PLATFORM_TEXTURE := preload("res://assets/art/environment/xinye1/2.png")
-const XINYE_TARGET_GROUP_TEXTURE := preload("res://assets/art/environment/xinye1/3.png")
-const XINYE_TENT_TEXTURE := preload("res://assets/art/environment/xinye1/4.png")
-const XINYE_FENCE_TEXTURE := preload("res://assets/art/environment/xinye1/5_1.png")
-const XINYE_FLAG_GROUP_TEXTURE := preload("res://assets/art/environment/xinye1/5_2.png")
-const XINYE_SPEAR_FENCE_TEXTURE := preload("res://assets/art/environment/xinye1/5_3.png")
-const BOWANGPO_GROUND_TEXTURE := preload("res://assets/art/environment/bowangpo1/1.png")
-const BOWANGPO_ROCK_PLATFORM_TEXTURE := preload("res://assets/art/environment/bowangpo1/2.png")
-const BOWANGPO_BURNT_LOG_TEXTURE := preload("res://assets/art/environment/bowangpo1/3_1.png")
-const BOWANGPO_DEAD_LOG_TEXTURE := preload("res://assets/art/environment/bowangpo1/3_2.png")
-const BOWANGPO_DEAD_TREE_TEXTURE := preload("res://assets/art/environment/bowangpo1/3_3.png")
-const BOWANGPO_FIRE_PATH_TEXTURE := preload("res://assets/art/environment/bowangpo1/4.png")
-const BOWANGPO_EMBER_TEXTURES := [
-	preload("res://assets/art/environment/bowangpo1/5_1.png"),
-	preload("res://assets/art/environment/bowangpo1/5_2.png"),
-	preload("res://assets/art/environment/bowangpo1/5_3.png"),
-	preload("res://assets/art/environment/bowangpo1/5_4.png"),
-	preload("res://assets/art/environment/bowangpo1/5_5.png"),
-	preload("res://assets/art/environment/bowangpo1/5_6.png"),
-	preload("res://assets/art/environment/bowangpo1/5_7.png"),
-	preload("res://assets/art/environment/bowangpo1/5_8.png"),
-	preload("res://assets/art/environment/bowangpo1/5_9.png"),
-	preload("res://assets/art/environment/bowangpo1/5_10.png"),
-	preload("res://assets/art/environment/bowangpo1/5_11.png"),
-	preload("res://assets/art/environment/bowangpo1/5_12.png"),
-]
-const COMMON_FENCE_TEXTURE := preload("res://assets/art/environment/common1/1.png")
-const COMMON_SLOPE_TEXTURE := preload("res://assets/art/environment/common1/3.png")
-const COMMON_TRACK_TEXTURES := [
-	preload("res://assets/art/environment/common1/4.png"),
-	preload("res://assets/art/environment/common1/5.png"),
-	preload("res://assets/art/environment/common1/7.png"),
-	preload("res://assets/art/environment/common1/8.png"),
-	preload("res://assets/art/environment/common1/9.png"),
-	preload("res://assets/art/environment/common1/10.png"),
-	preload("res://assets/art/environment/common1/11.png"),
-	preload("res://assets/art/environment/common1/12.png"),
-	preload("res://assets/art/environment/common1/13.png"),
-	preload("res://assets/art/environment/common1/14.png"),
-	preload("res://assets/art/environment/common1/15.png"),
-	preload("res://assets/art/environment/common1/16.png"),
-]
-const COMMON_FLAG_TEXTURES := [
-	preload("res://assets/art/environment/common1/flag1.png"),
-	preload("res://assets/art/environment/common1/flag2.png"),
-	preload("res://assets/art/environment/common1/flag3.png"),
 ]
 const ENEMY_SWORD_IDLE_TEXTURES := [
 	preload("res://assets/art/enemies/sword/idle_right/knife-idle-right-01.png"),
@@ -699,6 +1116,7 @@ var bounds := Rect2(0, 0, 2560, 1440)
 var enemies: EnemySimulation
 var player: HeroActor
 var boss: BossActor
+var battle_camera: Camera2D
 var elites: Array[EliteActor] = []
 var telegraphs: Array[Telegraph] = []
 var loot
@@ -707,7 +1125,12 @@ var pickup_marks: Array[Dictionary] = []
 var impact_marks: Array[Dictionary] = []
 var named_hit_marks: Array[Dictionary] = []
 var tianji_marks: Array[Dictionary] = []
+var tianji_wind_marks: Array[Dictionary] = []
+var tianji_water_marks: Array[Dictionary] = []
+var tianji_arrow_marks: Array[Dictionary] = []
+var tianji_fire_rain_marks: Array[Dictionary] = []
 var weapon_clash_marks: Array[Dictionary] = []
+var guard_feedback_marks: Array[Dictionary] = []
 var stance_break_marks: Array[Dictionary] = []
 var shield_break_marks: Array[Dictionary] = []
 var ultimate_wave_marks: Array[Dictionary] = []
@@ -720,6 +1143,7 @@ var crossbow_impact_marks: Array[Dictionary] = []
 var banner_command_marks: Array[Dictionary] = []
 var firewheel_rings: Array[Dictionary] = []
 var guan_blade_waves: Array[Dictionary] = []
+var guan_knife_wave_frames: Dictionary = {}
 var elite_corpses: Array[Dictionary] = []
 var visual_time := 0.0
 var shake_remaining := 0.0
@@ -746,6 +1170,7 @@ var player_attack_04_time := 0.0
 var player_is_playing_attack_04 := false
 var player_attack_05_time := 0.0
 var player_is_playing_attack_05 := false
+var player_guard_time := 0.0
 var player_hit_flash_remaining := 0.0
 var player_hit_flash_strength := 0.0
 var player_hit_white_textures: Dictionary = {}
@@ -763,13 +1188,12 @@ var weather_lightning_seed := 0.0
 var weather_lightning_remaining := 0.0
 var weather_lightning_cooldown := 0.0
 var battlefield_id := "changban"
-var battlefield_layout_objects: Array[Dictionary] = []
 var battlefield_ground_layers: Array[Dictionary] = []
 
 func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_actor: HeroActor, boss_actor: BossActor, active_telegraphs: Array[Telegraph], loot_system = null, elite_actors: Array[EliteActor] = [], selected_battlefield_id: String = "changban") -> void:
+	_load_guan_knife_wave_frames()
 	bounds = world_bounds
 	battlefield_id = selected_battlefield_id if selected_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao"] else "changban"
-	battlefield_layout_objects.clear()
 	battlefield_ground_layers.clear()
 	for raw_layer in BATTLEFIELD_LAYOUT.ground_layers_for(battlefield_id):
 		var layer := raw_layer.duplicate(true)
@@ -778,8 +1202,6 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 			continue
 		layer["texture"] = texture
 		battlefield_ground_layers.append(layer)
-	for object_variant in BATTLEFIELD_LAYOUT.world_objects(battlefield_id, bounds):
-		battlefield_layout_objects.append(object_variant as Dictionary)
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	enemies = enemy_simulation
 	player = player_actor
@@ -813,6 +1235,7 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	player_is_playing_attack_04 = false
 	player_attack_05_time = 0.0
 	player_is_playing_attack_05 = false
+	player_guard_time = 0.0
 	player_hit_flash_remaining = 0.0
 	player_hit_flash_strength = 0.0
 	player_hit_white_textures.clear()
@@ -832,7 +1255,12 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	elite_corpses.clear()
 	named_hit_marks.clear()
 	tianji_marks.clear()
+	tianji_wind_marks.clear()
+	tianji_water_marks.clear()
+	tianji_arrow_marks.clear()
+	tianji_fire_rain_marks.clear()
 	weapon_clash_marks.clear()
+	guard_feedback_marks.clear()
 	stance_break_marks.clear()
 	enemy_last_positions.resize(EnemySimulation.CAPACITY)
 	enemy_is_moving.resize(EnemySimulation.CAPACITY)
@@ -845,6 +1273,9 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 func set_elites(elite_actors: Array[EliteActor]) -> void:
 	elites = elite_actors
 	queue_redraw()
+
+func set_battle_camera(camera: Camera2D) -> void:
+	battle_camera = camera
 
 func set_weather_mode(mode: String) -> void:
 	weather_mode = mode if mode in [WEATHER_SUNNY, WEATHER_RAIN, WEATHER_STORM] else WEATHER_SUNNY
@@ -878,7 +1309,12 @@ func begin_player_death_cinematic(hero_id: String) -> void:
 	impact_marks.clear()
 	named_hit_marks.clear()
 	tianji_marks.clear()
+	tianji_wind_marks.clear()
+	tianji_water_marks.clear()
+	tianji_arrow_marks.clear()
+	tianji_fire_rain_marks.clear()
 	weapon_clash_marks.clear()
+	guard_feedback_marks.clear()
 	stance_break_marks.clear()
 	shield_break_marks.clear()
 	ultimate_wave_marks.clear()
@@ -907,12 +1343,34 @@ func tick_player_death_cinematic(delta: float) -> void:
 func is_player_death_cinematic_finished() -> bool:
 	return player_death_cinematic_active and player_death_elapsed >= player_death_cinematic_duration
 
+func end_player_death_cinematic() -> void:
+	player_death_cinematic_active = false
+	player_death_elapsed = 0.0
+	player_death_hero_id = ""
+	queue_redraw()
+
 func add_flash(request: AttackRequest) -> void:
 	if request.label == "穿阵挑刺":
 		return
 	# Keep a small visual seed on creation so the wind shape does not visibly reshuffle every frame.
-	var duration := FIREWHEEL_PROJECTILE_FLASH_DURATION if request.label == "乾坤掷轮" else (0.34 if request.label in ["拖刀刀浪", "青龙断浪", "武圣刀浪", "武圣震阵", "武圣拖刀震阵", "丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵"] else (0.24 if request.label.begins_with("威震华夏") else FLASH_DURATION))
+	var duration := _flash_duration_for_request(request)
 	flashes.append({"request": _copy_request_for_visual(request), "remaining": duration, "duration": duration, "variant": randi_range(0, 5)})
+
+func _flash_duration_for_request(request: AttackRequest) -> float:
+	if request.label == "乾坤掷轮":
+		return FIREWHEEL_PROJECTILE_FLASH_DURATION
+	if request.label in ["丈八跃砸", "据水断桥·跃砸"]:
+		var landing_duration := 0.0
+		for frame_duration in ZHANG_FEI_LANDING_FRAME_DURATIONS:
+			landing_duration += frame_duration
+		return landing_duration
+	if request.label in ["武圣震阵", "武圣拖刀震阵", "万夫莫开·怒喝震阵"]:
+		return WUSHUANG_IMPACT_FRAME_DURATION * float(WUSHUANG_IMPACT_TEXTURES.size())
+	if request.label in ["拖刀刀浪", "青龙断浪", "武圣刀浪"]:
+		return 0.34
+	if request.label.begins_with("威震华夏"):
+		return 0.24
+	return FLASH_DURATION
 
 func add_pickup(at: Vector2) -> void:
 	pickup_marks.append({"position": at, "remaining": 0.45})
@@ -929,6 +1387,19 @@ func add_weapon_clash(at: Vector2, perfect: bool, skill_clash: bool = false, min
 	weapon_clash_marks.append({"position": at, "remaining": duration, "duration": duration, "perfect": perfect, "skill": skill_clash, "minor": minor, "seed": randi_range(0, 10)})
 	shake_remaining = maxf(shake_remaining, 0.075 if minor else (0.22 if perfect else (0.18 if skill_clash else 0.13)))
 	shake_strength = maxf(shake_strength, 5.5 if minor else (16.0 if perfect else (13.0 if skill_clash else 10.0)))
+
+func add_guard_feedback(at: Vector2, direction: Vector2, perfect: bool) -> void:
+	var normalized_direction := direction.normalized()
+	if normalized_direction.length_squared() <= 0.01:
+		normalized_direction = Vector2.RIGHT
+	var duration := 0.40 if perfect else 0.32
+	guard_feedback_marks.append({
+		"position": at,
+		"direction": normalized_direction,
+		"remaining": duration,
+		"duration": duration,
+		"perfect": perfect,
+	})
 
 func add_stance_break(at: Vector2) -> void:
 	stance_break_marks.append({"position": at, "remaining": 0.48})
@@ -952,11 +1423,16 @@ func add_named_hit_feedback(at: Vector2, direction: Vector2, strength: float, em
 	shake_remaining = maxf(shake_remaining, 0.10 if emphasized else 0.06)
 	shake_strength = maxf(shake_strength, 7.0 if emphasized else 4.0)
 
-func add_tianji_windup(skill_id: String, center: Vector2, direction: Vector2, definition: Dictionary) -> void:
+func add_tianji_windup(skill_id: String, center: Vector2, direction: Vector2, definition: Dictionary, rank: int = 1, radius: float = 0.0) -> void:
 	var normalized_direction := direction.normalized()
 	if normalized_direction.length_squared() <= 0.01:
 		normalized_direction = Vector2.RIGHT
 	var duration := maxf(0.10, float(definition.get("precast", 0.50)))
+	var windup_width := float(definition.get("width", 0.0))
+	if skill_id == "xun_wind_break":
+		# The windup must preview the same rank-scaled breadth as the tornado
+		# that follows, otherwise the effect visibly expands after it fires.
+		windup_width = maxf(windup_width, radius)
 	tianji_marks.append({
 		"id": skill_id,
 		"phase": "windup",
@@ -964,16 +1440,83 @@ func add_tianji_windup(skill_id: String, center: Vector2, direction: Vector2, de
 		"direction": normalized_direction,
 		"remaining": duration,
 		"duration": duration,
-		"radius": float(definition.get("radius", 0.0)),
+		"rank": rank,
+		"radius": radius if radius > 0.0 else float(definition.get("radius", 0.0)),
 		"range": float(definition.get("range", 0.0)),
-		"width": float(definition.get("width", 0.0)),
+		"width": windup_width,
 	})
 
-func add_tianji_impact(skill_id: String, center: Vector2, direction: Vector2, hit_count: int, active_duration: float = 0.0) -> void:
+func add_tianji_impact(skill_id: String, center: Vector2, direction: Vector2, hit_count: int, active_duration: float = 0.0, rank: int = 1, radius: float = 0.0) -> void:
 	var normalized_direction := direction.normalized()
 	if normalized_direction.length_squared() <= 0.01:
 		normalized_direction = Vector2.UP
-	var duration := maxf(0.28, active_duration if active_duration > 0.0 else 0.42)
+	if skill_id == "arrow_support_volley":
+		_add_tianji_arrow_volley(center, radius if radius > 0.0 else TIANJI_ARROW_VOLLEY_RADIUS)
+		shake_remaining = maxf(shake_remaining, 0.05)
+		shake_strength = maxf(shake_strength, 2.5)
+		return
+	if skill_id in ["fire_rain_burning", "fire_rain_final"]:
+		return
+	if skill_id == "xun_wind_break":
+		var visible_rect := _visible_battle_rect()
+		var wind_width := maxf(48.0, radius)
+		var wind_travel_distance := visible_rect.size.x + wind_width * 2.0
+		var wind_duration := maxf(0.28, active_duration if active_duration > 0.0 else 0.42)
+		tianji_wind_marks.append({
+			"position": center,
+			"direction": normalized_direction,
+			"elapsed": 0.0,
+			"remaining": wind_duration,
+			"duration": wind_duration,
+			"width": wind_width,
+			"travel_distance": wind_travel_distance,
+			"rank": clampi(rank, 1, 5),
+		})
+		shake_remaining = maxf(shake_remaining, 0.05)
+		shake_strength = maxf(shake_strength, 2.5)
+		return
+	if skill_id == "eight_trigram_tide":
+		var water_rank := clampi(rank, 1, 5)
+		var travel_distances: Array[float] = [560.0, 640.0, 720.0, 800.0, 880.0]
+		var visible_rect := _visible_battle_rect()
+		var water_width := maxf(140.0, radius)
+		var path_y := clampf(center.y, visible_rect.position.y + water_width * 0.32, visible_rect.end.y - water_width * 0.32)
+		var start_x := visible_rect.position.x - water_width
+		var end_x := visible_rect.end.x + water_width
+		var water_origin := Vector2(start_x, path_y)
+		var water_travel_distance := maxf(travel_distances[water_rank - 1], end_x - start_x)
+		var reflux_delay := 0.16 if water_rank >= 5 else 0.0
+		var reflux_duration := 0.72 if water_rank >= 5 else 0.0
+		var layer_count := _tianji_water_layer_count(water_rank)
+		var layer_stagger := _tianji_water_layer_stagger(layer_count)
+		# TianjiSystem includes the delayed trailing crests in active_duration.
+		# Remove that shared delay here so every visual crest keeps the same
+		# travel speed as its corresponding gameplay wave.
+		var total_duration := maxf(1.0, active_duration if active_duration > 0.0 else 1.55)
+		var trailing_delay := float(layer_count - 1) * layer_stagger
+		var wave_duration := maxf(0.60, total_duration - trailing_delay)
+		var surge_duration := maxf(0.60, wave_duration - reflux_delay - reflux_duration)
+		tianji_water_marks.append({
+			"origin": water_origin,
+			"direction": Vector2.RIGHT,
+			"elapsed": 0.0,
+			"remaining": total_duration + 0.18,
+			"duration": wave_duration,
+			"surge_duration": surge_duration,
+			"reflux_delay": reflux_delay,
+			"reflux_duration": reflux_duration,
+			"width": water_width,
+			"travel_distance": water_travel_distance,
+			"rank": water_rank,
+			"layer_count": layer_count,
+			"layer_stagger": layer_stagger,
+		})
+		shake_remaining = maxf(shake_remaining, 0.12 if water_rank >= 5 else 0.08)
+		shake_strength = maxf(shake_strength, 7.5 if water_rank >= 5 else 4.0)
+		return
+	var duration := TIANJI_LIGHTNING_FRAME_DURATION * float((TIANJI_LIGHTNING_FRAME_SEQUENCES.get(clampi(rank, 1, 5), []) as Array).size()) if skill_id == "seven_star_lightning" else maxf(0.28, active_duration if active_duration > 0.0 else 0.42)
+	var wind_range := 0.0
+	var wind_width := 0.0
 	tianji_marks.append({
 		"id": skill_id,
 		"phase": "impact",
@@ -983,10 +1526,103 @@ func add_tianji_impact(skill_id: String, center: Vector2, direction: Vector2, hi
 		"duration": duration,
 		"hit_count": hit_count,
 		"active_duration": active_duration,
-		"radius": TIANJI_ARROW_VOLLEY_RADIUS if skill_id == "arrow_support_volley" else 0.0,
+		"rank": rank,
+		"radius": radius if radius > 0.0 else (TIANJI_ARROW_VOLLEY_RADIUS if skill_id == "arrow_support_volley" else 0.0),
+		"range": wind_range,
+		"width": wind_width,
+		"seed": randi_range(0, 100000),
 	})
 	shake_remaining = maxf(shake_remaining, 0.10 if active_duration <= 0.0 else 0.05)
 	shake_strength = maxf(shake_strength, 6.0 if active_duration <= 0.0 else 2.5)
+
+func add_fire_rain_meteor(center: Vector2, rank: int, final_meteor: bool, delay: float, radius: float, wave_index: int = -1, wave_last: bool = false) -> void:
+	var is_final := final_meteor
+	var frame_count := TIANJI_FIRE_RAIN_FINAL_TEXTURES.size() if is_final else TIANJI_FIRE_RAIN_METEOR_TEXTURES.size()
+	var frame_duration := TIANJI_FIRE_RAIN_FINAL_FRAME_DURATION if is_final else TIANJI_FIRE_RAIN_FRAME_DURATION
+	var scale := TIANJI_FIRE_RAIN_FINAL_SCALE if is_final else TIANJI_FIRE_RAIN_METEOR_SCALE
+	tianji_fire_rain_marks.append({
+		"target": center,
+		"elapsed": -maxf(0.0, delay),
+		"frame_duration": frame_duration,
+		"frame_count": frame_count,
+		"scale": scale * randf_range(0.92, 1.08) if not is_final else scale,
+		"final": is_final,
+		"radius": radius,
+		"wave_last": wave_last,
+		"wave_index": wave_index,
+		"sky_distance": randf_range(180.0, 260.0) if not is_final else 220.0,
+		"impact_feedback_played": false,
+	})
+	while tianji_fire_rain_marks.size() > TIANJI_FIRE_RAIN_MAX_MARKS:
+		tianji_fire_rain_marks.pop_front()
+
+func _add_tianji_arrow_volley(center: Vector2, radius: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(absf(center.x * 17.0 + center.y * 31.0)) + randi_range(1, 100000)
+	var ground_center := center + Vector2(0.0, 9.0)
+	var outer_radius := maxf(48.0, radius)
+	var visible_rect := _visible_battle_rect()
+	var arrows: Array[Dictionary] = []
+	for index in range(TIANJI_ARROW_VOLLEY_ARROW_COUNT):
+		var angle := TAU * rng.randf() + float(index) * 2.39996323
+		var distance := sqrt(rng.randf_range(0.15, 1.0)) * outer_radius * 0.86
+		var target := ground_center + Vector2.from_angle(angle) * distance
+		var sky_x := clampf(target.x + rng.randf_range(-118.0, 118.0), visible_rect.position.x + 16.0, visible_rect.end.x - 16.0)
+		var sky_y := visible_rect.position.y - TIANJI_ARROW_SKY_ENTRY_OFFSET - rng.randf_range(0.0, 34.0)
+		var origin := Vector2(sky_x, sky_y)
+		var delay := rng.randf_range(0.0, 0.14)
+		var flight_duration := TIANJI_ARROW_FLIGHT_DURATION + rng.randf_range(-0.05, 0.06)
+		var lodged_direction := Vector2.DOWN.rotated(rng.randf_range(-0.52, 0.52))
+		arrows.append({
+			"origin": origin,
+			"target": target,
+			"delay": delay,
+			"flight_duration": flight_duration,
+			"lodged_direction": lodged_direction,
+		})
+	var total_duration := 0.14 + TIANJI_ARROW_FLIGHT_DURATION + 0.08 + TIANJI_ARROW_LODGED_DURATION
+	tianji_arrow_marks.append({
+		"center": ground_center,
+		"radius": outer_radius,
+		"elapsed": 0.0,
+		"duration": total_duration,
+		"arrows": arrows,
+	})
+	while tianji_arrow_marks.size() > TIANJI_ARROW_MAX_VOLLEY_MARKS:
+		tianji_arrow_marks.pop_front()
+
+func add_victory_arrow_salvo() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = randi_range(1, 1000000)
+	var visible_rect := _visible_battle_rect()
+	var arrows: Array[Dictionary] = []
+	for index in range(VICTORY_ARROW_SALVO_ARROW_COUNT):
+		var target := Vector2(
+			rng.randf_range(visible_rect.position.x + 22.0, visible_rect.end.x - 22.0),
+			rng.randf_range(visible_rect.position.y + visible_rect.size.y * 0.18, visible_rect.position.y + visible_rect.size.y * 0.90)
+		)
+		var origin := Vector2(
+			clampf(target.x + rng.randf_range(-132.0, 132.0), visible_rect.position.x + 12.0, visible_rect.end.x - 12.0),
+			visible_rect.position.y - TIANJI_ARROW_SKY_ENTRY_OFFSET - rng.randf_range(12.0, 80.0)
+		)
+		arrows.append({
+			"origin": origin,
+			"target": target,
+			"delay": rng.randf_range(0.0, 0.18),
+			"flight_duration": rng.randf_range(0.32, 0.44),
+			"lodged_direction": Vector2.DOWN.rotated(rng.randf_range(-0.56, 0.56)),
+		})
+	var total_duration := 0.18 + 0.44 + TIANJI_ARROW_LODGED_DURATION
+	tianji_arrow_marks.append({
+		"center": visible_rect.get_center(),
+		"radius": 0.0,
+		"elapsed": 0.0,
+		"duration": total_duration,
+		"arrows": arrows,
+		"show_ground_ring": false,
+	})
+	while tianji_arrow_marks.size() > TIANJI_ARROW_MAX_VOLLEY_MARKS:
+		tianji_arrow_marks.pop_front()
 
 func add_named_skill_shake(strength: float) -> void:
 	shake_remaining = maxf(shake_remaining, 0.15)
@@ -1106,6 +1742,10 @@ func cancel_projectiles_for_enemy(source_enemy_id: int) -> void:
 func add_banner_command(at: Vector2) -> void:
 	banner_command_marks.append({"position": at, "remaining": 0.54, "duration": 0.54})
 
+func _load_guan_knife_wave_frames() -> void:
+	# Static references keep every required frame inside the Android export PCK.
+	guan_knife_wave_frames = GUAN_KNIFE_WAVE_TEXTURES.duplicate()
+
 static func archer_projectile_position(origin: Vector2, target: Vector2, progress: float, arc_height: float = ARCHER_PROJECTILE_ARC_HEIGHT) -> Vector2:
 	var clamped_progress := clampf(progress, 0.0, 1.0)
 	return origin.lerp(target, clamped_progress) + Vector2.UP * sin(clamped_progress * PI) * arc_height
@@ -1122,16 +1762,27 @@ func _on_player_damaged(amount: float) -> void:
 	player_hit_flash_remaining = PLAYER_HIT_FLASH_DURATION
 	player_hit_flash_strength = clampf(0.82 + amount * 0.018, 0.82, 1.0)
 
-func _on_hero_visual_effect_started(effect_id: String, origin: Vector2, direction: Vector2, travel_distance: float) -> void:
+func _on_hero_visual_effect_started(effect_id: String, origin: Vector2, direction: Vector2, travel_distance: float, metadata: Dictionary) -> void:
 	if effect_id == "firewheel_ring":
 		firewheel_rings.append({"position": origin, "direction": direction.normalized(), "remaining": travel_distance})
-	elif effect_id in ["guan_drag_wave", "guan_active_wave", "guan_wusheng_wave"]:
+	elif effect_id in ["guan_drag_wave", "guan_active_wave", "guan_wusheng_wave", "guan_fourth_wave"]:
+		var frame_max := clampi(int(metadata.get("max_frame", 4)), 0, 13)
+		var expansion_frames := _guan_knife_wave_expansion_frames(frame_max)
+		var infinite := bool(metadata.get("infinite", false))
+		var hold_duration := GUAN_KNIFE_WAVE_INFINITE_HOLD_DURATION if infinite else 0.0
+		var expansion_duration := GUAN_KNIFE_WAVE_EXPANSION_DURATION
+		var travel_duration := maxf(expansion_duration + hold_duration, float(metadata.get("travel_duration", travel_distance / GUAN_BLADE_WAVE_SPEED)))
+		var base_scale := float(metadata.get("scale", 0.60))
+		var display_scale := _guan_knife_wave_display_scale(frame_max, base_scale, travel_distance, infinite)
 		guan_blade_waves.append({
-			"position": origin,
+			"origin": origin,
 			"direction": direction.normalized(),
-			"remaining": travel_distance,
-			"initial_remaining": travel_distance,
 			"elapsed": 0.0,
+			"expansion_duration": expansion_duration,
+			"hold_duration": hold_duration,
+			"frame_max": frame_max,
+			"scale": display_scale,
+			"infinite": infinite,
 			"kind": effect_id,
 		})
 
@@ -1161,10 +1812,66 @@ func tick_visuals(delta: float) -> void:
 		tianji_marks[index].remaining -= delta
 		if tianji_marks[index].remaining <= 0.0:
 			tianji_marks.remove_at(index)
+	for index in range(tianji_wind_marks.size() - 1, -1, -1):
+		var wind_mark: Dictionary = tianji_wind_marks[index]
+		wind_mark["elapsed"] = float(wind_mark.get("elapsed", 0.0)) + delta
+		wind_mark["remaining"] = float(wind_mark.get("remaining", 0.0)) - delta
+		if float(wind_mark.get("remaining", 0.0)) <= 0.0:
+			tianji_wind_marks.remove_at(index)
+		else:
+			tianji_wind_marks[index] = wind_mark
+	for index in range(tianji_water_marks.size() - 1, -1, -1):
+		var water_mark: Dictionary = tianji_water_marks[index]
+		water_mark["elapsed"] = float(water_mark.get("elapsed", 0.0)) + delta
+		water_mark["remaining"] = float(water_mark.get("remaining", 0.0)) - delta
+		if float(water_mark.get("remaining", 0.0)) <= 0.0:
+			tianji_water_marks.remove_at(index)
+		else:
+			tianji_water_marks[index] = water_mark
+	for index in range(tianji_arrow_marks.size() - 1, -1, -1):
+		var arrow_mark: Dictionary = tianji_arrow_marks[index]
+		arrow_mark["elapsed"] = float(arrow_mark.get("elapsed", 0.0)) + delta
+		if float(arrow_mark.get("elapsed", 0.0)) >= float(arrow_mark.get("duration", 0.0)):
+			tianji_arrow_marks.remove_at(index)
+		else:
+			tianji_arrow_marks[index] = arrow_mark
+	for index in range(tianji_fire_rain_marks.size() - 1, -1, -1):
+		var meteor: Dictionary = tianji_fire_rain_marks[index]
+		meteor["elapsed"] = float(meteor.get("elapsed", 0.0)) + delta
+		var elapsed := float(meteor.get("elapsed", 0.0))
+		var final_meteor := bool(meteor.get("final", false))
+		var frame_duration := maxf(0.01, float(meteor.get("frame_duration", 0.035)))
+		var flight_duration := TIANJI_FIRE_RAIN_FINAL_FLIGHT_DURATION if final_meteor else 0.34
+		var impact_elapsed := flight_duration + (frame_duration * float(TIANJI_FIRE_RAIN_FINAL_LANDING_FRAME) if final_meteor else 0.0)
+		if elapsed >= 0.0 and not bool(meteor.get("impact_feedback_played", false)):
+			if elapsed >= impact_elapsed:
+				meteor["impact_feedback_played"] = true
+				if final_meteor:
+					var final_rank := int(meteor.get("rank", 1))
+					shake_remaining = maxf(shake_remaining, 0.70 if final_rank >= 5 else 0.48)
+					shake_strength = maxf(shake_strength, 32.0 if final_rank >= 5 else 22.0)
+				elif bool(meteor.get("wave_last", false)):
+					shake_remaining = maxf(shake_remaining, 0.18)
+					shake_strength = maxf(shake_strength, 8.0)
+				else:
+					shake_remaining = maxf(shake_remaining, 0.09)
+					shake_strength = maxf(shake_strength, 5.0)
+		var frame_count := int(meteor.get("frame_count", 1))
+		# The timer starts at -delay. Keep the delay implicit, but retain the full
+		# sky-to-ground flight before the impact animation and its fade-out.
+		var total_duration := flight_duration + float(frame_count) * frame_duration + 0.28
+		if elapsed > total_duration:
+			tianji_fire_rain_marks.remove_at(index)
+		else:
+			tianji_fire_rain_marks[index] = meteor
 	for index in range(weapon_clash_marks.size() - 1, -1, -1):
 		weapon_clash_marks[index].remaining -= delta
 		if weapon_clash_marks[index].remaining <= 0.0:
 			weapon_clash_marks.remove_at(index)
+	for index in range(guard_feedback_marks.size() - 1, -1, -1):
+		guard_feedback_marks[index].remaining -= delta
+		if guard_feedback_marks[index].remaining <= 0.0:
+			guard_feedback_marks.remove_at(index)
 	for index in range(stance_break_marks.size() - 1, -1, -1):
 		stance_break_marks[index].remaining -= delta
 		if stance_break_marks[index].remaining <= 0.0:
@@ -1236,17 +1943,14 @@ func tick_visuals(delta: float) -> void:
 			firewheel_rings[index] = ring
 	for index in range(guan_blade_waves.size() - 1, -1, -1):
 		var wave: Dictionary = guan_blade_waves[index]
-		var remaining := maxf(0.0, float(wave.get("remaining", 0.0)))
-		var travel_distance := minf(GUAN_BLADE_WAVE_SPEED * delta, remaining)
-		var direction: Vector2 = wave.get("direction", Vector2.RIGHT)
-		wave["position"] = (wave.get("position", Vector2.ZERO) as Vector2) + direction * travel_distance
-		wave["elapsed"] = float(wave.get("elapsed", 0.0)) + delta
-		remaining = maxf(0.0, remaining - travel_distance)
-		if remaining <= 0.0:
+		var elapsed := float(wave.get("elapsed", 0.0)) + delta
+		var expansion_duration := maxf(0.01, float(wave.get("expansion_duration", GUAN_KNIFE_WAVE_FRAME_DURATION)))
+		var hold_duration := maxf(0.0, float(wave.get("hold_duration", 0.0)))
+		if elapsed >= expansion_duration + hold_duration + GUAN_KNIFE_WAVE_FADE_DURATION:
 			guan_blade_waves.remove_at(index)
-		else:
-			wave["remaining"] = remaining
-			guan_blade_waves[index] = wave
+			continue
+		wave["elapsed"] = elapsed
+		guan_blade_waves[index] = wave
 	shake_remaining = maxf(0.0, shake_remaining - delta)
 	if shake_remaining > 0.0:
 		position = Vector2(randf_range(-shake_strength, shake_strength), randf_range(-shake_strength, shake_strength))
@@ -1317,6 +2021,7 @@ func _tick_player_animation(delta: float) -> void:
 	if is_attack_05:
 		player_attack_05_time = 0.0 if not player_is_playing_attack_05 else player_attack_05_time + delta
 	player_is_playing_attack_05 = is_attack_05
+	player_guard_time = player.guard_elapsed() if player.is_guard_active() else 0.0
 	if player_is_moving:
 		var started_moving := (is_guan_yu and not guan_yu_was_moving) or (is_zhang_fei and not zhang_fei_was_moving)
 		if (is_guan_yu and (started_moving or uses_drag_motion != guan_yu_was_using_drag_motion)) or (is_zhang_fei and started_moving):
@@ -1345,9 +2050,15 @@ func _tick_enemy_animation(delta: float) -> void:
 
 func _draw() -> void:
 	_draw_background()
+	_draw_trial_atmosphere()
 	_draw_weather_back()
+	_draw_duel_formation()
 	_draw_telegraphs()
 	_draw_tianji_marks()
+	_draw_tianji_wind_marks()
+	_draw_tianji_water_marks()
+	_draw_tianji_arrow_marks()
+	_draw_tianji_fire_rain_marks()
 	_draw_pickups()
 	_draw_elite_corpses()
 	_draw_enemies()
@@ -1367,24 +2078,84 @@ func _draw() -> void:
 	_draw_flashes()
 	_draw_impacts()
 	_draw_weapon_clashes()
+	_draw_guard_feedback()
 	_draw_stance_breaks()
 	_draw_death_collisions()
 	_draw_named_hit_feedback()
 	_draw_weather_front()
 
+func _draw_trial_atmosphere() -> void:
+	if battlefield_id != "hulao":
+		return
+	for guard_data in TRIAL_ATMOSPHERE_POSITIONS:
+		var guard_position: Vector2 = guard_data.get("position", Vector2.ZERO)
+		var is_shield := bool(guard_data.get("shield", false))
+		var phase := float(guard_data.get("phase", 0.0))
+		var facing := (BOSS_TRIAL_ARENA_BOUNDS.get_center() - guard_position).normalized()
+		_draw_trial_atmosphere_guard(guard_position, is_shield, facing, phase)
+
+func _draw_trial_atmosphere_guard(at: Vector2, is_shield: bool, facing: Vector2, phase: float) -> void:
+	# Atmosphere guards are deliberately draw-only. Their animation has no
+	# simulation slot, collision, hit points, AI, rewards, or attack effects.
+	var cycle := fposmod(visual_time + phase, TRIAL_ATMOSPHERE_ATTACK_INTERVAL)
+	var attacking := cycle >= TRIAL_ATMOSPHERE_ATTACK_INTERVAL - TRIAL_ATMOSPHERE_ATTACK_DURATION
+	var texture: Texture2D
+	var source_anchor: Vector2
+	var frame_index := 0
+	if is_shield:
+		if attacking:
+			var attack_progress := (cycle - (TRIAL_ATMOSPHERE_ATTACK_INTERVAL - TRIAL_ATMOSPHERE_ATTACK_DURATION)) / TRIAL_ATMOSPHERE_ATTACK_DURATION
+			frame_index = mini(int(attack_progress * float(ENEMY_SHIELD_ATTACK_TEXTURES.size())), ENEMY_SHIELD_ATTACK_TEXTURES.size() - 1)
+			texture = ENEMY_SHIELD_ATTACK_TEXTURES[frame_index]
+		else:
+			frame_index = int((visual_time + phase) / ENEMY_SHIELD_IDLE_FRAME_DURATION) % ENEMY_SHIELD_IDLE_TEXTURES.size()
+			texture = ENEMY_SHIELD_IDLE_TEXTURES[frame_index]
+		source_anchor = ENEMY_SHIELD_SOURCE_FOOT_ANCHOR
+	else:
+		if attacking:
+			var attack_progress := (cycle - (TRIAL_ATMOSPHERE_ATTACK_INTERVAL - TRIAL_ATMOSPHERE_ATTACK_DURATION)) / TRIAL_ATMOSPHERE_ATTACK_DURATION
+			frame_index = mini(int(attack_progress * float(ENEMY_SWORD_ATTACK_TEXTURES.size())), ENEMY_SWORD_ATTACK_TEXTURES.size() - 1)
+			texture = ENEMY_SWORD_ATTACK_TEXTURES[frame_index]
+			source_anchor = ENEMY_SWORD_ATTACK_FOOT_ANCHORS[frame_index]
+		else:
+			frame_index = int((visual_time + phase) / ENEMY_SWORD_IDLE_FRAME_DURATION) % ENEMY_SWORD_IDLE_FRAME_ORDER.size()
+			var idle_index: int = int(ENEMY_SWORD_IDLE_FRAME_ORDER[frame_index])
+			texture = ENEMY_SWORD_IDLE_TEXTURES[idle_index]
+			source_anchor = ENEMY_SWORD_SOURCE_FOOT_ANCHOR
+	var horizontal := -TRIAL_ATMOSPHERE_GUARD_SCALE if facing.x < -0.05 else TRIAL_ATMOSPHERE_GUARD_SCALE
+	var foot_position := at + Vector2(0.0, 14.0)
+	draw_set_transform(foot_position, 0.0, Vector2(horizontal, TRIAL_ATMOSPHERE_GUARD_SCALE))
+	draw_texture(texture, -source_anchor, Color(0.78, 0.80, 0.77, 0.72))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_duel_formation() -> void:
+	if enemies == null or not enemies.is_duel_formation_active():
+		return
+	var center := enemies.duel_formation_center() + Vector2(0.0, 12.0)
+	var sealed := enemies.is_duel_formation_sealed()
+	var phase_alpha := 0.16 if sealed else 0.42
+	var pulse := 0.76 + 0.24 * (sin(visual_time * 4.0) + 1.0) * 0.5
+	var shield_radius := enemies.duel_containment_radii()
+	var spear_radius := EnemySimulation.DUEL_SPEAR_RADIUS
+	var ranged_radius := EnemySimulation.DUEL_RANGED_RADIUS
+	if not sealed:
+		var soft_radius := enemies.duel_soft_boundary_radii()
+		_draw_ellipse_arc(center, soft_radius, 0.0, TAU, 40, Color(0.95, 0.62, 0.24, 0.24 * pulse), 1.6)
+		_draw_ellipse_arc(center, ranged_radius, 0.0, TAU, 40, Color(0.72, 0.50, 0.24, 0.09 * phase_alpha), 1.0)
+		_draw_ellipse_arc(center, spear_radius, 0.0, TAU, 36, Color(0.82, 0.62, 0.28, 0.12 * phase_alpha), 1.3)
+	else:
+		_draw_ellipse_arc(center, shield_radius, 0.0, TAU, 32, Color(0.90, 0.32, 0.18, 0.09 * pulse), 1.4)
+	for slot in range(EnemySimulation.DUEL_SHIELD_SLOTS):
+		var angle := TAU * (float(slot) + 0.5) / float(EnemySimulation.DUEL_SHIELD_SLOTS)
+		var direction := Vector2(cos(angle), sin(angle))
+		var tick_root := center + Vector2(direction.x * shield_radius.x, direction.y * shield_radius.y)
+		var tick_tip := center + Vector2(direction.x * (shield_radius.x + 9.0), direction.y * (shield_radius.y + 6.0))
+		if not sealed:
+			draw_line(tick_root, tick_tip, Color(0.96, 0.67, 0.30, 0.18 * pulse), 1.2)
+
 func _draw_background() -> void:
-	var baked_scene := BATTLEFIELD_LAYOUT.has_baked_scene_for(battlefield_id)
 	draw_rect(bounds.grow(96.0), BATTLEFIELD_LAYOUT.ground_fill_color_for(battlefield_id))
 	_draw_auto_ground_layers()
-	if not baked_scene and (battlefield_id == "bowangpo" or battlefield_id == "bowangpo_story"):
-		_draw_bowangpo_ember_decor()
-		for index in range(14):
-			var ember_x := bounds.position.x + fposmod(float(index) * 173.0 + visual_time * 22.0, bounds.size.x - 80.0) + 40.0
-			var ember_y := bounds.position.y + fposmod(float(index) * 89.0 - visual_time * (7.0 + float(index % 3) * 2.0), bounds.size.y - 180.0) + 90.0
-			var ember_alpha := 0.16 + float(index % 4) * 0.04
-			draw_rect(Rect2(Vector2(ember_x, ember_y), Vector2(2.0, 2.0)), Color(1.0, 0.58, 0.22, ember_alpha))
-	if not baked_scene:
-		_draw_layout_objects()
 	_draw_weather_ground_tint()
 
 func _draw_auto_ground_layers() -> void:
@@ -1411,28 +2182,6 @@ func _draw_auto_ground_layers() -> void:
 			var region := raw_region as Rect2
 			var region_rect := Rect2(bounds.position + bounds.size * region.position, bounds.size * region.size)
 			draw_texture_rect(texture, region_rect, true, tint)
-
-func _draw_xinye_background() -> void:
-	draw_rect(bounds.grow(96.0), Color("29321a"))
-	_draw_mirrored_ground(XINYE_GROUND_TEXTURE, Color(1.0, 1.0, 1.0, 0.96))
-	_draw_layout_objects()
-
-func _draw_layout_objects() -> void:
-	for object in battlefield_layout_objects:
-		var texture: Texture2D = object.get("texture") as Texture2D
-		var rect: Rect2 = object.get("rect", Rect2()) as Rect2
-		_draw_environment_texture(texture, rect, Color.WHITE)
-
-func _draw_bowangpo_background() -> void:
-	draw_rect(bounds.grow(96.0), Color("160f0c"))
-	_draw_mirrored_ground(BOWANGPO_GROUND_TEXTURE, Color(0.90, 0.86, 0.78, 0.96))
-	_draw_bowangpo_ember_decor()
-	for index in range(14):
-		var ember_x := bounds.position.x + fposmod(float(index) * 173.0 + visual_time * 22.0, bounds.size.x - 80.0) + 40.0
-		var ember_y := bounds.position.y + fposmod(float(index) * 89.0 - visual_time * (7.0 + float(index % 3) * 2.0), bounds.size.y - 180.0) + 90.0
-		var ember_alpha := 0.16 + float(index % 4) * 0.04
-		draw_rect(Rect2(Vector2(ember_x, ember_y), Vector2(2.0, 2.0)), Color(1.0, 0.58, 0.22, ember_alpha))
-	_draw_layout_objects()
 
 func _draw_mirrored_ground(texture: Texture2D, tint: Color = Color.WHITE) -> void:
 	if texture == null:
@@ -1464,69 +2213,6 @@ func _draw_mirrored_ground(texture: Texture2D, tint: Color = Color.WHITE) -> voi
 			draw_set_transform(transform_origin, 0.0, transform_scale)
 			draw_texture_rect(texture, Rect2(origin, rect_size), false, tint)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-func _draw_environment_texture(texture: Texture2D, rect: Rect2, tint: Color = Color.WHITE) -> void:
-	if texture == null:
-		return
-	draw_texture_rect(texture, rect, false, tint)
-
-func _draw_environment_texture_mirrored(texture: Texture2D, rect: Rect2, flip_x: bool, tint: Color = Color.WHITE) -> void:
-	if texture == null:
-		return
-	if not flip_x:
-		_draw_environment_texture(texture, rect, tint)
-		return
-	draw_set_transform(Vector2(rect.position.x * 2.0 + rect.size.x, 0.0), 0.0, Vector2(-1.0, 1.0))
-	draw_texture_rect(texture, rect, false, tint)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-func _draw_common_training_decor() -> void:
-	_draw_environment_texture(COMMON_FENCE_TEXTURE, Rect2(bounds.position.x + 470.0, bounds.position.y + 30.0, 600.0, 400.0), Color(1.0, 1.0, 1.0, 0.82))
-	_draw_environment_texture_mirrored(COMMON_SLOPE_TEXTURE, Rect2(bounds.end.x - 600.0, bounds.position.y + 22.0, 560.0, 430.0), true, Color(1.0, 1.0, 1.0, 0.72))
-	_draw_environment_texture(COMMON_FLAG_TEXTURES[0], Rect2(bounds.position.x + 980.0, bounds.position.y + 18.0, 330.0, 330.0), Color(1.0, 1.0, 1.0, 0.84))
-	_draw_environment_texture(COMMON_FLAG_TEXTURES[1], Rect2(bounds.end.x - 370.0, bounds.end.y - 440.0, 320.0, 350.0), Color(1.0, 1.0, 1.0, 0.78))
-	var track_rects := [
-		Rect2(bounds.position.x + 740.0, bounds.position.y + 620.0, 520.0, 330.0),
-		Rect2(bounds.position.x + 1290.0, bounds.position.y + 770.0, 500.0, 320.0),
-		Rect2(bounds.position.x + 1530.0, bounds.position.y + 260.0, 460.0, 300.0),
-	]
-	for index in range(track_rects.size()):
-		_draw_environment_texture(COMMON_TRACK_TEXTURES[index * 2], track_rects[index], Color(1.0, 1.0, 1.0, 0.22))
-
-func _draw_bowangpo_ember_decor() -> void:
-	var ember_rects := [
-		Rect2(bounds.position.x + 180.0, bounds.position.y + 50.0, 360.0, 240.0),
-		Rect2(bounds.position.x + 720.0, bounds.position.y + 74.0, 330.0, 220.0),
-		Rect2(bounds.end.x - 520.0, bounds.position.y + 56.0, 360.0, 240.0),
-		Rect2(bounds.position.x + 200.0, bounds.end.y - 310.0, 360.0, 230.0),
-		Rect2(bounds.position.x + 930.0, bounds.end.y - 300.0, 350.0, 230.0),
-		Rect2(bounds.end.x - 540.0, bounds.end.y - 320.0, 380.0, 250.0),
-	]
-	for index in range(ember_rects.size()):
-		_draw_environment_texture(BOWANGPO_EMBER_TEXTURES[index * 2], ember_rects[index], Color(1.0, 1.0, 1.0, 0.72))
-	_draw_environment_texture(COMMON_FLAG_TEXTURES[2], Rect2(bounds.position.x + 760.0, bounds.position.y + 12.0, 330.0, 350.0), Color(1.0, 1.0, 1.0, 0.72))
-	_draw_environment_texture_mirrored(COMMON_FLAG_TEXTURES[1], Rect2(bounds.end.x - 420.0, bounds.position.y + 16.0, 350.0, 360.0), true, Color(1.0, 1.0, 1.0, 0.72))
-
-func _draw_fire_valley_bank(center: Vector2, flip_vertical: bool, seed: int) -> void:
-	var sign_y := -1.0 if flip_vertical else 1.0
-	var ridge := PackedVector2Array([
-		center + Vector2(-92.0, 0.0),
-		center + Vector2(-42.0, sign_y * 44.0),
-		center + Vector2(6.0, sign_y * 24.0),
-		center + Vector2(58.0, sign_y * 58.0),
-		center + Vector2(98.0, sign_y * 6.0),
-	])
-	draw_polyline(ridge, Color("2b2118"), 14.0, true)
-	draw_polyline(ridge, Color("766040"), 5.0, true)
-	if seed % 2 != 0:
-		return
-	var flame := PackedVector2Array([
-		center + Vector2(-8.0, sign_y * 8.0),
-		center + Vector2(0.0, sign_y * 40.0),
-		center + Vector2(11.0, sign_y * 8.0),
-	])
-	draw_colored_polygon(flame, Color(0.92, 0.31, 0.10, 0.34))
-	draw_polyline(flame, Color(1.0, 0.66, 0.24, 0.54), 1.5, true)
 
 func _draw_weather_ground_tint() -> void:
 	match weather_mode:
@@ -1588,27 +2274,19 @@ func _weather_particle_position(index: int, horizontal_span: float, vertical_spa
 func _weather_anchor() -> Vector2:
 	return player.position if player != null else bounds.get_center()
 
-func _draw_ground_patch(texture: Texture2D, rect: Rect2, opacity: float) -> void:
-	draw_texture_rect(texture, rect, false, Color(1.0, 1.0, 1.0, opacity))
-
-func _draw_boundary_slope(rect: Rect2, flip_horizontally: bool) -> void:
-	if not flip_horizontally:
-		draw_texture_rect(CHANGBAN_SLOPE_TEXTURE, rect, false)
-		return
-	draw_set_transform(rect.get_center(), 0.0, Vector2(-1.0, 1.0))
-	draw_texture_rect(CHANGBAN_SLOPE_TEXTURE, Rect2(-rect.size * 0.5, rect.size), false)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
 func _draw_enemies() -> void:
 	if enemies == null:
 		return
+	var draw_region := _enemy_draw_region()
 	for id in range(EnemySimulation.CAPACITY):
+		var ground_at := enemies.positions[id]
+		if not draw_region.has_point(ground_at):
+			continue
 		if enemies.is_dying(id):
 			_draw_enemy_death(id)
 			continue
 		if not enemies.is_active(id):
 			continue
-		var ground_at := enemies.positions[id]
 		var is_launched := enemies.is_enemy_launched(id)
 		var at := ground_at + enemies.launch_visual_offset(id)
 		var enemy_type := enemies.get_type(id)
@@ -1618,6 +2296,9 @@ func _draw_enemies() -> void:
 		var hit_strength := enemies.get_hit_feedback_strength(id)
 		var crowd_dim := _named_target_crowd_dim(at)
 		var is_being_displaced := enemies.is_being_displaced(id)
+		if enemies.is_tianji_lifted(id):
+			_draw_tianji_lifted_enemy(id, at, enemy_type, facing, crowd_dim)
+			continue
 		color = color.lerp(Color.WHITE, hurt_ratio * 0.82)
 		var size := 20.0 if enemy_type == EnemySimulation.EnemyType.ELITE else (17.0 if enemy_type == EnemySimulation.EnemyType.CAVALRY else 12.0)
 		var uses_enemy_sprite := enemy_type == EnemySimulation.EnemyType.SWORD or enemy_type == EnemySimulation.EnemyType.SHIELD or enemy_type == EnemySimulation.EnemyType.ARCHER or enemy_type == EnemySimulation.EnemyType.HALBERD or enemy_type == EnemySimulation.EnemyType.SPEAR or enemy_type == EnemySimulation.EnemyType.CROSSBOW or enemy_type == EnemySimulation.EnemyType.BANNER or enemy_type == EnemySimulation.EnemyType.CAVALRY
@@ -1657,9 +2338,68 @@ func _draw_enemies() -> void:
 					draw_circle(facing * 10.0, size * 0.55, Color("68747f"))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		_draw_enemy_hit_feedback(at, id, facing, hurt_ratio, hit_strength)
+		if enemies.is_duel_shield(id):
+			_draw_duel_shield_marker(at)
 		var command_ratio := enemies.command_aura_ratio(id)
 		if command_ratio > 0.0 and enemy_type != EnemySimulation.EnemyType.BANNER:
 			_draw_banner_commanded_marker(at, command_ratio)
+
+func _draw_tianji_lifted_enemy(id: int, at: Vector2, enemy_type: int, facing: Vector2, crowd_dim: float) -> void:
+	var alpha := clampf(0.92 - crowd_dim * 0.25, 0.58, 0.92)
+	var horizontal := -1.0 if facing.x < -0.05 else 1.0
+	match enemy_type:
+		EnemySimulation.EnemyType.SWORD:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_SWORD_SPRITE_SCALE, ENEMY_SWORD_SPRITE_SCALE))
+			draw_texture(ENEMY_SWORD_DEATH_TEXTURES[0], -ENEMY_SWORD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.SHIELD:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_SHIELD_SPRITE_SCALE, ENEMY_SHIELD_SPRITE_SCALE))
+			draw_texture(ENEMY_SHIELD_DEATH_TEXTURES[0], -ENEMY_SHIELD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.ARCHER:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_ARCHER_SPRITE_SCALE, ENEMY_ARCHER_SPRITE_SCALE))
+			draw_texture(ENEMY_ARCHER_DEATH_TEXTURES[0], -ENEMY_ARCHER_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.HALBERD:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_HALBERD_SPRITE_SCALE, ENEMY_HALBERD_SPRITE_SCALE))
+			draw_texture(ENEMY_HALBERD_DEATH_TEXTURES[0], -ENEMY_HALBERD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.SPEAR:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_SPEAR_SPRITE_SCALE, ENEMY_SPEAR_SPRITE_SCALE))
+			draw_texture(ENEMY_SPEAR_DEATH_TEXTURES[0], -ENEMY_SPEAR_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.CROSSBOW:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_CROSSBOW_SPRITE_SCALE, ENEMY_CROSSBOW_SPRITE_SCALE))
+			draw_texture(ENEMY_CROSSBOW_DEATH_TEXTURES[0], -ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.CAVALRY:
+			draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal * ENEMY_CAVALRY_SPRITE_SCALE, ENEMY_CAVALRY_SPRITE_SCALE))
+			draw_texture(ENEMY_CAVALRY_DEATH_TEXTURES[0], -ENEMY_CAVALRY_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.BANNER:
+			_draw_banner_enemy_death_proxy(at, facing, 0.0, alpha)
+		_:
+			var size := 12.0 if enemy_type != EnemySimulation.EnemyType.ELITE else 20.0
+			draw_set_transform(at, 0.0, Vector2.ONE)
+			var fallback_color := _enemy_color(enemy_type)
+			fallback_color.a = alpha
+			draw_rect(Rect2(-size * 0.55, -size, size * 1.1, size * 1.5), fallback_color)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _enemy_draw_region() -> Rect2:
+	if player == null:
+		return bounds.grow(128.0)
+	var battle_camera := player.get_node_or_null("BattleCamera") as Camera2D
+	if battle_camera == null:
+		return bounds.grow(128.0)
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return bounds.grow(128.0)
+	var zoom := battle_camera.zoom
+	var visible_world_size := Vector2(
+		viewport_size.x / maxf(0.01, zoom.x),
+		viewport_size.y / maxf(0.01, zoom.y)
+	)
+	return Rect2(battle_camera.get_screen_center_position() - visible_world_size * 0.5, visible_world_size).grow(96.0)
+
+func _draw_duel_shield_marker(at: Vector2) -> void:
+	var pulse := 0.72 + 0.28 * (sin(visual_time * 6.0 + at.x * 0.03) + 1.0) * 0.5
+	var center := at + Vector2(0.0, -47.0)
+	draw_arc(center, 8.0, 0.10, PI - 0.10, 8, Color(0.98, 0.66, 0.30, 0.40 * pulse), 1.2)
+	draw_line(center + Vector2(-5.0, 1.0), center + Vector2(5.0, 1.0), Color(0.88, 0.25, 0.16, 0.40 * pulse), 1.4)
 
 func _draw_enemy_knockback_pose(enemy_type: int, at: Vector2, facing: Vector2, hurt_ratio: float, crowd_dim: float) -> void:
 	if enemy_type == EnemySimulation.EnemyType.SWORD:
@@ -1948,6 +2688,7 @@ func _draw_player() -> void:
 		return
 	_draw_ground_shadow(at + Vector2(0, 14), 27.0, 7.5, Color(0.0, 0.0, 0.0, 0.34))
 	_draw_player_status_aura(at)
+	_draw_player_guard_shield(at)
 	_draw_player_sprite(at)
 	if player.is_ultimate_ready():
 		_draw_ultimate_ready_burst(at)
@@ -1963,6 +2704,7 @@ func _draw_player() -> void:
 
 func _draw_generic_hero_placeholder(at: Vector2) -> void:
 	_draw_ground_shadow(at + Vector2(0, 14), 24.0, 7.0, Color(0.0, 0.0, 0.0, 0.34))
+	_draw_player_guard_shield(at)
 	draw_circle(at + Vector2(0, -10), 14.0, Color("d6c3a1"))
 	draw_rect(Rect2(at + Vector2(-15, 3), Vector2(30, 28)), Color("596e7f"))
 	draw_arc(at + Vector2(0, 8), 24.0, 0.0, TAU, 16, Color("d9b66e"), 1.5)
@@ -1980,6 +2722,7 @@ func _draw_prototype_hero(at: Vector2) -> void:
 		shadow_vertical = lerpf(8.0, 4.5, lift_ratio)
 		shadow_alpha = lerpf(0.36, 0.20, lift_ratio)
 	_draw_ground_shadow(at + Vector2(0, 15), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, shadow_alpha))
+	_draw_player_guard_shield(body_at)
 	match player.presentation_id():
 		"zhang_fei":
 			_draw_zhang_fei_body(body_at, 1.0)
@@ -2013,6 +2756,10 @@ func _draw_zhang_fei_body(at: Vector2, alpha: float) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _current_zhang_fei_texture() -> Texture2D:
+	if player.is_guard_active():
+		var guard_index := mini(int(player_guard_time / ZHANG_FEI_GUARD_FRAME_DURATION), ZHANG_FEI_GUARD_FRAMES.size() - 1)
+		var guard_frame: int = ZHANG_FEI_GUARD_FRAMES[guard_index]
+		return ZHANG_FEI_ATTACK_03_TEXTURES[guard_frame]
 	if player.current_action == "basic":
 		match player.combo_stage:
 			1:
@@ -2029,6 +2776,10 @@ func _current_zhang_fei_texture() -> Texture2D:
 	return ZHANG_FEI_IDLE_TEXTURES[idle_frame]
 
 func _current_zhang_fei_source_foot_anchor() -> Vector2:
+	if player.is_guard_active():
+		var guard_index := mini(int(player_guard_time / ZHANG_FEI_GUARD_FRAME_DURATION), ZHANG_FEI_GUARD_FRAMES.size() - 1)
+		var guard_frame: int = ZHANG_FEI_GUARD_FRAMES[guard_index]
+		return ZHANG_FEI_ATTACK_03_FOOT_ANCHORS[guard_frame]
 	if player.current_action == "basic":
 		match player.combo_stage:
 			1:
@@ -2148,6 +2899,7 @@ func _draw_guan_yu(at: Vector2) -> void:
 	_draw_ground_shadow(at + Vector2(0, 15), 29.0, 8.0, Color(0.0, 0.0, 0.0, 0.38))
 	if player.is_wusheng_active():
 		_draw_guan_wusheng_aura(at)
+	_draw_player_guard_shield(at)
 	_draw_guan_yu_body(at)
 	if player.is_ultimate_ready():
 		_draw_ultimate_ready_burst(at)
@@ -2189,6 +2941,9 @@ func _draw_guan_yu_body(at: Vector2) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _current_guan_yu_texture() -> Texture2D:
+	if player.is_guard_active():
+		var guard_frame := mini(int(player_guard_time / GUAN_YU_GUARD_FRAME_DURATION), GUAN_YU_ATTACK_02_TEXTURES.size() - 1)
+		return GUAN_YU_ATTACK_02_TEXTURES[guard_frame]
 	if player.current_action == "basic":
 		match player.combo_stage:
 			1:
@@ -2211,6 +2966,9 @@ func _current_guan_yu_texture() -> Texture2D:
 	return GUAN_YU_IDLE_TEXTURES[idle_frame]
 
 func _current_guan_yu_source_foot_anchor() -> Vector2:
+	if player.is_guard_active():
+		var guard_frame := mini(int(player_guard_time / GUAN_YU_GUARD_FRAME_DURATION), GUAN_YU_ATTACK_02_FOOT_ANCHORS.size() - 1)
+		return GUAN_YU_ATTACK_02_FOOT_ANCHORS[guard_frame]
 	if player.current_action == "basic":
 		match player.combo_stage:
 			1:
@@ -2267,6 +3025,37 @@ func _draw_player_status_aura(at: Vector2) -> void:
 		_draw_breakout_guard(at)
 	if player.has_firewheel_talent() and player.firewheel_cooldown_ratio() > 0.0:
 		_draw_firewheel_cooldown_marker(at)
+
+func _draw_player_guard_shield(at: Vector2) -> void:
+	if player == null or not player.is_guard_active() or GUARD_SHIELD_TEXTURES.is_empty():
+		return
+	var frame_index := mini(int(player_guard_time / GUARD_SHIELD_FRAME_DURATION), GUARD_SHIELD_TEXTURES.size() - 1)
+	var texture := GUARD_SHIELD_TEXTURES[frame_index]
+	if texture == null:
+		return
+	var progress := clampf(player_guard_time / HeroActor.GUARD_ACTIVE_DURATION, 0.0, 1.0)
+	var fade_in := clampf(player_guard_time / 0.055, 0.0, 1.0)
+	var fade_out := clampf((1.0 - progress) / 0.24, 0.0, 1.0)
+	var pulse := 0.86 + 0.14 * (sin(visual_time * 12.0) + 1.0) * 0.5
+	var shield_alpha := 0.30 * fade_in * fade_out * pulse
+	var shield_center := at + Vector2(0.0, -24.0)
+	var texture_size := Vector2(texture.get_size())
+	var shield_scale := GUARD_SHIELD_SCALE * lerpf(0.90, 1.0, fade_in)
+	draw_set_transform(shield_center, 0.0, Vector2(shield_scale, shield_scale))
+	draw_texture(texture, -texture_size * 0.5, Color(0.82, 0.97, 1.0, shield_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# The texture is a full shell; this brighter front arc communicates the
+	# actual 180-degree guard direction without implying rear protection.
+	var facing := player.guard_direction.normalized()
+	if facing.length_squared() <= 0.01:
+		facing = Vector2.RIGHT
+	var arc_alpha := 0.50 * fade_in * fade_out * pulse
+	var arc_center := shield_center + facing * 4.0
+	var arc_angle := facing.angle()
+	draw_arc(arc_center, 61.0, arc_angle - PI * 0.50, arc_angle + PI * 0.50, 24, Color(0.72, 0.94, 1.0, arc_alpha), 2.2, true)
+	draw_arc(arc_center, 55.0, arc_angle - PI * 0.47, arc_angle + PI * 0.47, 20, Color(0.92, 1.0, 1.0, arc_alpha * 0.58), 1.0, true)
+	draw_arc(arc_center, 67.0, arc_angle - PI * 0.43, arc_angle + PI * 0.43, 20, Color(0.52, 0.84, 1.0, arc_alpha * 0.34), 1.2, true)
 
 func _draw_firewheel_flames(at: Vector2) -> void:
 	var elapsed := player.firewheel_animation_time()
@@ -2702,6 +3491,7 @@ func _copy_request_for_visual(source: AttackRequest) -> AttackRequest:
 	copy.origin = source.origin
 	copy.direction = source.direction
 	copy.range = source.range
+	copy.inner_radius = source.inner_radius
 	copy.width = source.width
 	copy.half_angle = source.half_angle
 	copy.multiplier = source.multiplier
@@ -2730,6 +3520,10 @@ func _copy_request_for_visual(source: AttackRequest) -> AttackRequest:
 	return copy
 
 func _current_player_texture() -> Texture2D:
+	if player.is_guard_active():
+		var guard_frames := [1, 3]
+		var guard_frame := mini(int(player_guard_time / PLAYER_GUARD_FRAME_DURATION), guard_frames.size() - 1)
+		return PLAYER_ATTACK_02_TEXTURES[guard_frames[guard_frame]]
 	if player_is_playing_attack_01:
 		var attack_frame := mini(int(player_attack_01_time / PLAYER_ATTACK_01_FRAME_DURATION), PLAYER_ATTACK_01_TEXTURES.size() - 1)
 		return PLAYER_ATTACK_01_TEXTURES[attack_frame]
@@ -2748,6 +3542,10 @@ func _current_player_texture() -> Texture2D:
 	return PLAYER_IDLE_TEXTURES[PLAYER_IDLE_FRAME_ORDER[idle_step]]
 
 func _current_player_source_foot_anchor() -> Vector2:
+	if player.is_guard_active():
+		var guard_frames := [1, 3]
+		var guard_frame := mini(int(player_guard_time / PLAYER_GUARD_FRAME_DURATION), guard_frames.size() - 1)
+		return PLAYER_ATTACK_02_FOOT_ANCHORS[guard_frames[guard_frame]]
 	if player_is_playing_attack_02:
 		return PLAYER_ATTACK_02_FOOT_ANCHORS[_attack_02_frame_index()]
 	if player_is_playing_attack_05:
@@ -2798,25 +3596,59 @@ func _draw_boss() -> void:
 		return
 	var at := boss.position + boss.knockback_visual_offset() if boss.is_knockback_visual_active() else boss.position
 	var spear_direction := boss.facing_direction if boss.facing_direction.length_squared() > 0.01 else Vector2.DOWN
+	if boss.archetype == BossActor.Archetype.LV_BU and boss.is_ultimate_airborne():
+		var target := boss.ultimate_target()
+		var leap_progress := boss.ultimate_airborne_progress()
+		_draw_ground_shadow(target + Vector2(0, 22), lerpf(36.0, 22.0, leap_progress), lerpf(10.5, 5.0, leap_progress), Color(0.0, 0.0, 0.0, 0.30 - leap_progress * 0.16))
+		if leap_progress < 0.18:
+			var takeoff_ratio := leap_progress / 0.18
+			var takeoff_scale := BOSS_LV_BU_SPRITE_SCALE * (1.0 - takeoff_ratio * 0.42)
+			var takeoff_vertical := BOSS_LV_BU_SPRITE_SCALE * (1.08 + (1.0 - takeoff_ratio) * 0.26)
+			var takeoff_facing := -takeoff_scale if spear_direction.x < -0.05 else takeoff_scale
+			_draw_named_sprite(BOSS_LV_BU_ATTACK_3_TEXTURES[0], BOSS_LV_BU_ATTACK_3_FOOT_ANCHORS[0], at + Vector2(0.0, -takeoff_ratio * 20.0 + 14.0), takeoff_facing, takeoff_vertical, Color(1.0, 1.0, 1.0, 1.0 - takeoff_ratio), Color(0.13, 0.04, 0.04, 0.90 * (1.0 - takeoff_ratio)), 1.6)
+		return
+	if boss.archetype == BossActor.Archetype.LV_BU and boss.is_ultimate_landing():
+		at = boss.ultimate_target()
+		_draw_lv_bu_skyfall_marker(at, boss.ultimate_landing_progress(), true)
 	_draw_ground_shadow(at + Vector2(0, 22), 36.0, 10.5, Color(0.0, 0.0, 0.0, 0.38))
 	if boss.is_dying():
 		if boss.archetype == BossActor.Archetype.XIAHOU_DUN:
-			_draw_xiahou_dun_death_proxy(at, spear_direction)
+			_draw_xiahou_dun_death_sprite(at, spear_direction)
+			return
+		if boss.archetype == BossActor.Archetype.LV_BU:
+			_draw_lv_bu_death_sprite(at, spear_direction)
 			return
 		_draw_boss_death_sprite(at, spear_direction)
 		return
-	_draw_boss_aura(at, spear_direction)
+	if not boss.is_vulnerable():
+		_draw_boss_aura(at, spear_direction)
 	if boss.is_cast_invulnerable():
 		_draw_cast_invulnerability_marker(at, spear_direction, 1.0, boss.current_action)
 	if boss.archetype == BossActor.Archetype.XIAHOU_DUN:
 		var xiahou_recoil_wave := sin(boss.knockback_visual_progress() * PI) if boss.is_knockback_visual_active() else 0.0
 		var xiahou_dun_tilt := (0.12 + xiahou_recoil_wave * 0.16 * boss.knockback_visual_strength()) * (-1.0 if spear_direction.x < 0.0 else 1.0) if boss.is_knockback_visual_active() else 0.0
-		_draw_xiahou_dun_proxy(at, spear_direction, xiahou_dun_tilt)
+		_draw_xiahou_dun_sprite(at, spear_direction, xiahou_dun_tilt)
 		_draw_boss_command_marker(at)
+		if boss.is_vulnerable():
+			_draw_named_vulnerable_marker(at, 1.0, boss.vulnerable_ratio())
 		if boss.is_stance_broken():
 			_draw_named_stance_break_marker(at, 1.0)
-		elif boss.has_counterattack():
-			_draw_named_counterattack_aura(at, spear_direction, 1.0)
+		return
+	if boss.archetype == BossActor.Archetype.LV_BU:
+		if boss.is_ultimate_landing():
+			_draw_lv_bu_landing_sprite(at, spear_direction, boss.ultimate_landing_progress())
+			_draw_boss_command_marker(at)
+			return
+		var lvbu_recoil_wave := sin(boss.knockback_visual_progress() * PI) if boss.is_knockback_visual_active() else 0.0
+		var lvbu_tilt := (0.10 + lvbu_recoil_wave * 0.18 * boss.knockback_visual_strength()) * (-1.0 if spear_direction.x < 0.0 else 1.0) if boss.is_knockback_visual_active() else 0.0
+		_draw_lv_bu_sprite(at, spear_direction, lvbu_tilt)
+		_draw_lv_bu_rush_trail(at, spear_direction)
+		_draw_lv_bu_attack_vfx(at, spear_direction)
+		_draw_boss_command_marker(at)
+		if boss.is_vulnerable():
+			_draw_named_vulnerable_marker(at, 1.08, boss.vulnerable_ratio())
+		if boss.is_stance_broken():
+			_draw_named_stance_break_marker(at, 1.08)
 		return
 	var texture: Texture2D
 	var recoil_wave := sin(boss.knockback_visual_progress() * PI) if boss.is_knockback_visual_active() else 0.0
@@ -2837,44 +3669,141 @@ func _draw_boss() -> void:
 	_draw_named_sprite(texture, BOSS_ZHANG_HE_SOURCE_FOOT_ANCHOR, at + Vector2(0, 14), facing_scale * recoil_scale_x, BOSS_ZHANG_HE_SPRITE_SCALE * recoil_scale_y, Color.WHITE, Color("211c3a", 0.94), 1.6, recoil_tilt)
 	_draw_zhang_he_attack_vfx(at, spear_direction)
 	_draw_boss_command_marker(at)
+	if boss.is_vulnerable():
+		_draw_named_vulnerable_marker(at, 1.0, boss.vulnerable_ratio())
 	if boss.is_stance_broken():
 		_draw_named_stance_break_marker(at, 1.0)
-	elif boss.has_counterattack():
-		_draw_named_counterattack_aura(at, spear_direction, 1.0)
 
 func _draw_boss_death_sprite(at: Vector2, direction: Vector2) -> void:
 	var frame_index := mini(int(boss.death_animation_progress() * BOSS_ZHANG_HE_DEATH_TEXTURES.size()), BOSS_ZHANG_HE_DEATH_TEXTURES.size() - 1)
 	var facing_scale := -BOSS_ZHANG_HE_SPRITE_SCALE if direction.x < -0.05 else BOSS_ZHANG_HE_SPRITE_SCALE
 	_draw_named_sprite(BOSS_ZHANG_HE_DEATH_TEXTURES[frame_index], BOSS_ZHANG_HE_SOURCE_FOOT_ANCHOR, at + Vector2(0, 14), facing_scale, BOSS_ZHANG_HE_SPRITE_SCALE, Color.WHITE, Color("211c3a", 0.94), 1.6)
 
-func _draw_xiahou_dun_proxy(at: Vector2, direction: Vector2, recoil_tilt: float = 0.0) -> void:
-	var facing := Vector2.LEFT if direction.x < -0.05 else Vector2.RIGHT
-	var scale := 1.20
-	var windup_scale := 1.06 if boss.state == BossActor.State.WINDUP else 1.0
-	draw_set_transform(at + Vector2(0.0, 3.0), recoil_tilt, Vector2(scale * windup_scale, scale))
-	draw_rect(Rect2(-21.0, 8.0, 14.0, 20.0), Color("241d1d"))
-	draw_rect(Rect2(7.0, 8.0, 14.0, 20.0), Color("241d1d"))
-	draw_rect(Rect2(-26.0, -23.0, 52.0, 37.0), Color("351f23"))
-	draw_rect(Rect2(-22.0, -20.0, 44.0, 29.0), Color("733634"))
-	draw_rect(Rect2(-18.0, -17.0, 36.0, 13.0), Color("b66a43"))
-	draw_circle(Vector2(0.0, -31.0), 14.0, Color("d9b994"))
-	draw_rect(Rect2(-16.0, -43.0, 32.0, 10.0), Color("4b3138"))
-	draw_line(Vector2(-4.0, -30.0), Vector2(11.0, -30.0), Color("44201e"), 2.0)
-	draw_circle(Vector2(7.0 * facing.x, -30.0), 2.0, Color("25191a"))
-	var spear_root := Vector2(15.0 * facing.x, 3.0)
-	var spear_tip := spear_root + facing * 72.0 + Vector2(0.0, -44.0)
-	draw_line(spear_root, spear_tip, Color("5f3929"), 5.5)
-	draw_line(spear_tip - facing * 11.0, spear_tip + facing * 18.0 + Vector2(0.0, -9.0), Color("d9d7c9"), 4.0)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+func _draw_xiahou_dun_sprite(at: Vector2, direction: Vector2, recoil_tilt: float = 0.0) -> void:
+	var frame_data := _xiahou_dun_frame_data()
+	var texture: Texture2D = frame_data.get("texture")
+	var source_anchor: Vector2 = frame_data.get("anchor", Vector2(64.0, 94.0))
+	var facing_scale := -BOSS_XIAHOU_DUN_SPRITE_SCALE if direction.x < -0.05 else BOSS_XIAHOU_DUN_SPRITE_SCALE
+	var recoil_wave := sin(boss.knockback_visual_progress() * PI) if boss.is_knockback_visual_active() else 0.0
+	var recoil_scale_x := 1.0 + recoil_wave * 0.08 * boss.knockback_visual_strength() if boss.is_knockback_visual_active() else 1.0
+	var recoil_scale_y := 1.0 - recoil_wave * 0.05 * boss.knockback_visual_strength() if boss.is_knockback_visual_active() else 1.0
+	var hurt_ratio := clampf(boss.hurt_remaining / 0.14, 0.0, 1.0)
+	var hurt_color := Color.WHITE.lerp(Color("d8e9f2"), hurt_ratio * 0.62)
+	_draw_named_sprite(texture, source_anchor, at + Vector2(0.0, 14.0), facing_scale * recoil_scale_x, BOSS_XIAHOU_DUN_SPRITE_SCALE * recoil_scale_y, hurt_color, Color("211c3a", 0.94), 1.6, recoil_tilt)
 
-func _draw_xiahou_dun_death_proxy(at: Vector2, direction: Vector2) -> void:
-	var tilt := -0.48 if direction.x >= 0.0 else 0.48
+func _draw_xiahou_dun_death_sprite(at: Vector2, direction: Vector2) -> void:
+	var frame_index := mini(int(boss.death_animation_progress() / BOSS_XIAHOU_DUN_DEATH_FRAME_DURATION), BOSS_XIAHOU_DUN_DEATH_TEXTURES.size() - 1)
+	var facing_scale := -BOSS_XIAHOU_DUN_SPRITE_SCALE if direction.x < -0.05 else BOSS_XIAHOU_DUN_SPRITE_SCALE
+	var source_anchor: Vector2 = BOSS_XIAHOU_DUN_DEATH_FOOT_ANCHORS[frame_index]
 	var fade := 1.0 - boss.death_animation_progress() * 0.36
-	draw_set_transform(at + Vector2(0.0, 17.0), tilt, Vector2(1.20, 1.20))
-	draw_rect(Rect2(-29.0, -14.0, 58.0, 24.0), Color(0.35, 0.25, 0.23, fade))
-	draw_circle(Vector2(-18.0, -17.0), 13.0, Color(0.68, 0.56, 0.46, fade))
-	draw_line(Vector2(10.0, 2.0), Vector2(72.0, -29.0), Color(0.55, 0.52, 0.48, fade), 4.5)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_named_sprite(BOSS_XIAHOU_DUN_DEATH_TEXTURES[frame_index], source_anchor, at + Vector2(0.0, 14.0), facing_scale, BOSS_XIAHOU_DUN_SPRITE_SCALE, Color(1.0, 1.0, 1.0, fade), Color(0.13, 0.11, 0.17, fade * 0.92), 1.6)
+
+func _draw_lv_bu_sprite(at: Vector2, direction: Vector2, recoil_tilt: float = 0.0) -> void:
+	var frame_data := _lv_bu_frame_data()
+	var texture: Texture2D = frame_data.get("texture")
+	var source_anchor: Vector2 = frame_data.get("anchor", Vector2(64.0, 66.0))
+	var frame_scale := float(frame_data.get("scale", 1.0))
+	var sprite_scale := BOSS_LV_BU_SPRITE_SCALE * frame_scale
+	var facing_scale := -sprite_scale if direction.x < -0.05 else sprite_scale
+	var hurt_ratio := clampf(boss.hurt_remaining / 0.14, 0.0, 1.0)
+	var hurt_color := Color.WHITE.lerp(Color("ffe2b6"), hurt_ratio * 0.56)
+	_draw_named_sprite(texture, source_anchor, at + Vector2(0.0, 14.0), facing_scale, sprite_scale, hurt_color, Color("211c3a", 0.94), 1.6, recoil_tilt)
+
+func _draw_lv_bu_landing_sprite(at: Vector2, direction: Vector2, progress: float) -> void:
+	var texture: Texture2D = BOSS_LV_BU_ATTACK_3_TEXTURES[3]
+	var source_anchor: Vector2 = BOSS_LV_BU_ATTACK_3_FOOT_ANCHORS[3]
+	var rebound := sin(clampf(progress, 0.0, 1.0) * PI)
+	var scale_x := BOSS_LV_BU_SPRITE_SCALE * lerpf(0.72, 1.06, progress) * (1.0 + rebound * 0.12)
+	var scale_y := BOSS_LV_BU_SPRITE_SCALE * lerpf(1.24, 0.96, progress) * (1.0 - rebound * 0.10)
+	var facing_scale := -scale_x if direction.x < -0.05 else scale_x
+	_draw_named_sprite(texture, source_anchor, at + Vector2(0.0, 14.0), facing_scale, scale_y, Color.WHITE, Color("211c3a", 0.94), 1.6, 0.0)
+
+func _draw_lv_bu_skyfall_marker(center: Vector2, progress: float, landing: bool) -> void:
+	var pulse := 0.62 + 0.30 * (sin(visual_time * 10.0) + 1.0) * 0.5
+	var radius := 212.0 * (0.82 + progress * 0.18)
+	var red := Color(0.92, 0.12, 0.16, pulse * (0.62 if landing else 0.46))
+	var gold := Color(1.0, 0.72, 0.30, pulse * (0.82 if landing else 0.58))
+	draw_arc(center, radius, -PI * 0.5, TAU - PI * 0.5, 40, red, 3.0)
+	draw_arc(center, radius * 0.78, visual_time * 0.8, visual_time * 0.8 + PI * 1.2, 24, gold, 2.0)
+	if landing:
+		var burst := 1.0 - progress
+		for index in range(10):
+			var direction := Vector2.from_angle(TAU * float(index) / 10.0)
+			draw_line(center + direction * 28.0, center + direction * (72.0 + burst * 30.0), Color(1.0, 0.66, 0.24, burst * 0.84), 2.4)
+	else:
+		var beam_height := 90.0 + progress * 70.0
+		draw_line(center + Vector2(0, -beam_height), center + Vector2(0, -18.0), Color(1.0, 0.42, 0.18, pulse * 0.45), 3.0)
+		draw_line(center + Vector2(-10.0, -beam_height + 12.0), center + Vector2(-3.0, -22.0), Color(1.0, 0.78, 0.36, pulse * 0.28), 1.6)
+
+func _draw_lv_bu_death_sprite(at: Vector2, direction: Vector2) -> void:
+	var frame_index := mini(int(boss.death_animation_progress() / BOSS_LV_BU_DEATH_FRAME_DURATION), BOSS_LV_BU_DEATH_TEXTURES.size() - 1)
+	var facing_scale := -BOSS_LV_BU_SPRITE_SCALE if direction.x < -0.05 else BOSS_LV_BU_SPRITE_SCALE
+	var source_anchor: Vector2 = BOSS_LV_BU_DEATH_FOOT_ANCHORS[frame_index]
+	var fade := 1.0 - boss.death_animation_progress() * 0.36
+	_draw_named_sprite(BOSS_LV_BU_DEATH_TEXTURES[frame_index], source_anchor, at + Vector2(0.0, 14.0), facing_scale, BOSS_LV_BU_SPRITE_SCALE, Color(1.0, 1.0, 1.0, fade), Color(0.13, 0.11, 0.17, fade * 0.92), 1.6)
+
+func _lv_bu_frame_data() -> Dictionary:
+	if boss.is_knockback_visual_active():
+		if boss.is_stance_broken():
+			return {"texture": BOSS_LV_BU_DEATH_TEXTURES[0], "anchor": BOSS_LV_BU_DEATH_FOOT_ANCHORS[0], "scale": 1.0, "weapon_tip": BOSS_LV_BU_DEFAULT_WEAPON_TIP}
+		return {"texture": BOSS_LV_BU_ATTACK_1_TEXTURES[0], "anchor": BOSS_LV_BU_ATTACK_1_FOOT_ANCHORS[0], "scale": BOSS_LV_BU_ATTACK_1_FRAME_SCALES[0], "weapon_tip": BOSS_LV_BU_ATTACK_1_WEAPON_TIPS[0]}
+	if boss.state in [BossActor.State.WINDUP, BossActor.State.DASH, BossActor.State.RECOVER]:
+		return _lv_bu_attack_frame_data(boss.current_action, boss.attack_animation_progress())
+	if boss.is_moving():
+		var walk_frame := int(visual_time / BOSS_LV_BU_WALK_FRAME_DURATION) % BOSS_LV_BU_WALK_TEXTURES.size()
+		return {"texture": BOSS_LV_BU_WALK_TEXTURES[walk_frame], "anchor": BOSS_LV_BU_WALK_FOOT_ANCHORS[walk_frame], "scale": 1.0, "weapon_tip": BOSS_LV_BU_DEFAULT_WEAPON_TIP}
+	var idle_frame := int(visual_time / BOSS_LV_BU_IDLE_FRAME_DURATION) % BOSS_LV_BU_IDLE_TEXTURES.size()
+	return {"texture": BOSS_LV_BU_IDLE_TEXTURES[idle_frame], "anchor": BOSS_LV_BU_IDLE_FOOT_ANCHORS[idle_frame], "scale": 1.0, "weapon_tip": BOSS_LV_BU_DEFAULT_WEAPON_TIP}
+
+func _lv_bu_attack_frame_data(action: String, progress: float) -> Dictionary:
+	var textures: Array = BOSS_LV_BU_ATTACK_1_TEXTURES
+	var anchors: Array = BOSS_LV_BU_ATTACK_1_FOOT_ANCHORS
+	var scales: Array = BOSS_LV_BU_ATTACK_1_FRAME_SCALES
+	var weapon_tips: Array = BOSS_LV_BU_ATTACK_1_WEAPON_TIPS
+	if action in ["lvbu_sweep", "lvbu_slow_sweep"]:
+		textures = BOSS_LV_BU_ATTACK_2_TEXTURES
+		anchors = BOSS_LV_BU_ATTACK_2_FOOT_ANCHORS
+		scales = BOSS_LV_BU_ATTACK_2_FRAME_SCALES
+		weapon_tips = BOSS_LV_BU_ATTACK_2_WEAPON_TIPS
+	elif action in ["lvbu_whirl", "lvbu_glaive_return", "lvbu_rush"]:
+		textures = BOSS_LV_BU_ATTACK_3_TEXTURES
+		anchors = BOSS_LV_BU_ATTACK_3_FOOT_ANCHORS
+		scales = BOSS_LV_BU_ATTACK_3_FRAME_SCALES
+		weapon_tips = BOSS_LV_BU_ATTACK_3_WEAPON_TIPS
+	var frame_index := mini(int(clampf(progress, 0.0, 1.0) * textures.size()), textures.size() - 1)
+	return {"texture": textures[frame_index], "anchor": anchors[frame_index], "scale": scales[frame_index], "weapon_tip": weapon_tips[frame_index]}
+
+func _xiahou_dun_frame_data() -> Dictionary:
+	if boss.is_knockback_visual_active():
+		return {"texture": BOSS_XIAHOU_DUN_ATTACK_1_TEXTURES[0], "anchor": BOSS_XIAHOU_DUN_ATTACK_1_FOOT_ANCHORS[0]}
+	# Keep dash attacks on their attack sequence even while the actor is moving.
+	if boss.state in [BossActor.State.WINDUP, BossActor.State.DASH, BossActor.State.RECOVER]:
+		return _xiahou_dun_attack_frame_data(boss.current_action, boss.attack_animation_progress())
+	if boss.is_moving():
+		var walk_frame := int(visual_time / BOSS_XIAHOU_DUN_WALK_FRAME_DURATION) % BOSS_XIAHOU_DUN_WALK_TEXTURES.size()
+		return {"texture": BOSS_XIAHOU_DUN_WALK_TEXTURES[walk_frame], "anchor": BOSS_XIAHOU_DUN_WALK_FOOT_ANCHORS[walk_frame]}
+	var idle_frame := int(visual_time / BOSS_XIAHOU_DUN_IDLE_FRAME_DURATION) % BOSS_XIAHOU_DUN_IDLE_TEXTURES.size()
+	return {"texture": BOSS_XIAHOU_DUN_IDLE_TEXTURES[idle_frame], "anchor": BOSS_XIAHOU_DUN_IDLE_FOOT_ANCHORS[idle_frame]}
+
+func _xiahou_dun_attack_frame_data(action: String, progress: float) -> Dictionary:
+	var sequence: Array = BOSS_XIAHOU_DUN_ACTION_2_SEQUENCE
+	if action == "command_thrust":
+		sequence = BOSS_XIAHOU_DUN_ACTION_1_SEQUENCE
+	elif action == "fire_charge":
+		sequence = BOSS_XIAHOU_DUN_ACTION_3_SEQUENCE
+	elif action == "fire_lines":
+		sequence = BOSS_XIAHOU_DUN_ACTION_34_SEQUENCE
+	var total_frames := 0
+	for segment in sequence:
+		total_frames += (segment["textures"] as Array).size()
+	var frame_index := mini(int(clampf(progress, 0.0, 1.0) * total_frames), total_frames - 1)
+	for segment in sequence:
+		var textures: Array = segment["textures"]
+		var anchors: Array = segment["anchors"]
+		if frame_index < textures.size():
+			return {"texture": textures[frame_index], "anchor": anchors[frame_index]}
+		frame_index -= textures.size()
+	return {"texture": BOSS_XIAHOU_DUN_IDLE_TEXTURES[0], "anchor": BOSS_XIAHOU_DUN_IDLE_FOOT_ANCHORS[0]}
 
 func _boss_attack_texture(action: String, progress: float) -> Texture2D:
 	var sequence := BOSS_ZHANG_HE_SWEEP_SEQUENCE
@@ -2916,8 +3845,6 @@ func _draw_elites() -> void:
 		_draw_elite_command_marker(at)
 		if elite.is_stance_broken():
 			_draw_named_stance_break_marker(at, 0.82)
-		elif elite.has_counterattack():
-			_draw_named_counterattack_aura(at, direction, 0.82)
 
 func _draw_elite_knockback_pose(elite: EliteActor, at: Vector2, direction: Vector2) -> void:
 	var hurt_ratio := clampf(elite.hurt_remaining / 0.14, 0.0, 1.0)
@@ -3011,9 +3938,13 @@ func _draw_han_hao_proxy(elite: EliteActor, at: Vector2, direction: Vector2, rec
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_named_sprite(texture: Texture2D, source_anchor: Vector2, foot_position: Vector2, scale_x: float, scale_y: float, color: Color, outline_color: Color, outline_width: float, rotation: float = 0.0) -> void:
-	for offset in [Vector2(-outline_width, 0.0), Vector2(outline_width, 0.0), Vector2(0.0, -outline_width), Vector2(0.0, outline_width), Vector2(-outline_width, -outline_width), Vector2(outline_width, -outline_width), Vector2(-outline_width, outline_width), Vector2(outline_width, outline_width)]:
-		draw_set_transform(foot_position + offset, rotation, Vector2(scale_x, scale_y))
-		draw_texture(texture, -source_anchor, outline_color)
+	# Named enemies already have dedicated status bars, ground auras, and command
+	# markers. A second silhouette outline makes small source frames look muddy.
+	var applied_outline_width := minf(outline_width, NAMED_SPRITE_OUTLINE_WIDTH)
+	if applied_outline_width > 0.0 and outline_color.a > 0.0:
+		for offset in [Vector2(-applied_outline_width, 0.0), Vector2(applied_outline_width, 0.0), Vector2(0.0, -applied_outline_width), Vector2(0.0, applied_outline_width), Vector2(-applied_outline_width, -applied_outline_width), Vector2(applied_outline_width, -applied_outline_width), Vector2(-applied_outline_width, applied_outline_width), Vector2(applied_outline_width, applied_outline_width)]:
+			draw_set_transform(foot_position + offset, rotation, Vector2(scale_x, scale_y))
+			draw_texture(texture, -source_anchor, outline_color)
 	draw_set_transform(foot_position, rotation, Vector2(scale_x, scale_y))
 	draw_texture(texture, -source_anchor, color)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -3151,8 +4082,14 @@ func _draw_boss_aura(at: Vector2, direction: Vector2) -> void:
 	var perpendicular := Vector2(-direction.y, direction.x)
 	var windup_boost: float = 1.38 if boss.state == BossActor.State.WINDUP else 1.0
 	var phase_boost := 0.72 + float(boss.phase - 1) * 0.16
-	var aura_color := Color(0.76, 0.29, 0.16) if boss.archetype == BossActor.Archetype.XIAHOU_DUN else Color(0.62, 0.49, 0.94)
-	var spark_color := Color(1.0, 0.70, 0.30) if boss.archetype == BossActor.Archetype.XIAHOU_DUN else Color(0.82, 0.71, 0.38)
+	var aura_color := Color(0.62, 0.49, 0.94)
+	var spark_color := Color(0.82, 0.71, 0.38)
+	if boss.archetype == BossActor.Archetype.XIAHOU_DUN:
+		aura_color = Color(0.76, 0.29, 0.16)
+		spark_color = Color(1.0, 0.70, 0.30)
+	elif boss.archetype == BossActor.Archetype.LV_BU:
+		aura_color = Color(0.78, 0.12, 0.16)
+		spark_color = Color(1.0, 0.74, 0.30)
 	var ground := at + Vector2(0, 20)
 	var pulse := 0.66 + 0.20 * (sin(visual_time * 2.8) + 1.0) * 0.5
 	for index in range(4):
@@ -3170,19 +4107,6 @@ func _draw_boss_aura(at: Vector2, direction: Vector2) -> void:
 		draw_line(root, tip, color, 2.0)
 		if index % 2 == 0:
 			draw_line(tip, tip - direction * 5.0, Color(spark_color.r, spark_color.g, spark_color.b, color.a * 0.82), 1.2)
-
-func _draw_named_counterattack_aura(at: Vector2, direction: Vector2, scale: float) -> void:
-	var facing := direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
-	var perpendicular := Vector2(-facing.y, facing.x)
-	var center := at + Vector2(0, -24.0 * scale) + facing * (18.0 * scale)
-	var pulse := 0.64 + 0.30 * (sin(visual_time * 8.0) + 1.0) * 0.5
-	draw_circle(center, 11.0 * scale, Color(0.52, 0.08, 0.04, 0.24 * pulse))
-	draw_arc(center, 11.0 * scale, 0.0, TAU, 16, Color(1.0, 0.36, 0.18, pulse), 1.7 * scale)
-	for index in range(3):
-		var spread := (float(index) - 1.0) * 7.0 * scale
-		var root := center + perpendicular * spread - facing * (4.0 * scale)
-		var tip := root + facing * (18.0 * scale) + perpendicular * spread * 0.22
-		draw_line(root, tip, Color(1.0, 0.57, 0.26, pulse * 0.92), 1.9 * scale)
 
 func _draw_cast_invulnerability_marker(at: Vector2, direction: Vector2, scale: float, action: String) -> void:
 	var center := at + Vector2(0.0, -28.0 * scale)
@@ -3285,6 +4209,58 @@ func _draw_zhang_he_attack_vfx(at: Vector2, direction: Vector2) -> void:
 			_draw_named_triple_thrust_vfx(at + Vector2(0, -10), facing, 302.0 * phase_scale, progress, alpha, steel, azure)
 		"summon":
 			_draw_named_summon_vfx(at, progress, alpha, Color("b2dfff"), Color("755ad0"))
+
+func _draw_lv_bu_attack_vfx(at: Vector2, direction: Vector2) -> void:
+	if boss.state not in [BossActor.State.WINDUP, BossActor.State.DASH, BossActor.State.RECOVER]:
+		return
+	var progress := boss.attack_animation_progress() if boss.state == BossActor.State.WINDUP else 1.0
+	var alpha := _lv_bu_attack_vfx_alpha()
+	if alpha <= 0.01:
+		return
+	var facing := direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
+	if boss.current_action == "lvbu_glaive_return" and boss.thrust_sequence.is_empty():
+		facing = -facing
+	var textures: Array = LV_BU_ATTACK_1_VFX_TEXTURES
+	var source_anchor := LV_BU_ATTACK_1_VFX_SOURCE_ANCHOR
+	var texture_scale := 0.38
+	if boss.current_action in ["lvbu_sweep", "lvbu_slow_sweep", "lvbu_whirl", "lvbu_rush", "lvbu_glaive_return"]:
+		textures = LV_BU_ATTACK_2_VFX_TEXTURES
+		source_anchor = LV_BU_ATTACK_2_VFX_SOURCE_ANCHOR
+		texture_scale = 0.42
+	var frame_index := mini(int(clampf(progress, 0.0, 1.0) * textures.size()), textures.size() - 1)
+	if boss.state == BossActor.State.WINDUP:
+		frame_index = mini(int(boss.action_animation_elapsed / LV_BU_ATTACK_VFX_FRAME_DURATION), textures.size() - 1)
+	var frame_data := _lv_bu_frame_data()
+	var body_anchor: Vector2 = frame_data.get("anchor", Vector2(64.0, 66.0))
+	var source_tip: Vector2 = frame_data.get("weapon_tip", BOSS_LV_BU_DEFAULT_WEAPON_TIP)
+	var sprite_scale := BOSS_LV_BU_SPRITE_SCALE * float(frame_data.get("scale", 1.0))
+	var sprite_facing_scale := -sprite_scale if direction.x < -0.05 else sprite_scale
+	var local_tip := source_tip - body_anchor
+	var effect_position := at + Vector2(0.0, 14.0) + Vector2(local_tip.x * sprite_facing_scale, local_tip.y * sprite_scale)
+	var effect_alpha := alpha * 0.90
+	draw_set_transform(effect_position, facing.angle(), Vector2(texture_scale, texture_scale))
+	draw_texture(textures[frame_index], -source_anchor, Color(1.0, 1.0, 1.0, effect_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_lv_bu_rush_trail(at: Vector2, direction: Vector2) -> void:
+	if boss.current_action != "lvbu_rush" or boss.state != BossActor.State.DASH:
+		return
+	var facing := direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
+	var side := Vector2(-facing.y, facing.x)
+	for index in range(3):
+		var distance := 22.0 + float(index) * 24.0
+		var alpha := 0.34 - float(index) * 0.08
+		var root := at - facing * distance
+		draw_line(root - side * 8.0, root + facing * 28.0 + side * 8.0, Color(0.88, 0.20, 0.14, alpha), 4.0 - float(index) * 0.7)
+		draw_line(root - side * 3.0, root + facing * 22.0 + side * 3.0, Color(1.0, 0.72, 0.30, alpha * 0.84), 1.3)
+
+func _lv_bu_attack_vfx_alpha() -> float:
+	match boss.state:
+		BossActor.State.WINDUP:
+			return clampf((boss.attack_animation_progress() - 0.08) * 1.20, 0.0, 1.0)
+		BossActor.State.DASH:
+			return 0.96
+	return 0.0
 
 func _zhang_he_attack_vfx_alpha() -> float:
 	match boss.state:
@@ -3411,6 +4387,8 @@ func _draw_special_telegraph_visual(telegraph: Telegraph, progress: float, outli
 			_draw_oil_fire_telegraph(telegraph, progress, outline)
 		"earth_blade":
 			_draw_earth_blade_telegraph(telegraph, progress, outline)
+		"lvbu_skyfall":
+			_draw_lv_bu_skyfall_marker(telegraph.origin, progress, telegraph.remaining <= 0.0)
 
 func _draw_arrow_rain_telegraph(telegraph: Telegraph, progress: float, outline: Color) -> void:
 	var center := _pixel_snap(telegraph.origin + Vector2(0.0, 8.0))
@@ -3706,16 +4684,15 @@ func _draw_flashes() -> void:
 			"拖刀斩浪":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(0.96, 0.72, 0.24, 0.98), 25.0, 5)
 			"拖刀刀浪":
-				_draw_guan_line_cut(request, alpha, progress, Color(0.95, 0.76, 0.28, 0.96), 20.0)
+				pass
 			"青龙断浪":
-				_draw_guan_line_cut(request, alpha, progress, Color(0.20, 0.94, 0.66, 0.98), 28.0)
-				_draw_guan_line_cut(request, alpha * 0.56, progress * 0.92, Color(0.99, 0.82, 0.35, 0.82), 11.0)
+				pass
 			"青龙破阵":
 				_draw_guan_line_cut(request, alpha, progress, Color(0.36, 0.96, 0.68, 0.74), 12.0)
 			"武圣刀浪":
-				_draw_guan_line_cut(request, alpha, progress, Color(0.92, 0.76, 0.28, 0.94), 24.0)
-			"武圣震阵", "武圣拖刀震阵":
-				_draw_wusheng_pulse(request, alpha, progress)
+				pass
+			"武圣震阵", "武圣拖刀震阵", "万夫莫开·怒喝震阵":
+				_draw_wushuang_impact_wave(request, progress)
 			"威震华夏·横江":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(0.28, 0.98, 0.72, 0.96), 27.0, 5)
 			"威震华夏·断岳":
@@ -3725,8 +4702,10 @@ func _draw_flashes() -> void:
 				_draw_guan_blade_sweep(request, alpha * 0.64, progress * 0.86, variant + 3, Color(0.26, 0.96, 0.67, 0.92), 17.0, 4)
 			"扫阵横击", "蛇矛挑阵", "据水断桥·掀阵":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(0.94, 0.48, 0.22, 0.92), 16.0, 4)
-			"丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵":
-				_draw_zhang_landing_shockwave(request, alpha, progress)
+			"丈八跃砸", "据水断桥·跃砸":
+				_draw_zhang_fei_landing_effect(request, alpha, progress)
+			"丈八跃砸·前震":
+				_draw_zhang_fei_forward_impact(request, alpha, progress, variant)
 			"断阵横掷", "万夫莫开·横扫":
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(1.0, 0.66, 0.24, 0.96), 25.0, 5)
 			"万夫莫开·掀阵", "万夫莫开·断阵":
@@ -3801,6 +4780,37 @@ func _draw_guan_line_cut(request: AttackRequest, alpha: float, progress: float, 
 		var shard_center := root + direction * (length * (0.34 + float(index) * 0.12)) + perpendicular * side * (half_width * 0.82)
 		draw_line(shard_center, shard_center + direction * (16.0 + float(index) * 3.0), Color(color.r, color.g, color.b, alpha * 0.54), 2.2)
 
+func _draw_zhang_fei_landing_effect(request: AttackRequest, _alpha: float, progress: float) -> void:
+	var first_frame_ratio := ZHANG_FEI_LANDING_FRAME_DURATIONS[0] / (ZHANG_FEI_LANDING_FRAME_DURATIONS[0] + ZHANG_FEI_LANDING_FRAME_DURATIONS[1])
+	var frame_index := 0 if progress < first_frame_ratio else 1
+	var texture: Texture2D = ZHANG_FEI_LANDING_TEXTURES[frame_index]
+	var effect_alpha := 1.0 if frame_index == 0 else 1.0 - clampf((progress - first_frame_ratio) / (1.0 - first_frame_ratio), 0.0, 1.0)
+	var scale := clampf(request.range / 200.0, 0.42, 0.90)
+	var center := request.origin + ZHANG_FEI_WORLD_FOOT_OFFSET
+	draw_set_transform(center, 0.0, Vector2(scale, scale))
+	draw_texture(texture, -ZHANG_FEI_LANDING_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, effect_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_zhang_fei_forward_impact(request: AttackRequest, alpha: float, progress: float, variant: int) -> void:
+	var start_angle := request.direction.angle() - request.half_angle
+	var end_angle := request.direction.angle() + request.half_angle
+	var radius := lerpf(request.inner_radius + 10.0, request.range, clampf(progress * 1.28, 0.0, 1.0))
+	_draw_broken_sweep_band(request.origin, start_angle, end_angle, radius, 13.0, Color(1.0, 0.48, 0.20, alpha * 0.82), alpha, variant + 2, 4)
+	_draw_broken_sweep_band(request.origin, start_angle + 0.08, end_angle - 0.08, maxf(request.inner_radius + 6.0, radius - 11.0), 3.6, Color(1.0, 0.82, 0.42, alpha * 0.76), alpha, variant + 5, 3)
+
+func _draw_wushuang_impact_wave(request: AttackRequest, progress: float) -> void:
+	var frame_count := WUSHUANG_IMPACT_TEXTURES.size()
+	var frame_index := mini(int(floor(progress * float(frame_count))), frame_count - 1)
+	var texture: Texture2D = WUSHUANG_IMPACT_TEXTURES[frame_index]
+	# Frame 4 is the peak; fade only once frame 5 begins.
+	var fade_start := 5.0 / float(frame_count)
+	var effect_alpha := 1.0 if progress < fade_start else 1.0 - clampf((progress - fade_start) / (1.0 - fade_start), 0.0, 1.0)
+	var scale := clampf(request.range / 212.0, 0.58, 1.24)
+	var center := request.origin + Vector2(0.0, 13.0)
+	draw_set_transform(center, 0.0, Vector2(scale, scale))
+	draw_texture(texture, -WUSHUANG_IMPACT_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, effect_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_wusheng_pulse(request: AttackRequest, alpha: float, progress: float) -> void:
 	var radius := request.range * (0.20 + progress * 0.80)
 	draw_arc(request.origin, radius, 0.0, TAU, 28, Color(0.96, 0.76, 0.28, alpha * 0.90), 3.0)
@@ -3846,92 +4856,76 @@ func _draw_firewheel_rings() -> void:
 
 func _draw_guan_blade_waves() -> void:
 	for wave in guan_blade_waves:
-		var center: Vector2 = wave.get("position", Vector2.ZERO)
+		var origin: Vector2 = wave.get("origin", Vector2.ZERO)
 		var direction: Vector2 = wave.get("direction", Vector2.RIGHT)
 		if direction.length_squared() <= 0.01:
 			direction = Vector2.RIGHT
-		var initial_remaining := maxf(1.0, float(wave.get("initial_remaining", wave.get("remaining", 1.0))))
-		var remaining := clampf(float(wave.get("remaining", 0.0)), 0.0, initial_remaining)
-		var travel_progress := clampf(1.0 - remaining / initial_remaining, 0.0, 1.0)
-		var fade_in := clampf(travel_progress / 0.10, 0.0, 1.0)
-		var fade_out := 1.0 - clampf((travel_progress - 0.84) / 0.16, 0.0, 1.0)
-		var alpha := fade_in * fade_out
+		direction = direction.normalized()
+		var frame_max := clampi(int(wave.get("frame_max", 4)), 0, 13)
+		var expansion_frames := _guan_knife_wave_expansion_frames(frame_max)
+		var elapsed := maxf(0.0, float(wave.get("elapsed", 0.0)))
+		var expansion_duration := maxf(0.01, float(wave.get("expansion_duration", GUAN_KNIFE_WAVE_FRAME_DURATION)))
+		var hold_duration := maxf(0.0, float(wave.get("hold_duration", 0.0)))
+		var frame_number := expansion_frames[expansion_frames.size() - 1]
+		var alpha := 1.0
+		var scale := float(wave.get("scale", 0.60))
+		if elapsed < expansion_duration:
+			var frame_index := mini(expansion_frames.size() - 1, int(floor(elapsed / expansion_duration * float(expansion_frames.size()))))
+			frame_number = expansion_frames[frame_index]
+		elif elapsed < expansion_duration + hold_duration:
+			# The peak frame keeps one fixed size during the brief infinite-range hold.
+			pass
+		else:
+			var fade_progress := clampf((elapsed - expansion_duration - hold_duration) / GUAN_KNIFE_WAVE_FADE_DURATION, 0.0, 1.0)
+			var fade_index := mini(GUAN_KNIFE_WAVE_FADE_FRAMES.size() - 1, int(floor(fade_progress * float(GUAN_KNIFE_WAVE_FADE_FRAMES.size()))))
+			frame_number = GUAN_KNIFE_WAVE_FADE_FRAMES[fade_index]
+			alpha = 1.0 - fade_progress
 		if alpha <= 0.01:
 			continue
-		_draw_guan_blade_wave_shape(center, direction.normalized(), str(wave.get("kind", "guan_drag_wave")), alpha, travel_progress)
+		_draw_guan_blade_wave_frame(origin, direction, frame_number, scale, alpha)
 
-func _draw_guan_blade_wave_shape(center: Vector2, direction: Vector2, kind: String, alpha: float, travel_progress: float) -> void:
-	var is_active := kind == "guan_active_wave"
-	var is_wusheng := kind == "guan_wusheng_wave"
-	var length := 122.0 if is_wusheng else (112.0 if is_active else 94.0)
-	var half_width := 42.0 if is_wusheng else (37.0 if is_active else 30.0)
-	var jade := Color(0.12, 0.76, 0.54, alpha * (0.94 if is_wusheng else 0.84))
-	var jade_shadow := Color(0.035, 0.24, 0.20, alpha * 0.76)
-	var gold := Color(1.0, 0.78, 0.28, alpha * (0.98 if is_wusheng else 0.82))
-	var highlight := Color(0.74, 1.0, 0.78, alpha * 0.92)
-	var side := Vector2(-direction.y, direction.x)
-	var origin := center + direction * 7.0
+func _guan_knife_wave_display_scale(frame_max: int, base_scale: float, travel_distance: float, infinite: bool) -> float:
+	if infinite:
+		return maxf(base_scale, GUAN_KNIFE_WUSHENG_FIXED_SCALE)
+	var peak_texture := _guan_knife_wave_texture(frame_max)
+	if peak_texture == null:
+		return base_scale
+	var source_forward_extent := maxf(1.0, peak_texture.get_width() - GUAN_KNIFE_WAVE_SOURCE_ANCHOR.x)
+	var fitted_scale := (travel_distance + GUAN_KNIFE_WAVE_FIT_PADDING) / source_forward_extent
+	return maxf(base_scale, fitted_scale)
 
-	# A single hard-edged crescent is reused for every wave count and rotated by direction.
-	var outer := PackedVector2Array([
-		origin - direction * length * 0.52 + side * half_width * 0.12,
-		origin - direction * length * 0.22 + side * half_width * 0.72,
-		origin + direction * length * 0.02 + side * half_width,
-		origin + direction * length * 0.25 + side * half_width * 0.70,
-		origin + direction * length * 0.52 + side * half_width * 0.14,
-		origin + direction * length * 0.58,
-		origin + direction * length * 0.45 - side * half_width * 0.18,
-		origin + direction * length * 0.23 - side * half_width * 0.69,
-		origin + direction * length * 0.01 - side * half_width,
-		origin - direction * length * 0.22 - side * half_width * 0.72,
-		origin - direction * length * 0.52 - side * half_width * 0.12,
-	])
-	outer.append(outer[0])
-	draw_colored_polygon(outer, Color(jade_shadow.r, jade_shadow.g, jade_shadow.b, jade_shadow.a * 0.56))
-	draw_colored_polygon(outer, Color(jade.r, jade.g, jade.b, jade.a * 0.34))
-	draw_polyline(outer, Color(gold.r, gold.g, gold.b, gold.a * 0.78), 2.6, true)
+func _guan_knife_wave_expansion_frames(frame_max: int) -> Array[int]:
+	var frames: Array[int] = []
+	for frame_number in GUAN_KNIFE_WAVE_EXPANSION_FRAMES:
+		if frame_number <= frame_max:
+			frames.append(frame_number)
+	if frames.is_empty():
+		frames.append(0)
+	return frames
 
-	var core := PackedVector2Array([
-		origin - direction * length * 0.38 + side * half_width * 0.08,
-		origin - direction * length * 0.08 + side * half_width * 0.44,
-		origin + direction * length * 0.18 + side * half_width * 0.66,
-		origin + direction * length * 0.46 + side * half_width * 0.10,
-		origin + direction * length * 0.40 - side * half_width * 0.12,
-		origin + direction * length * 0.16 - side * half_width * 0.42,
-		origin - direction * length * 0.09 - side * half_width * 0.64,
-		origin - direction * length * 0.38 - side * half_width * 0.08,
-	])
-	core.append(core[0])
-	draw_colored_polygon(core, Color(jade.r, jade.g, jade.b, jade.a * 0.72))
-	draw_polyline(core, Color(highlight.r, highlight.g, highlight.b, highlight.a * 0.84), 2.0, true)
+func _guan_knife_wave_texture(frame_number: int) -> Texture2D:
+	if guan_knife_wave_frames.has(frame_number):
+		return guan_knife_wave_frames[frame_number] as Texture2D
+	var fallback := frame_number
+	while fallback > 0:
+		fallback -= 1
+		if guan_knife_wave_frames.has(fallback):
+			return guan_knife_wave_frames[fallback] as Texture2D
+	return null
 
-	# Broken edge fragments sell weight without recreating the original water texture.
-	for index in range(3):
-		var shard_ratio := float(index) / 2.0
-		var shard_root := origin - direction * length * (0.28 - shard_ratio * 0.16) + side * (half_width * (0.54 + shard_ratio * 0.24))
-		var shard_tip := shard_root + direction * (12.0 + shard_ratio * 10.0) + side * (4.0 - shard_ratio * 8.0)
-		var shard := PackedVector2Array([shard_root - side * 2.4, shard_tip, shard_root + side * 2.4])
-		draw_colored_polygon(shard, Color(gold.r, gold.g, gold.b, gold.a * (0.46 - shard_ratio * 0.08)))
-
-	_draw_guan_ground_scars(origin, direction, side, length, half_width, alpha, travel_progress)
-
-func _draw_guan_ground_scars(origin: Vector2, direction: Vector2, side: Vector2, length: float, half_width: float, alpha: float, travel_progress: float) -> void:
-	var ground := origin + Vector2(0.0, 15.0)
-	var scar_length := length * (0.62 + travel_progress * 0.18)
-	var scar_width := maxf(1.4, half_width * 0.055)
-	var scar_shadow := Color(0.02, 0.12, 0.10, alpha * 0.52)
-	var scar_glow := Color(0.45, 0.96, 0.62, alpha * 0.68)
-	for index in range(3):
-		var lane := float(index) - 1.0
-		var lane_offset := side * lane * half_width * 0.38
-		var start := ground - direction * scar_length * 0.52 + lane_offset
-		var middle := ground - direction * scar_length * 0.06 + lane_offset + side * (2.0 if index == 0 else -2.0)
-		var finish := ground + direction * scar_length * 0.38 + lane_offset * 0.76
-		var points := PackedVector2Array([start, middle, finish])
-		draw_polyline(points, scar_shadow, scar_width + 2.2, true)
-		draw_polyline(points, scar_glow, scar_width, true)
-		if index != 1:
-			draw_line(middle - side * 3.0, middle + side * 3.0, Color(1.0, 0.78, 0.30, alpha * 0.46), 1.2)
+func _draw_guan_blade_wave_frame(center: Vector2, direction: Vector2, frame_number: int, scale: float, alpha: float) -> void:
+	var texture := _guan_knife_wave_texture(frame_number)
+	if texture == null:
+		return
+	var transform_scale := Vector2(scale, scale)
+	var rotation := direction.angle()
+	if direction.x < -0.08:
+		# Mirror left-facing waves so the ground contact remains upright instead of turning upside down.
+		rotation -= PI
+		transform_scale.x = -scale
+	draw_set_transform(center, rotation, transform_scale)
+	draw_texture(texture, -GUAN_KNIFE_WAVE_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_firewheel_texture(center: Vector2, scale: float, rotation: float, color: Color) -> void:
 	draw_set_transform(center, rotation, Vector2(scale, scale))
@@ -4149,9 +5143,10 @@ func _draw_pickups() -> void:
 		for drop in loot.drops:
 			var at: Vector2 = drop.get("position", Vector2.ZERO)
 			var pulse := 0.78 + 0.22 * (sin(visual_time * 7.0 + at.x * 0.03) + 1.0) * 0.5
-			draw_circle(at + Vector2(-4, 0), 5.0, Color(0.42, 0.90, 1.0, pulse))
-			draw_circle(at + Vector2(4, 0), 5.0, Color(0.95, 0.76, 0.25, pulse))
-			draw_arc(at, 8.0, 0.0, TAU, 12, Color(0.86, 0.96, 1.0, pulse), 1.0)
+			var coin_size := LOOT_COIN_DISPLAY_SIZE * (0.94 + pulse * 0.08)
+			var coin_rect := Rect2(at - coin_size * 0.5, coin_size)
+			draw_circle(at + Vector2(0.0, 1.0), 8.0, Color(0.95, 0.72, 0.28, 0.10 * pulse))
+			draw_texture_rect_region(LOOT_COIN_TEXTURE, coin_rect, LOOT_COIN_SOURCE_RECT, Color(1.0, 0.94, 0.72, 0.62 + pulse * 0.16))
 	for pickup in pickup_marks:
 		var alpha := clampf(pickup.remaining / 0.45, 0.0, 1.0)
 		draw_circle(pickup.position, 6.0, Color(0.95, 0.78, 0.26, alpha))
@@ -4166,18 +5161,17 @@ func _draw_tianji_marks() -> void:
 		var center: Vector2 = mark.get("position", Vector2.ZERO)
 		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
 		if skill_id == "seven_star_lightning":
-			_draw_tianji_lightning(center, alpha, progress, phase)
-		elif skill_id == "xun_wind_break":
+			_draw_tianji_lightning(center, alpha, progress, phase, int(mark.get("rank", 1)), float(mark.get("radius", 72.0)), int(mark.get("seed", 0)))
+		elif skill_id == "xun_wind_break" and phase == "windup":
 			_draw_tianji_wind(center, direction, alpha, progress, phase, float(mark.get("range", 206.0)), float(mark.get("width", 86.0)))
-		elif skill_id == "eight_trigram_tide":
-			_draw_tianji_water(center, alpha, progress, phase)
 		elif skill_id == "fire_rain_burning":
 			_draw_tianji_fire_rain(center, alpha, progress, phase)
 		elif skill_id == "arrow_support_volley":
 			_draw_tianji_arrow_volley(center, alpha, progress, phase, float(mark.get("radius", TIANJI_ARROW_VOLLEY_RADIUS)))
 
-func _draw_tianji_lightning(center: Vector2, alpha: float, progress: float, phase: String) -> void:
-	var radius := 72.0
+func _draw_tianji_lightning(center: Vector2, alpha: float, progress: float, phase: String, rank: int, radius: float, seed: int) -> void:
+	rank = clampi(rank, 1, 5)
+	radius = maxf(1.0, radius)
 	var pale := Color(0.55, 0.80, 1.0, alpha * 0.56)
 	if phase == "windup":
 		var pulse_radius := radius * (0.28 + progress * 0.72)
@@ -4188,15 +5182,59 @@ func _draw_tianji_lightning(center: Vector2, alpha: float, progress: float, phas
 			var direction := Vector2.from_angle(angle)
 			draw_line(center + direction * (pulse_radius - 8.0), center + direction * pulse_radius, pale, 2.0)
 		draw_arc(center, pulse_radius, 0.0, TAU, 18, Color(0.42, 0.66, 0.94, alpha * 0.46), 1.4)
+		var strike_warning := clampf((progress - 0.72) / 0.28, 0.0, 1.0)
+		if strike_warning > 0.0:
+			var warning_radius := radius * (0.16 + strike_warning * 0.10)
+			draw_circle(center, warning_radius, Color(0.62, 0.84, 1.0, strike_warning * 0.18))
+			draw_arc(center, warning_radius, 0.0, TAU, 18, Color(0.82, 0.94, 1.0, strike_warning * 0.72), 1.8)
 		return
-	var flash_alpha := alpha * (0.92 if progress < 0.22 else 0.48)
-	var top := center + Vector2(0.0, -178.0)
-	var points := [top, center + Vector2(-10.0, -126.0), center + Vector2(7.0, -76.0), center + Vector2(-5.0, -28.0), center]
-	for index in range(points.size() - 1):
-		draw_line(points[index], points[index + 1], Color(0.76, 0.92, 1.0, flash_alpha), 3.4)
-		draw_line(points[index] + Vector2(2.0, 0.0), points[index + 1] + Vector2(2.0, 0.0), Color(0.40, 0.61, 0.98, flash_alpha * 0.72), 1.2)
-	draw_circle(center, 18.0 + progress * 28.0, Color(0.46, 0.72, 1.0, alpha * 0.18))
-	draw_arc(center, 26.0 + progress * 42.0, 0.0, TAU, 18, Color(0.70, 0.88, 1.0, alpha * 0.72), 2.0)
+	var sequence: Array = TIANJI_LIGHTNING_FRAME_SEQUENCES.get(rank, TIANJI_LIGHTNING_FRAME_SEQUENCES[1]) as Array
+	var frame_index := mini(int(floor(progress * float(sequence.size()))), sequence.size() - 1)
+	var texture: Texture2D = TIANJI_LIGHTNING_TEXTURES.get(str(sequence[frame_index])) as Texture2D
+	if texture == null:
+		return
+	var fade_progress := clampf((progress - 0.72) / 0.28, 0.0, 1.0)
+	var effect_alpha := 1.0 - fade_progress * 0.65
+	var scale := maxf(0.12, radius / 570.0)
+	_draw_tianji_lightning_sky_entry(center, rank, scale, effect_alpha, progress, seed)
+	draw_set_transform(center, 0.0, Vector2(scale, scale))
+	draw_texture(texture, -TIANJI_LIGHTNING_SOURCE_IMPACT_ANCHOR, Color(1.0, 1.0, 1.0, effect_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_tianji_lightning_sky_entry(center: Vector2, rank: int, scale: float, alpha: float, progress: float, seed: int) -> void:
+	var visible_rect := _visible_battle_rect()
+	var entry := center + (TIANJI_LIGHTNING_SOURCE_ENTRY_ANCHOR - TIANJI_LIGHTNING_SOURCE_IMPACT_ANCHOR) * scale
+	var root := Vector2(entry.x, visible_rect.position.y + TIANJI_LIGHTNING_SKY_EDGE_OFFSET)
+	if entry.y <= root.y + 4.0:
+		return
+	var seed_value := float(seed)
+	root.x += sin(seed_value * 0.013 + floor(visual_time * 20.0) * 1.7) * 12.0
+	root.x = clampf(root.x, visible_rect.position.x + 12.0, visible_rect.end.x - 12.0)
+	var segment_count := clampi(int(ceili(root.distance_to(entry) / 46.0)), 3, 10)
+	var points := PackedVector2Array([root])
+	for step in range(1, segment_count):
+		var fraction := float(step) / float(segment_count)
+		var base := root.lerp(entry, fraction)
+		var jitter := sin(seed_value * 0.021 + float(step) * 2.37 + floor(visual_time * 24.0) * 0.91) * (6.0 + float(rank) * 0.75)
+		points.append(base + Vector2(jitter, 0.0))
+	points.append(entry)
+	var entry_alpha := alpha * (0.78 + 0.22 * sin(progress * PI))
+	draw_polyline(points, Color(0.26, 0.58, 1.0, entry_alpha * 0.30), 7.0 + float(rank) * 0.45, true)
+	draw_polyline(points, Color(0.80, 0.92, 1.0, entry_alpha * 0.90), 2.0 + float(rank) * 0.12, true)
+	draw_circle(root, 8.0 + float(rank) * 1.3, Color(0.56, 0.78, 1.0, entry_alpha * 0.28))
+
+func _visible_battle_rect() -> Rect2:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if battle_camera != null and is_instance_valid(battle_camera) and viewport_size.x > 0.0 and viewport_size.y > 0.0:
+		var zoom := battle_camera.zoom
+		var visible_size := Vector2(
+			viewport_size.x / maxf(0.01, zoom.x),
+			viewport_size.y / maxf(0.01, zoom.y)
+		)
+		return Rect2(battle_camera.get_screen_center_position() - visible_size * 0.5, visible_size)
+	var fallback_center := player.position if player != null else bounds.get_center()
+	var fallback_size := viewport_size if viewport_size.x > 0.0 and viewport_size.y > 0.0 else Vector2(1280.0, 720.0)
+	return Rect2(fallback_center - fallback_size * 0.5, fallback_size)
 
 func _draw_tianji_wind(origin: Vector2, direction: Vector2, alpha: float, progress: float, phase: String, requested_range: float, requested_width: float) -> void:
 	var forward := direction.normalized()
@@ -4205,6 +5243,8 @@ func _draw_tianji_wind(origin: Vector2, direction: Vector2, alpha: float, progre
 	var perpendicular := Vector2(-forward.y, forward.x)
 	var range := requested_range if requested_range > 0.0 else 206.0
 	var width := requested_width if requested_width > 0.0 else 86.0
+	if phase != "windup" and requested_range > 0.0:
+		origin += forward * ((range + width * 2.0) * progress - width)
 	var spread := range * (progress if phase == "windup" else 1.0)
 	for index in range(5):
 		var lane := float(index - 2) * width * 0.18
@@ -4220,39 +5260,144 @@ func _draw_tianji_wind(origin: Vector2, direction: Vector2, alpha: float, progre
 		draw_line(origin + perpendicular * width * 0.5, origin + forward * range + perpendicular * width * 0.30, Color(0.44, 0.76, 0.62, edge_alpha), 1.5)
 		draw_line(origin - perpendicular * width * 0.5, origin + forward * range - perpendicular * width * 0.30, Color(0.44, 0.76, 0.62, edge_alpha), 1.5)
 
-func _draw_tianji_water(center: Vector2, alpha: float, progress: float, phase: String) -> void:
-	var radius := 110.0
-	var ripple := radius * (0.28 + 0.72 * (progress if phase == "windup" else 0.72 + sin(visual_time * 4.0) * 0.08))
-	var color := Color(0.34, 0.78, 0.84, alpha * (0.42 if phase == "windup" else 0.30))
-	_draw_ellipse_arc(center + Vector2(0.0, 12.0), Vector2(ripple, ripple * 0.32), 0.0, TAU, 20, color, 2.0)
-	if phase == "windup":
-		for index in range(8):
-			var angle := TAU * float(index) / 8.0 + visual_time * 0.25
-			var point := center + Vector2.from_angle(angle) * ripple
-			draw_rect(Rect2(point - Vector2(2.0, 1.0), Vector2(4.0, 2.0)), Color(0.58, 0.88, 0.91, alpha * 0.50))
-		return
-	for index in range(3):
-		var inner_radius := radius * (0.26 + float(index) * 0.20)
-		var phase_offset := visual_time * (2.2 + float(index)) + float(index) * 0.9
-		var arc_start := phase_offset
-		_draw_ellipse_arc(center + Vector2(0.0, 12.0), Vector2(inner_radius, inner_radius * 0.30), arc_start, arc_start + PI * 1.25, 12, Color(0.52, 0.90, 0.94, alpha * (0.42 - float(index) * 0.07)), 1.5)
+func _draw_tianji_wind_marks() -> void:
+	for mark in tianji_wind_marks:
+		var duration := maxf(0.01, float(mark.get("duration", 0.42)))
+		var elapsed := maxf(0.0, float(mark.get("elapsed", 0.0)))
+		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		var formation_duration := float(TIANJI_WIND_FORMATION_FRAMES.size()) * TIANJI_WIND_FORMATION_FRAME_DURATION
+		var collapse_duration := float(TIANJI_WIND_COLLAPSE_FRAMES.size()) * TIANJI_WIND_COLLAPSE_FRAME_DURATION
+		var collapse_start := maxf(formation_duration, duration - collapse_duration)
+		var frame_index := 0
+		var texture: Texture2D
+		var alpha := 1.0
+		if elapsed < formation_duration:
+			frame_index = mini(int(floor(elapsed / TIANJI_WIND_FORMATION_FRAME_DURATION)), TIANJI_WIND_FORMATION_FRAMES.size() - 1)
+			texture = TIANJI_WIND_TEXTURES[TIANJI_WIND_FORMATION_FRAMES[frame_index]]
+		elif elapsed >= collapse_start:
+			var collapse_elapsed := elapsed - collapse_start
+			frame_index = mini(int(floor(collapse_elapsed / TIANJI_WIND_COLLAPSE_FRAME_DURATION)), TIANJI_WIND_COLLAPSE_FRAMES.size() - 1)
+			texture = TIANJI_WIND_TEXTURES[TIANJI_WIND_COLLAPSE_FRAMES[frame_index]]
+			alpha = clampf(1.0 - collapse_elapsed / collapse_duration * 0.12, 0.0, 1.0)
+		else:
+			var core_elapsed := elapsed - formation_duration
+			frame_index = int(floor(core_elapsed / TIANJI_WIND_CORE_FRAME_DURATION)) % TIANJI_WIND_CORE_FRAMES.size()
+			texture = TIANJI_WIND_TEXTURES[TIANJI_WIND_CORE_FRAMES[frame_index]]
+		if texture == null:
+			continue
+		var origin: Vector2 = mark.get("position", Vector2.ZERO)
+		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
+		if direction.length_squared() <= 0.01:
+			direction = Vector2.RIGHT
+		direction = direction.normalized()
+		var travel_distance := maxf(1.0, float(mark.get("travel_distance", 1.0)))
+		var current_origin := origin + direction * travel_distance * progress
+		var width := maxf(48.0, float(mark.get("width", 86.0)))
+		var scale := clampf(width / 220.0, 0.28, 1.32)
+		draw_set_transform(current_origin, 0.0, Vector2(scale, scale))
+		draw_texture(texture, -TIANJI_WIND_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_tianji_water_marks() -> void:
+	for mark in tianji_water_marks:
+		var elapsed := maxf(0.0, float(mark.get("elapsed", 0.0)))
+		var origin: Vector2 = mark.get("origin", Vector2.ZERO)
+		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
+		if direction.length_squared() <= 0.01:
+			direction = Vector2.RIGHT
+		direction = direction.normalized()
+		var travel_distance := maxf(1.0, float(mark.get("travel_distance", 340.0)))
+		var width := maxf(96.0, float(mark.get("width", 124.0)))
+		var rank := clampi(int(mark.get("rank", 1)), 1, 5)
+		var surge_duration := maxf(0.60, float(mark.get("surge_duration", 1.55)))
+		var reflux_delay := maxf(0.0, float(mark.get("reflux_delay", 0.16 if rank >= 5 else 0.0)))
+		var reflux_duration := maxf(0.0, float(mark.get("reflux_duration", 0.72 if rank >= 5 else 0.0)))
+		var layer_count := clampi(int(mark.get("layer_count", _tianji_water_layer_count(rank))), 3, 5)
+		var layer_stagger := maxf(0.18, float(mark.get("layer_stagger", _tianji_water_layer_stagger(layer_count))))
+		var layer_duration := surge_duration + (reflux_delay + reflux_duration if rank >= 5 else 0.0)
+		var perpendicular := Vector2(-direction.y, direction.x)
+		for layer in range(layer_count - 1, -1, -1):
+			var local_elapsed := elapsed - float(layer) * layer_stagger
+			if local_elapsed < 0.0 or local_elapsed > layer_duration + 0.18:
+				continue
+			var profile_index := clampi(layer, 0, TIANJI_WATER_LAYER_SIZE_RATIOS.size() - 1)
+			var layer_width := width * float(TIANJI_WATER_LAYER_SIZE_RATIOS[profile_index])
+			var layer_alpha := float(TIANJI_WATER_LAYER_ALPHAS[profile_index])
+			var layer_offset := perpendicular * width * float(TIANJI_WATER_LAYER_Y_RATIOS[profile_index])
+			var life_alpha := 1.0
+			if local_elapsed > layer_duration:
+				life_alpha = clampf(1.0 - (local_elapsed - layer_duration) / 0.18, 0.0, 1.0)
+			layer_alpha *= life_alpha
+			var frame_offset := int(TIANJI_WATER_LAYER_FRAME_OFFSETS[profile_index])
+			var animation_speed := float(TIANJI_WATER_LAYER_SPEEDS[profile_index])
+			if local_elapsed <= surge_duration:
+				var progress := clampf(local_elapsed / surge_duration, 0.0, 1.0)
+				var current := origin + direction * travel_distance * progress + layer_offset
+				_draw_tianji_water_wave(current, direction, layer_width, rank, progress, layer_alpha, surge_duration, frame_offset, animation_speed)
+			elif rank >= 5 and reflux_duration > 0.0 and local_elapsed > surge_duration + reflux_delay:
+				var reflux_progress := clampf((local_elapsed - surge_duration - reflux_delay) / reflux_duration, 0.0, 1.0)
+				var end := origin + direction * travel_distance
+				var current := end.lerp(origin, reflux_progress) + layer_offset
+				_draw_tianji_water_wave(current, -direction, layer_width * 0.88, rank, reflux_progress, layer_alpha * 0.76, reflux_duration, frame_offset + 1, animation_speed * 1.06)
+
+func _tianji_water_layer_count(rank: int) -> int:
+	return clampi(2 + ceili(float(clampi(rank, 1, 5)) / 2.0), 3, 5)
+
+func _tianji_water_layer_stagger(layer_count: int) -> float:
+	return clampf(0.18 + float(clampi(layer_count, 3, 5) - 3) * 0.04, 0.18, 0.26)
+
+func _draw_tianji_water_wave(center: Vector2, direction: Vector2, width: float, rank: int, progress: float, alpha: float, wave_duration: float = 1.55, frame_offset: int = 0, animation_speed: float = 1.0) -> void:
+	wave_duration = maxf(0.35, wave_duration)
+	var formation_duration := 0.30
+	var collapse_duration := minf(0.52, wave_duration * 0.34)
+	var collapse_start := 1.0 - collapse_duration / wave_duration
+	var frame_index := 0
+	var frame_alpha := alpha
+	var animated_elapsed := clampf(progress * wave_duration * maxf(0.75, animation_speed) + float(frame_offset) * TIANJI_WATER_PEAK_FRAME_DURATION, 0.0, wave_duration)
+	var animated_progress := animated_elapsed / wave_duration
+	if animated_progress < formation_duration / wave_duration:
+		frame_index = clampi(int(floor(animated_elapsed / TIANJI_WATER_FORMATION_FRAME_DURATION)), 0, 5)
+	elif animated_progress >= collapse_start:
+		var collapse_progress := clampf((animated_progress - collapse_start) / (1.0 - collapse_start), 0.0, 1.0)
+		frame_index = 14 + clampi(int(floor(collapse_progress * 10.0)), 0, 9)
+		frame_alpha *= 1.0 - collapse_progress * 0.55
+	else:
+		var core_elapsed := animated_elapsed - formation_duration
+		frame_index = 6 + (int(floor(core_elapsed / TIANJI_WATER_PEAK_FRAME_DURATION)) % 8)
+	var texture: Texture2D = TIANJI_WATER_TEXTURES[clampi(frame_index, 0, TIANJI_WATER_TEXTURES.size() - 1)]
+	var middle_texture: Texture2D = TIANJI_WATER_TEXTURES[clampi(frame_index + 1, 0, TIANJI_WATER_TEXTURES.size() - 1)]
+	var scale := clampf(width / 255.0, 0.58, 1.28)
+	var horizontal_scale := 1.16 + float(rank) * 0.10
+	var rotation := direction.angle()
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var wake_alpha := frame_alpha * 0.20
+	_draw_ellipse_arc(center - direction * (width * 0.12) + Vector2(0.0, 11.0), Vector2(width * 0.62, width * 0.18), rotation, rotation + PI, 18, Color(0.27, 0.75, 0.88, wake_alpha), 3.0)
+	# Three restrained texture layers create depth without turning the flood into
+	# a particle swarm: rear wake, offset middle swell, and the readable crest.
+	var trail_center := center - direction * (width * 0.56) + perpendicular * sin(progress * PI) * width * 0.06
+	draw_set_transform(trail_center + Vector2(0.0, -8.0), rotation, Vector2(scale * horizontal_scale * 0.92, scale * 0.84))
+	draw_texture(texture, -TIANJI_WATER_SOURCE_ANCHOR, Color(0.70, 0.91, 0.98, frame_alpha * 0.24))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var middle_center := center - direction * (width * 0.22) + perpendicular * sin(progress * PI + 1.2) * width * 0.045
+	draw_set_transform(middle_center + Vector2(0.0, -12.0), rotation, Vector2(scale * horizontal_scale * 1.04, scale * 0.78))
+	draw_texture(middle_texture, -TIANJI_WATER_SOURCE_ANCHOR, Color(0.76, 0.94, 1.0, frame_alpha * 0.38))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_set_transform(center + Vector2(0.0, -8.0), rotation, Vector2(scale * horizontal_scale, scale * 0.82))
+	draw_texture(texture, -TIANJI_WATER_SOURCE_ANCHOR, Color(0.82, 0.96, 1.0, frame_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_tianji_fire_rain(center: Vector2, alpha: float, progress: float, phase: String) -> void:
-	var ground_center := center + Vector2(0.0, 11.0)
 	if phase == "windup":
-		var pulse := 20.0 + progress * 34.0
-		_draw_ellipse_arc(ground_center, Vector2(pulse, pulse * 0.34), 0.0, TAU, 16, Color(0.94, 0.45, 0.20, alpha * 0.48), 1.6)
 		for index in range(5):
 			var x_offset := float(index - 2) * 9.0
 			draw_line(center + Vector2(x_offset, -60.0 - progress * 34.0), center + Vector2(x_offset * 0.45, -24.0), Color(1.0, 0.72, 0.34, alpha * 0.34), 1.4)
 		return
+	var ground_center := center + Vector2(0.0, 11.0)
 	var flame_alpha := alpha * (0.60 + sin(visual_time * 15.0 + center.x * 0.04) * 0.12)
 	if progress < 0.18:
 		var meteor_top := center + Vector2(-8.0, -166.0 + progress * 520.0)
 		draw_line(meteor_top, center + Vector2(2.0, -4.0), Color(1.0, 0.86, 0.50, alpha * 0.80), 3.0)
 		draw_line(meteor_top + Vector2(5.0, -12.0), center + Vector2(6.0, -4.0), Color(0.90, 0.28, 0.12, alpha * 0.64), 1.4)
-	_draw_ellipse_arc(ground_center, Vector2(34.0 + sin(visual_time * 5.0 + center.y) * 4.0, 12.0), 0.0, TAU, 16, Color(0.96, 0.36, 0.13, flame_alpha * 0.50), 2.0)
-	draw_circle(ground_center, 12.0, Color(0.82, 0.18, 0.08, flame_alpha * 0.24))
 	for index in range(6):
 		var phase_offset := visual_time * (3.0 + float(index % 3)) + float(index) * 1.73 + center.x * 0.02
 		var ember_position := ground_center + Vector2(sin(phase_offset) * (12.0 + float(index % 3) * 7.0), -4.0 - fmod(phase_offset * 14.0, 28.0))
@@ -4261,37 +5406,191 @@ func _draw_tianji_fire_rain(center: Vector2, alpha: float, progress: float, phas
 func _draw_tianji_arrow_volley(center: Vector2, alpha: float, progress: float, phase: String, radius: float) -> void:
 	var ground_center := center + Vector2(0.0, 9.0)
 	var outer_radius := maxf(48.0, radius)
-	if phase == "windup":
-		var pulse_radius := outer_radius * progress
-		draw_arc(ground_center, outer_radius, 0.0, TAU, 24, Color(0.73, 0.62, 0.34, alpha * 0.38), 1.4)
-		draw_arc(ground_center, pulse_radius, 0.0, TAU, 20, Color(0.88, 0.76, 0.43, alpha * 0.62), 2.0)
-		for index in range(16):
-			if index % 2 != 0:
-				continue
-			var angle := TAU * float(index) / 16.0
-			var radial := Vector2.from_angle(angle)
-			draw_line(ground_center + radial * (outer_radius - 8.0), ground_center + radial * outer_radius, Color(0.82, 0.70, 0.39, alpha * 0.48), 2.0)
+	if phase != "windup":
 		return
-	var fall_progress := clampf(progress * 3.6, 0.0, 1.0)
-	for index in range(TIANJI_ARROW_VOLLEY_ARROW_COUNT):
-		var angle := float(index) * 2.39996323 + 0.23
-		var distance := sqrt((float(index) + 0.5) / float(TIANJI_ARROW_VOLLEY_ARROW_COUNT)) * outer_radius * 0.86
-		var target := ground_center + Vector2.from_angle(angle) * distance
-		var origin := ground_center + Vector2((float(index) - 6.0) * 4.0 + sin(float(index) * 1.71) * 7.0, -310.0 - float(index % 3) * 15.0)
-		var arrow_progress := clampf(fall_progress - float(index % 4) * 0.055, 0.0, 1.0)
-		var tip := origin.lerp(target, arrow_progress)
-		var flight_direction := (target - origin).normalized()
-		var perpendicular := Vector2(-flight_direction.y, flight_direction.x)
-		var tail := tip - flight_direction * (18.0 + float(index % 3) * 3.0)
-		var arrow_alpha := alpha * (0.34 + float(index % 4) * 0.08)
-		draw_line(tail, tip, Color(0.84, 0.73, 0.45, arrow_alpha), 1.7)
-		draw_line(tip - flight_direction * 7.0 + perpendicular * 3.5, tip, Color(0.94, 0.86, 0.61, arrow_alpha), 1.0)
-		draw_line(tip - flight_direction * 7.0 - perpendicular * 3.5, tip, Color(0.94, 0.86, 0.61, arrow_alpha), 1.0)
-		if arrow_progress >= 0.86:
-			var burst := clampf((arrow_progress - 0.86) / 0.14, 0.0, 1.0)
-			draw_arc(target, 5.0 + burst * 11.0, 0.0, TAU, 10, Color(0.88, 0.70, 0.36, arrow_alpha * (1.0 - burst * 0.55)), 1.2)
-			draw_rect(Rect2(target - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), Color(0.98, 0.87, 0.55, arrow_alpha * (1.0 - burst * 0.35)))
-	draw_arc(ground_center, outer_radius, 0.0, TAU, 24, Color(0.71, 0.58, 0.30, alpha * 0.18), 1.0)
+	var pulse_radius := outer_radius * progress
+	draw_arc(ground_center, outer_radius, 0.0, TAU, 24, Color(0.73, 0.62, 0.34, alpha * 0.38), 1.4)
+	draw_arc(ground_center, pulse_radius, 0.0, TAU, 20, Color(0.88, 0.76, 0.43, alpha * 0.62), 2.0)
+	for index in range(16):
+		if index % 2 != 0:
+			continue
+		var angle := TAU * float(index) / 16.0
+		var radial := Vector2.from_angle(angle)
+		draw_line(ground_center + radial * (outer_radius - 8.0), ground_center + radial * outer_radius, Color(0.82, 0.70, 0.39, alpha * 0.48), 2.0)
+
+func _draw_tianji_arrow_marks() -> void:
+	for volley in tianji_arrow_marks:
+		var elapsed := float(volley.get("elapsed", 0.0))
+		var center: Vector2 = volley.get("center", Vector2.ZERO)
+		var radius := float(volley.get("radius", TIANJI_ARROW_VOLLEY_RADIUS))
+		var arrows: Array = volley.get("arrows", []) as Array
+		if bool(volley.get("show_ground_ring", true)):
+			_draw_tianji_arrow_ground_ring(center, radius, elapsed)
+		for arrow_value in arrows:
+			var arrow: Dictionary = arrow_value as Dictionary
+			_draw_tianji_arrow(arrow, elapsed)
+
+func _draw_tianji_fire_rain_marks() -> void:
+	var visible_rect := _visible_battle_rect()
+	for index in range(tianji_fire_rain_marks.size()):
+		var meteor: Dictionary = tianji_fire_rain_marks[index] as Dictionary
+		var elapsed := float(meteor.get("elapsed", 0.0))
+		var final_meteor := bool(meteor.get("final", false))
+		var frame_duration := maxf(0.01, float(meteor.get("frame_duration", 0.035)))
+		var flight_duration := TIANJI_FIRE_RAIN_FINAL_FLIGHT_DURATION if final_meteor else 0.34
+		var feedback_elapsed := flight_duration + (frame_duration * float(TIANJI_FIRE_RAIN_FINAL_LANDING_FRAME) if final_meteor else 0.0)
+		if elapsed >= feedback_elapsed and not bool(meteor.get("impact_feedback_played", false)):
+			meteor["impact_feedback_played"] = true
+			if final_meteor:
+				var final_rank := int(meteor.get("rank", 1))
+				shake_remaining = maxf(shake_remaining, 0.70 if final_rank >= 5 else 0.48)
+				shake_strength = maxf(shake_strength, 32.0 if final_rank >= 5 else 22.0)
+			elif bool(meteor.get("wave_last", false)):
+				shake_remaining = maxf(shake_remaining, 0.18)
+				shake_strength = maxf(shake_strength, 8.0)
+			else:
+				shake_remaining = maxf(shake_remaining, 0.09)
+				shake_strength = maxf(shake_strength, 5.0)
+			tianji_fire_rain_marks[index] = meteor
+		var frame_count := int(meteor.get("frame_count", 1))
+		var animation_duration := float(frame_count) * frame_duration
+		var target: Vector2 = meteor.get("target", Vector2.ZERO)
+		var scale := float(meteor.get("scale", 0.46))
+		var sky_distance := float(meteor.get("sky_distance", 220.0))
+		if elapsed < 0.0:
+			continue
+		var impact_elapsed := maxf(0.0, elapsed - flight_duration)
+		var position := target
+		var rotation := 0.0
+		var alpha := 1.0
+		if elapsed < flight_duration:
+			var progress := clampf(elapsed / flight_duration, 0.0, 1.0)
+			var fall_progress := progress * progress * (3.0 - 2.0 * progress)
+			position = Vector2(target.x, visible_rect.position.y - sky_distance).lerp(target + Vector2(0.0, -12.0), fall_progress)
+			rotation = lerpf(-0.18, 0.10, progress)
+			var trail_end := position + Vector2(0.0, -58.0 - progress * 34.0).rotated(rotation)
+			draw_line(position + Vector2(0.0, 18.0), trail_end, Color(1.0, 0.68, 0.25, 0.32), 5.0 if final_meteor else 2.8)
+			draw_line(position + Vector2(0.0, 10.0), trail_end, Color(1.0, 0.92, 0.64, 0.58), 1.4 if final_meteor else 0.9)
+		else:
+			if impact_elapsed > animation_duration:
+				alpha = clampf(1.0 - (impact_elapsed - animation_duration) / 0.28, 0.0, 1.0)
+			if alpha <= 0.0:
+				continue
+		var frame_index := clampi(int(floor(maxf(0.0, impact_elapsed) / frame_duration)), 0, frame_count - 1)
+		var textures: Array[Texture2D] = TIANJI_FIRE_RAIN_FINAL_TEXTURES if final_meteor else TIANJI_FIRE_RAIN_METEOR_TEXTURES
+		var texture: Texture2D = textures[frame_index]
+		if texture == null:
+			continue
+		# The source sequence has a fixed canvas and its impact point sits near the lower centre.
+		var anchor_ratio := TIANJI_FIRE_RAIN_FINAL_ANCHOR_RATIO if final_meteor else Vector2(0.5, 0.72)
+		var anchor := Vector2(texture.get_width() * anchor_ratio.x, texture.get_height() * anchor_ratio.y)
+		if final_meteor:
+			_draw_tianji_fire_rain_ground_ring(target, float(meteor.get("radius", 0.0)), elapsed, flight_duration, impact_elapsed, alpha)
+		draw_set_transform(position, rotation, Vector2(scale, scale))
+		draw_texture(texture, -anchor, Color(1.0, 1.0, 1.0, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_tianji_fire_rain_ground_ring(center: Vector2, radius: float, elapsed: float, flight_duration: float, impact_elapsed: float, alpha: float) -> void:
+	if radius <= 1.0 or elapsed < -0.10:
+		return
+	var anticipation := clampf((elapsed + 0.10) / 0.24, 0.0, 1.0)
+	var fade := alpha
+	if impact_elapsed > 0.0:
+		fade *= clampf(1.0 - impact_elapsed / 1.15, 0.0, 1.0)
+	var pulse := 0.94 + 0.06 * sin(visual_time * 10.0)
+	var ring_radius := radius * (0.96 + 0.025 * pulse)
+	var ring_alpha := fade * (0.20 + anticipation * 0.24)
+	draw_circle(center, radius * 0.78, Color(1.0, 0.30, 0.08, ring_alpha * 0.07))
+	draw_arc(center, ring_radius, 0.0, TAU, 40, Color(1.0, 0.68, 0.24, ring_alpha), 2.0, true)
+	if elapsed < flight_duration:
+		var marker_progress := clampf(elapsed / maxf(0.01, flight_duration), 0.0, 1.0)
+		var marker_radius := lerpf(radius * 0.20, radius * 0.86, marker_progress)
+		draw_arc(center, marker_radius, 0.0, TAU, 28, Color(1.0, 0.90, 0.54, ring_alpha * 0.72), 1.2, true)
+
+func _draw_tianji_arrow_ground_ring(center: Vector2, radius: float, elapsed: float) -> void:
+	var fade := clampf(1.0 - elapsed / 0.42, 0.0, 1.0)
+	if fade <= 0.0:
+		return
+	var pulse := (0.18 + sin(elapsed * 8.0) * 0.04) * fade
+	draw_arc(center, maxf(48.0, radius), 0.0, TAU, 24, Color(0.71, 0.58, 0.30, pulse), 1.0)
+
+func _draw_tianji_arrow(arrow: Dictionary, elapsed: float) -> void:
+	var delay := float(arrow.get("delay", 0.0))
+	var local_time := elapsed - delay
+	if local_time < 0.0:
+		return
+	var origin: Vector2 = arrow.get("origin", Vector2.ZERO)
+	var target: Vector2 = arrow.get("target", origin)
+	var flight_duration := maxf(0.12, float(arrow.get("flight_duration", TIANJI_ARROW_FLIGHT_DURATION)))
+	if local_time < flight_duration:
+		var progress := clampf(local_time / flight_duration, 0.0, 1.0)
+		# The arrow is already moving as it crosses the top of the screen, then
+		# accelerates into the ground to make each impact read as a heavy volley.
+		var fall_progress := progress * (0.42 + 0.58 * progress)
+		var position := origin.lerp(target, fall_progress)
+		var tangent := (target - origin).normalized()
+		if tangent.length_squared() <= 0.01:
+			tangent = Vector2.DOWN
+		var perpendicular := Vector2(-tangent.y, tangent.x)
+		var arrow_tip := position + tangent * 12.0
+		var arrow_tail := arrow_tip - tangent * 46.0
+		var trail_length := TIANJI_ARROW_TRAIL_LENGTH * (0.78 + progress * 0.22)
+		var trail_alpha := 0.18 + progress * 0.24
+		var trail_start := arrow_tail + tangent * 3.0
+		var trail_mid := trail_start - tangent * trail_length * 0.42
+		var trail_end := trail_start - tangent * trail_length
+		# Layered white strokes make the long tail fade into the sky without
+		# becoming an opaque cone that hides the physical arrow silhouette.
+		draw_line(trail_start, trail_mid, Color(0.94, 0.97, 1.0, trail_alpha), 2.8)
+		draw_line(trail_mid, trail_end, Color(0.94, 0.97, 1.0, trail_alpha * 0.42), 1.6)
+		draw_line(trail_start, trail_mid, Color(1.0, 1.0, 1.0, trail_alpha * 0.88), 1.1)
+		draw_set_transform(position, tangent.angle(), Vector2(TIANJI_ARROW_TEXTURE_SCALE, TIANJI_ARROW_TEXTURE_SCALE))
+		draw_texture(ARCHER_PROJECTILE_TEXTURE, -TIANJI_ARROW_SOURCE_ANCHOR, Color(1.0, 0.95, 0.80, 0.98))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_draw_tianji_arrow_silhouette(arrow_tip, tangent, 0.98, 46.0, true)
+		return
+	var lodged_time := local_time - flight_duration
+	if lodged_time >= TIANJI_ARROW_LODGED_DURATION:
+		return
+	var fade_start := TIANJI_ARROW_LODGED_DURATION - 0.24
+	var lodged_alpha := 0.78 if lodged_time < fade_start else 0.78 * (1.0 - (lodged_time - fade_start) / 0.24)
+	var lodged_direction: Vector2 = arrow.get("lodged_direction", Vector2.DOWN)
+	var perpendicular := Vector2(-lodged_direction.y, lodged_direction.x)
+	_draw_ellipse_arc(target + Vector2(0.0, 2.0), Vector2(10.0, 3.2), 0.0, TAU, 10, Color(0.18, 0.12, 0.07, lodged_alpha * 0.48), 1.3)
+	if lodged_time < 0.12:
+		var impact_alpha := (1.0 - lodged_time / 0.12) * lodged_alpha
+		_draw_ellipse_arc(target + Vector2(0.0, 2.0), Vector2(20.0, 6.0), 0.0, TAU, 14, Color(0.72, 0.54, 0.28, impact_alpha * 0.58), 1.5)
+		draw_line(target - perpendicular * 10.0, target + perpendicular * 4.0, Color(0.82, 0.62, 0.34, impact_alpha * 0.72), 1.6)
+		draw_line(target + perpendicular * 8.0, target - perpendicular * 3.0, Color(0.74, 0.56, 0.31, impact_alpha * 0.58), 1.2)
+	draw_line(target + perpendicular * 2.0, target + lodged_direction * 7.0 + perpendicular * 2.0, Color(0.49, 0.34, 0.18, lodged_alpha * 0.60), 1.2)
+	draw_set_transform(target, lodged_direction.angle(), Vector2(TIANJI_ARROW_TEXTURE_SCALE, TIANJI_ARROW_TEXTURE_SCALE))
+	var source_size := TIANJI_ARROW_SOURCE_EXPOSED.size
+	var destination := Rect2(Vector2(-source_size.x, -source_size.y * 0.5), source_size)
+	draw_texture_rect_region(ARCHER_PROJECTILE_TEXTURE, destination, TIANJI_ARROW_SOURCE_EXPOSED, Color(1.0, 0.91, 0.67, lodged_alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_tianji_arrow_silhouette(target + lodged_direction * 4.0, lodged_direction, lodged_alpha, 34.0, false)
+
+func _draw_tianji_arrow_silhouette(tip: Vector2, direction: Vector2, alpha: float, exposed_length: float, draw_head: bool) -> void:
+	var forward := direction.normalized()
+	if forward.length_squared() <= 0.01:
+		forward = Vector2.DOWN
+	var side := Vector2(-forward.y, forward.x)
+	var tail := tip - forward * exposed_length
+	var shaft_end := tip - forward * (3.5 if draw_head else 0.0)
+	# The existing projectile texture is intentionally retained, but its very thin
+	# source art needs this readable shaft, head, and fletching at battle scale.
+	draw_line(tail, shaft_end, Color(0.16, 0.12, 0.08, alpha * 0.98), 2.7)
+	draw_line(tail + forward * 3.0, shaft_end - forward * 5.0, Color(0.78, 0.67, 0.45, alpha * 0.78), 0.9)
+	var feather_base := tail + forward * 6.0
+	draw_line(feather_base + side * 4.2, tail - forward * 5.5 + side * 1.2, Color(0.58, 0.50, 0.34, alpha * 0.90), 1.7)
+	draw_line(feather_base - side * 4.2, tail - forward * 5.5 - side * 1.2, Color(0.58, 0.50, 0.34, alpha * 0.90), 1.7)
+	if not draw_head:
+		return
+	var head_base := tip - forward * 10.0
+	var head := PackedVector2Array([tip, head_base + side * 5.0, head_base - side * 5.0])
+	draw_colored_polygon(head, Color(0.20, 0.22, 0.23, alpha * 0.98))
+	var head_highlight := PackedVector2Array([tip - forward * 1.5, head_base + side * 1.6, head_base - side * 0.8])
+	draw_colored_polygon(head_highlight, Color(0.78, 0.80, 0.76, alpha * 0.54))
 
 
 func _draw_impacts() -> void:
@@ -4380,6 +5679,29 @@ func _draw_weapon_clashes() -> void:
 			draw_arc(center, radius * 0.56, 0.0, TAU, 18, ring_color, 2.8)
 			draw_arc(center, radius * 0.34, 0.25, TAU + 0.25, 14, Color(1.0, 0.94, 0.66, alpha * 0.74), 1.8)
 
+func _draw_guard_feedback() -> void:
+	for mark in guard_feedback_marks:
+		var duration := maxf(0.01, float(mark.get("duration", 0.32)))
+		var alpha := clampf(float(mark.get("remaining", 0.0)) / duration, 0.0, 1.0)
+		var progress := 1.0 - alpha
+		var perfect := bool(mark.get("perfect", false))
+		var center: Vector2 = mark.get("position", Vector2.ZERO)
+		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
+		var angle := direction.angle()
+		var radius := lerpf(18.0, 62.0 if perfect else 50.0, progress)
+		var color := Color(1.0, 0.86, 0.34, alpha * 0.92) if perfect else Color(0.72, 0.94, 1.0, alpha * 0.86)
+		draw_arc(center, radius, angle - 0.92, angle + 0.92, 14, color, 3.2 if perfect else 2.4, true)
+		draw_arc(center, radius * 0.72, angle - 0.66, angle + 0.66, 10, Color(1.0, 0.98, 0.80, alpha * 0.82), 1.5, true)
+		var shard_count := 7 if perfect else 5
+		for index in range(shard_count):
+			var shard_angle := angle + (float(index) - float(shard_count - 1) * 0.5) * 0.22
+			var shard_direction := Vector2.from_angle(shard_angle)
+			var start := center + shard_direction * (8.0 + progress * 6.0)
+			var end := start + shard_direction * (12.0 + progress * (22.0 if perfect else 16.0))
+			draw_line(start, end, color, 2.2 if perfect else 1.6)
+		if progress < 0.24:
+			draw_circle(center + direction * 5.0, 11.0 + (1.0 - progress) * 8.0, Color(1.0, 0.98, 0.82, (1.0 - progress / 0.24) * (0.52 if perfect else 0.34)))
+
 func _draw_stance_breaks() -> void:
 	for mark in stance_break_marks:
 		var alpha := clampf(float(mark.get("remaining", 0.0)) / 0.48, 0.0, 1.0)
@@ -4397,6 +5719,16 @@ func _draw_named_stance_break_marker(at: Vector2, scale: float) -> void:
 		var start_angle := -1.02 + float(index) * 2.10
 		draw_arc(at, radius, start_angle, start_angle + 0.68, 8, Color(1.0, 0.76, 0.24, 0.90), 2.3)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-16.0, -68.0 * scale), "破势", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("ffe2a0"))
+
+func _draw_named_vulnerable_marker(at: Vector2, scale: float, remaining_ratio: float) -> void:
+	var pulse := 0.78 + 0.22 * (sin(visual_time * 8.0) + 1.0) * 0.5
+	var center := at + Vector2(0.0, -108.0 * scale)
+	var radius := 24.0 * scale * pulse
+	var color := Color("ff9a4a")
+	draw_circle(center, radius * 0.72, Color(0.22, 0.06, 0.03, 0.72))
+	draw_arc(center, radius, -PI * 0.5, TAU - PI * 0.5, 22, Color(0.20, 0.07, 0.04, 0.94), 3.4 * scale, true)
+	draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * clampf(remaining_ratio, 0.0, 1.0), 22, Color(color.r, color.g, color.b, pulse), 3.4 * scale, true)
+	draw_string(ThemeDB.fallback_font, center + Vector2(-22.0 * scale, 5.0 * scale), "虚弱", HORIZONTAL_ALIGNMENT_CENTER, 44.0 * scale, int(15.0 * scale), Color("fff1c6"))
 
 func _enemy_color(enemy_type: int) -> Color:
 	match enemy_type:
@@ -4425,7 +5757,7 @@ func _telegraph_colors(telegraph: Telegraph) -> Dictionary:
 
 func _uses_named_attack_vfx(telegraph: Telegraph) -> bool:
 	if telegraph.source == "boss":
-		return boss != null and boss.archetype == BossActor.Archetype.ZHANG_HE
+		return boss != null and boss.archetype in [BossActor.Archetype.ZHANG_HE, BossActor.Archetype.LV_BU]
 	if not telegraph.source.begins_with("elite:"):
 		return false
 	for elite in elites:

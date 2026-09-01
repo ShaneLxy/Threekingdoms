@@ -8,11 +8,23 @@ const ZHANG_FEI_ULTIMATE_DURATION := 10.0
 const WEAPON_CLASH_DURATION := 0.22
 const WEAPON_CLASH_REACH := 220.0
 const ZHANG_FEI_BASIC_JUMP_DISTANCE := 156.0
-const ZHANG_FEI_BASIC_JUMP_DURATION := 0.34
+const ZHANG_FEI_BASIC_SHORT_JUMP_DISTANCE := 76.0
+const ZHANG_FEI_BASIC_JUMP_DURATION := 0.29
 const ZHANG_FEI_BASIC_JUMP_HEIGHT := 58.0
 const ZHANG_FEI_ACTIVE_JUMP_DISTANCE := 238.0
+const ZHANG_FEI_ACTIVE_SHORT_JUMP_DISTANCE := 80.0
+const ZHANG_FEI_ACTIVE_HOLD_MAX_DURATION := 0.75
+const ZHANG_FEI_ACTIVE_HOLD_UPGRADED_DURATION := 0.56
+const ZHANG_FEI_ACTIVE_UPGRADED_JUMP_DISTANCE := 272.0
 const ZHANG_FEI_ACTIVE_JUMP_DURATION := 0.46
 const ZHANG_FEI_ACTIVE_JUMP_HEIGHT := 82.0
+const ZHANG_FEI_ULTIMATE_MOVE_SPEED_RATIO := 1.25
+const ZHANG_RAGE_MAX_STACKS := 4
+const ZHANG_RAGE_BASE_KILL_REQUIREMENT := 15
+const ZHANG_RAGE_BASE_DURATION := 8.0
+const ZHANG_RAGE_ATTACK_SPEED_PER_STACK := 0.04
+const ZHANG_RAGE_REAR_DAMAGE_REDUCTION := 0.18
+const ZHANG_RAGE_FRONT_HALF_ANGLE := deg_to_rad(60.0)
 
 @export var prototype_hero_id := "zhang_fei"
 
@@ -26,7 +38,12 @@ var action_duration := 0.0
 var pending_attack: AttackRequest
 var has_buffered_basic := false
 var buffered_basic_direction := Vector2.ZERO
+var buffered_basic_has_direction := false
 var active_direction := Vector2.RIGHT
+var zhang_active_hold_pending := false
+var zhang_active_hold_elapsed := 0.0
+var zhang_active_jump_distance := ZHANG_FEI_ACTIVE_SHORT_JUMP_DISTANCE
+var zhang_active_charge_level := 0
 var active_cooldown_duration := 7.0
 var weapon_clash_remaining := 0.0
 var weapon_clash_direction := Vector2.RIGHT
@@ -50,8 +67,27 @@ var zhang_jump_total_distance := 0.0
 var zhang_jump_peak_height := 0.0
 var zhang_jump_direction := Vector2.RIGHT
 var zhang_jump_request: AttackRequest
+var zhang_basic_jump_has_direction := false
 var rage_hits := 0
+var rage_stacks := 0
 var rage_remaining := 0.0
+var zhang_rage_kill_requirement := ZHANG_RAGE_BASE_KILL_REQUIREMENT
+var zhang_rage_duration := ZHANG_RAGE_BASE_DURATION
+var zhang_rage_move_speed_ratio := 0.0
+var zhang_rage_collision_damage_bonus := 0.0
+var zhang_rage_launch_speed_bonus := 0.0
+var zhang_rage_collision_target_bonus := 0
+var zhang_active_damage_bonus := 0.0
+var zhang_active_knockback_bonus := 0.0
+var zhang_active_displacement_bonus := 0.0
+var zhang_active_displacement_duration_bonus := 0.0
+var zhang_active_center_damage_bonus := 0.0
+var zhang_ultimate_duration_bonus := 0.0
+var zhang_ultimate_damage_reduction := 0.0
+var zhang_ultimate_move_speed_bonus := 0.0
+var zhang_ultimate_shockwave_range_bonus := 0.0
+var zhang_ultimate_shockwave_knockback_bonus := 0.0
+var zhang_ultimate_slam_range_bonus := 0.0
 var momentum := 0.0
 var previous_move_direction := Vector2.ZERO
 var current_move_direction := Vector2.ZERO
@@ -62,6 +98,7 @@ var knockback_bonus := 0.0
 var stance_bonus := 0.0
 var active_range_bonus := 0.0
 var ultimate_bonus := 0.0
+var zhang_leaping_slam_level := 0
 var projectile_pierce_bonus := 0
 var return_to_bow_on_release := false
 
@@ -93,10 +130,15 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	pending_attack = null
 	has_buffered_basic = false
 	buffered_basic_direction = Vector2.ZERO
+	buffered_basic_has_direction = false
 	active_cooldown = 0.0
 	active_charge_count = 1
 	active_charge_capacity = 1
 	active_direction = Vector2.RIGHT
+	zhang_active_hold_pending = false
+	zhang_active_hold_elapsed = 0.0
+	zhang_active_jump_distance = ZHANG_FEI_ACTIVE_SHORT_JUMP_DISTANCE
+	zhang_active_charge_level = 0
 	ultimate_energy = 0.0
 	ultimate_time = 0.0
 	ultimate_segment_index = 0
@@ -126,8 +168,27 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	zhang_jump_peak_height = 0.0
 	zhang_jump_direction = Vector2.RIGHT
 	zhang_jump_request = null
+	zhang_basic_jump_has_direction = false
 	rage_hits = 0
+	rage_stacks = 0
 	rage_remaining = 0.0
+	zhang_rage_kill_requirement = ZHANG_RAGE_BASE_KILL_REQUIREMENT
+	zhang_rage_duration = ZHANG_RAGE_BASE_DURATION
+	zhang_rage_move_speed_ratio = 0.0
+	zhang_rage_collision_damage_bonus = 0.0
+	zhang_rage_launch_speed_bonus = 0.0
+	zhang_rage_collision_target_bonus = 0
+	zhang_active_damage_bonus = 0.0
+	zhang_active_knockback_bonus = 0.0
+	zhang_active_displacement_bonus = 0.0
+	zhang_active_displacement_duration_bonus = 0.0
+	zhang_active_center_damage_bonus = 0.0
+	zhang_ultimate_duration_bonus = 0.0
+	zhang_ultimate_damage_reduction = 0.0
+	zhang_ultimate_move_speed_bonus = 0.0
+	zhang_ultimate_shockwave_range_bonus = 0.0
+	zhang_ultimate_shockwave_knockback_bonus = 0.0
+	zhang_ultimate_slam_range_bonus = 0.0
 	momentum = 0.0
 	previous_move_direction = Vector2.ZERO
 	current_move_direction = Vector2.ZERO
@@ -138,16 +199,24 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	stance_bonus = 0.0
 	active_range_bonus = 0.0
 	ultimate_bonus = 0.0
+	zhang_leaping_slam_level = 0
 	projectile_pierce_bonus = 0
 	return_to_bow_on_release = false
 	health_component.reset(float(base_stats.get("health", 140.0)))
 
 func tick(delta: float, move_direction: Vector2) -> void:
+	tick_movement_slow(delta)
 	current_move_direction = move_direction
+	if zhang_active_hold_pending:
+		zhang_active_hold_elapsed = minf(_zhang_active_hold_max_duration(), zhang_active_hold_elapsed + delta)
+	_update_buffered_basic_direction()
 	tick_active_charge_recovery(delta, active_cooldown_duration)
 	combo_window = maxf(0.0, combo_window - delta)
 	weapon_clash_remaining = maxf(0.0, weapon_clash_remaining - delta)
+	var rage_was_active := rage_remaining > 0.0
 	rage_remaining = maxf(0.0, rage_remaining - delta)
+	if rage_was_active and rage_remaining <= 0.0:
+		_decay_zhang_rage()
 	if weapon_clash_remaining <= 0.0:
 		weapon_clash_type = Telegraph.ClashKind.NONE
 	if combo_window <= 0.0 and not (current_action == "basic" and attack_lock_remaining > 0.0):
@@ -175,30 +244,70 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		attack_lock_remaining = maxf(0.0, attack_lock_remaining - delta)
 		if was_locked and attack_lock_remaining <= 0.0 and not is_path_dashing() and not is_zhang_fei_jumping():
 			_finish_action()
-	if current_action == "basic" and hit_delay_remaining <= 0.0 and not is_path_dashing() and not is_zhang_fei_jumping() and is_action_locked():
+	if current_action == "basic" and hit_delay_remaining <= 0.0 and not is_path_dashing() and not is_zhang_fei_jumping() and not _is_zhang_fei_slam_action() and is_action_locked():
 		tick_basic_attack_movement(delta, move_direction)
 	elif not is_action_locked():
 		_update_facing(move_direction)
-		_move(move_direction, speed * delta)
+		_move(move_direction, effective_move_speed() * delta)
 
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
+	if zhang_active_hold_pending or is_guard_active():
+		return false
 	if ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active():
 		return false
 	if is_action_locked():
 		if current_action == "basic" and combo_stage < _basic_stage_count() and not has_buffered_basic:
 			has_buffered_basic = true
-			buffered_basic_direction = _eight_way_direction(_current_basic_input(direction), last_attack_direction)
+			var next_stage := (combo_stage % _basic_stage_count()) + 1
+			var basic_input := _current_basic_input(direction)
+			buffered_basic_direction = _direction_for_basic_stage(next_stage, basic_input, last_attack_direction)
+			buffered_basic_has_direction = _is_zhang_directional_jump_input(next_stage, basic_input)
 			return true
 		return false
-	_update_facing(_current_basic_input(direction))
 	if combo_window <= 0.0:
 		combo_stage = 0
 	combo_stage = (combo_stage % _basic_stage_count()) + 1
+	var basic_input := _current_basic_input(direction)
+	zhang_basic_jump_has_direction = _is_zhang_directional_jump_input(combo_stage, basic_input)
+	_update_facing(_direction_for_basic_stage(combo_stage, basic_input, last_attack_direction))
 	_begin_basic(combo_stage)
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_charge_count <= 0 or (ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active()):
+	return _request_active(direction, 0.0 if hero_id == "zhang_fei" else 1.0)
+
+func supports_active_hold() -> bool:
+	return hero_id == "zhang_fei"
+
+func begin_active_hold(_direction: Vector2 = Vector2.ZERO) -> bool:
+	if not supports_active_hold() or not can_use_active():
+		return false
+	if current_action == "basic":
+		_cancel_basic_for_skill()
+	zhang_active_hold_pending = true
+	zhang_active_hold_elapsed = 0.0
+	return true
+
+func release_active_hold(direction: Vector2 = Vector2.ZERO) -> bool:
+	if not zhang_active_hold_pending:
+		return false
+	var charge_ratio := clampf(zhang_active_hold_elapsed / _zhang_active_hold_max_duration(), 0.0, 1.0)
+	zhang_active_hold_pending = false
+	zhang_active_hold_elapsed = 0.0
+	return _request_active(direction, charge_ratio)
+
+func cancel_active_hold() -> void:
+	zhang_active_hold_pending = false
+	zhang_active_hold_elapsed = 0.0
+
+func is_active_hold_charging() -> bool:
+	return zhang_active_hold_pending
+
+func active_hold_ratio() -> float:
+	return clampf(zhang_active_hold_elapsed / _zhang_active_hold_max_duration(), 0.0, 1.0) if zhang_active_hold_pending else 0.0
+
+func _request_active(direction: Vector2, charge_ratio: float) -> bool:
+	if active_charge_count <= 0 or is_guard_active() or (ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active()):
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -206,17 +315,22 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 		_cancel_basic_for_skill()
 	active_direction = _eight_way_direction(direction, last_attack_direction)
 	_update_facing(active_direction)
+	if hero_id == "zhang_fei":
+		zhang_active_jump_distance = _zhang_active_jump_distance_for_charge(charge_ratio)
 	consume_active_charge(active_cooldown_duration)
 	match hero_id:
 		"zhang_fei":
 			_start_action("active", 1.02)
 			hit_delay_remaining = 0.20
-			pending_attack = AttackRequest.circle(position, 126.0 + active_range_bonus, 3.55 + damage_bonus, 24, "据水断桥·跃砸")
+			pending_attack = AttackRequest.circle(position, 126.0 + active_range_bonus, 3.55 + damage_bonus + zhang_active_damage_bonus, 24, "据水断桥·跃砸")
 			pending_attack.dash_kind = HeroActor.DashKind.ACTIVE
-			pending_attack.knockback = 920.0 + knockback_bonus
-			pending_attack.forced_displacement = 128.0
-			pending_attack.forced_displacement_duration = 0.22
+			pending_attack.knockback = 920.0 + knockback_bonus + zhang_active_knockback_bonus
+			pending_attack.forced_displacement = 128.0 + zhang_active_displacement_bonus
+			pending_attack.forced_displacement_duration = 0.22 + zhang_active_displacement_duration_bonus
 			pending_attack.stance_damage = 68.0 + stance_bonus
+			if zhang_active_center_damage_bonus > 0.0:
+				pending_attack.center_damage_radius = pending_attack.range * 0.46
+				pending_attack.center_damage_multiplier = 1.0 + zhang_active_center_damage_bonus
 			_configure_zhang_launch(pending_attack, 1120.0, 0.74, 1.66, 980.0, 5, 4, 1)
 		"ma_chao":
 			_start_action("active", 0.92)
@@ -244,6 +358,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 				pending_attack.fan_knockback = true
 				pending_attack.stance_damage = 34.0 + stance_bonus
 				return_to_bow_on_release = true
+	pending_attack.direction = active_direction
 	pending_attack.action_kind = AttackRequest.ActionKind.ACTIVE
 	pending_attack.clash_kind = Telegraph.ClashKind.ACTIVE
 	active_used.emit()
@@ -254,16 +369,19 @@ func can_use_active() -> bool:
 	return active_charge_count > 0 and (ultimate_state == UltimateState.INACTIVE or is_zhang_fei_ultimate_active()) and (not is_action_locked() or current_action == "basic")
 
 func request_ultimate(direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE:
+	if ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
 	if current_action == "basic":
 		_cancel_basic_for_skill()
-	_update_facing(direction)
+	var ultimate_input := direction
+	if hero_id == "zhang_fei" and ultimate_input.length_squared() <= 0.01:
+		ultimate_input = current_move_direction
+	_update_facing(ultimate_input)
 	ultimate_energy -= ULTIMATE_COST
 	if hero_id == "zhang_fei":
-		ultimate_time = ZHANG_FEI_ULTIMATE_DURATION
+		ultimate_time = _zhang_ultimate_duration()
 		ultimate_state = UltimateState.EXECUTING
 		ultimate_phase_remaining = 0.0
 		ultimate_phase = 1
@@ -308,16 +426,55 @@ func apply_upgrade(upgrade_id: String) -> void:
 		"zhang_heavy_roar":
 			basic_range_bonus += 18.0
 			knockback_bonus += 82.0
+		"zhang_slam_range":
+			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 1)
+		"zhang_slam_leap":
+			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 2)
+		"zhang_slam_mastery":
+			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 3)
+		"zhang_leaping_slam":
+			# Legacy run upgrade id kept for old replay data.
+			zhang_leaping_slam_level = mini(3, zhang_leaping_slam_level + 1)
 		"zhang_iron_hide":
 			defense_bonus += 4.0
 			active_range_bonus += 12.0
 			stance_bonus += 10.0
 		"zhang_rage":
-			rage_remaining = maxf(rage_remaining, 3.6)
+			_grant_zhang_rage_stack()
 			damage_bonus += 0.13
+		"zhang_rage_hunt":
+			zhang_rage_kill_requirement = maxi(9, zhang_rage_kill_requirement - 3)
+		"zhang_rage_fervor":
+			zhang_rage_duration += 2.0
+			zhang_rage_move_speed_ratio += 0.07
+		"zhang_rage_overwhelm":
+			zhang_rage_collision_damage_bonus += 0.28
+			zhang_rage_launch_speed_bonus += 110.0
+			zhang_rage_collision_target_bonus += 1
+		"zhang_bridge_breaker":
+			active_range_bonus += 18.0
+			zhang_active_damage_bonus += 0.22
+		"zhang_active_charge":
+			zhang_active_charge_level = 1
+		"zhang_bridge_repel":
+			zhang_active_knockback_bonus += 120.0
+			zhang_active_displacement_bonus += 22.0
+			zhang_active_displacement_duration_bonus += 0.05
+		"zhang_bridge_shockwave":
+			zhang_active_center_damage_bonus += 0.30
 		"zhang_earthshaker":
 			ultimate_bonus += 0.46
 			stance_bonus += 16.0
+		"zhang_immovable":
+			zhang_ultimate_damage_reduction = minf(0.18, zhang_ultimate_damage_reduction + 0.07)
+		"zhang_battle_cry":
+			zhang_ultimate_duration_bonus += 1.5
+			zhang_ultimate_move_speed_bonus += 0.08
+		"zhang_war_stomp":
+			zhang_ultimate_shockwave_range_bonus += 34.0
+			zhang_ultimate_shockwave_knockback_bonus += 160.0
+			zhang_ultimate_slam_range_bonus += 16.0
+			ultimate_bonus += 0.28
 		"ma_long_stride":
 			basic_range_bonus += 22.0
 			momentum = minf(1.0, momentum + 0.22)
@@ -350,7 +507,8 @@ func current_stats() -> Dictionary:
 		"defense": total_defense(),
 		"health": health_component.current,
 		"max_health": health_component.maximum,
-		"move_speed": speed,
+		"move_speed": effective_move_speed(),
+		"basic_pierce": 12 + projectile_pierce_bonus,
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
@@ -391,26 +549,37 @@ func consume_weapon_clash_window() -> void:
 	weapon_clash_remaining = 0.0
 	weapon_clash_type = Telegraph.ClashKind.NONE
 
-func receive_damage(amount: float, _source: String) -> float:
+func receive_damage(amount: float, _source: String, attack_origin: Vector2 = Vector2.ZERO) -> float:
 	if is_zhang_fei_jumping():
 		return 0.0
 	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense())
-	if hero_id == "zhang_fei" and (rage_remaining > 0.0 or is_zhang_fei_ultimate_active()):
-		reduced_amount *= 0.82
+	if hero_id == "zhang_fei" and is_zhang_fei_ultimate_active():
+		reduced_amount *= maxf(0.60, 0.82 - zhang_ultimate_damage_reduction)
+	if hero_id == "zhang_fei":
+		reduced_amount *= _zhang_rage_side_rear_damage_multiplier(attack_origin)
 	var applied_damage := health_component.take_damage(reduced_amount)
 	if applied_damage > 0.0:
 		damaged.emit(applied_damage)
 	return applied_damage
 
+func interrupt_basic_attack() -> void:
+	if current_action == "basic" or combo_stage > 0 or combo_window > 0.0:
+		_cancel_basic_for_skill()
+
+func on_weapon_clash_success(perfect: bool, skill_clash: bool) -> void:
+	super.on_weapon_clash_success(perfect, skill_clash)
+	if hero_id == "zhang_fei":
+		_add_zhang_rage_progress(4 if perfect else 3)
+
+func on_light_weapon_clash_success() -> void:
+	if hero_id == "zhang_fei":
+		_add_zhang_rage_progress(3)
+
 func on_enemy_defeated(_enemy_type: int) -> void:
 	apply_military_enemy_defeat_reward(_enemy_type)
 	if hero_id != "zhang_fei":
 		return
-	rage_hits += 1
-	if rage_hits < 4:
-		return
-	rage_hits = 0
-	rage_remaining = 3.6
+	_add_zhang_rage_progress(1)
 
 func on_named_target_hit(_target_kind: int, _request: AttackRequest, _damage: float) -> void:
 	pass
@@ -466,11 +635,16 @@ func is_zhang_fei_ultimate_active() -> bool:
 
 func hud_status_effects() -> Array[Dictionary]:
 	var effects: Array[Dictionary] = []
+	var slow_effect := movement_slow_hud_effect()
+	if not slow_effect.is_empty():
+		effects.append(slow_effect)
 	if hero_id == "zhang_fei":
 		if is_zhang_fei_ultimate_active():
-			effects.append({"label": "万夫", "icon": "震", "stacks": 1, "remaining": ultimate_time, "duration": ZHANG_FEI_ULTIMATE_DURATION, "color": Color("e0673e")})
-		if rage_remaining > 0.0:
-			effects.append({"label": "怒势", "icon": "怒", "stacks": 1, "remaining": rage_remaining, "duration": 3.6, "color": Color("d85a3e")})
+			effects.append({"label": "万夫", "icon": "震", "stacks": 1, "remaining": ultimate_time, "duration": _zhang_ultimate_duration(), "color": Color("e0673e")})
+		if _has_zhang_rage():
+			effects.append({"label": "怒势", "icon": "怒", "stacks": rage_stacks, "stack_text": "%d/%d" % [rage_stacks, ZHANG_RAGE_MAX_STACKS], "remaining": rage_remaining, "duration": zhang_rage_duration, "color": Color("d85a3e")})
+		elif rage_hits > 0:
+			effects.append({"label": "怒势", "icon": "怒", "stacks": 0, "stack_text": "%d/%d" % [rage_hits, zhang_rage_kill_requirement], "timed": false, "color": Color("d85a3e")})
 	elif hero_id == "ma_chao" and momentum > 0.04:
 		effects.append({"label": "奔势", "icon": "势", "stacks": maxi(1, ceili(momentum * 3.0)), "remaining": momentum, "duration": 1.0, "color": Color("7ab7e8")})
 	elif hero_id == "huang_zhong":
@@ -502,7 +676,7 @@ func _basic_stage_count() -> int:
 	return 2 if hero_id == "huang_zhong" else 3
 
 func _begin_basic(stage: int) -> void:
-	combo_window = 0.72
+	combo_window = 0.0
 	has_buffered_basic = false
 	buffered_basic_direction = Vector2.ZERO
 	begin_basic_attack_movement()
@@ -530,17 +704,57 @@ func _begin_basic(stage: int) -> void:
 				_configure_zhang_launch(request, 720.0, 0.42, 1.04, 620.0, 2, 2, 0)
 			else:
 				lock = 0.92
-				hit_delay = 0.24
-				request = AttackRequest.circle(position, 94.0 + basic_range_bonus * 0.45, 2.28 + damage_bonus, 18, "丈八跃砸")
+				hit_delay = 0.20
+				var slam_level := _effective_zhang_leaping_slam_level()
+				var slam_range := 94.0
+				var slam_multiplier := 1.62
+				request = AttackRequest.circle(position, slam_range + basic_range_bonus * 0.40, slam_multiplier + damage_bonus, 18, "丈八跃砸")
 				request.dash_kind = HeroActor.DashKind.BASIC
+				match slam_level:
+					1:
+						request.range = 108.0 + basic_range_bonus * 0.40
+						request.multiplier = 2.02 + damage_bonus
+						request.center_damage_radius = request.range * 0.42
+						request.center_damage_multiplier = 1.25
+					2:
+						request.range = 120.0 + basic_range_bonus * 0.40
+						request.multiplier = 2.16 + damage_bonus
+						request.center_damage_radius = request.range * 0.42
+						request.center_damage_multiplier = 1.25
+					_:
+						if slam_level >= 3:
+							request.range = 132.0 + basic_range_bonus * 0.40
+							request.multiplier = 2.38 + damage_bonus
+							request.center_damage_radius = request.range * 0.44
+							request.center_damage_multiplier = 1.30
 				if is_zhang_fei_ultimate_active():
-					request.range += 26.0
+					request.range += 26.0 + zhang_ultimate_slam_range_bonus
 					request.multiplier += 0.28
-				request.knockback = 760.0 + knockback_bonus
-				request.forced_displacement = 96.0
-				request.forced_displacement_duration = 0.18
-				request.stance_damage = 52.0 + stance_bonus
-				_configure_zhang_launch(request, 940.0, 0.58, 1.36, 800.0, 4, 3, 1)
+				match slam_level:
+					0:
+						request.knockback = 520.0 + knockback_bonus
+						request.forced_displacement = 52.0
+						request.forced_displacement_duration = 0.13
+						request.stance_damage = 32.0 + stance_bonus
+						_configure_zhang_launch(request, 620.0, 0.30, 0.72, 460.0, 1, 2, 0)
+					1:
+						request.knockback = 580.0 + knockback_bonus
+						request.forced_displacement = 64.0
+						request.forced_displacement_duration = 0.15
+						request.stance_damage = 40.0 + stance_bonus
+						_configure_zhang_launch(request, 700.0, 0.38, 0.92, 560.0, 2, 2, 0)
+					2:
+						request.knockback = 820.0 + knockback_bonus
+						request.forced_displacement = 104.0
+						request.forced_displacement_duration = 0.23
+						request.stance_damage = 50.0 + stance_bonus
+						_configure_zhang_launch(request, 900.0, 0.54, 1.28, 760.0, 3, 3, 1)
+					_:
+						request.knockback = 900.0 + knockback_bonus
+						request.forced_displacement = 118.0
+						request.forced_displacement_duration = 0.24
+						request.stance_damage = 58.0 + stance_bonus
+						_configure_zhang_launch(request, 980.0, 0.62, 1.46, 840.0, 4, 4, 1)
 		"ma_chao":
 			if stage == 1:
 				lock = 0.42
@@ -585,7 +799,12 @@ func _begin_basic(stage: int) -> void:
 				request.stance_damage = 18.0 + stance_bonus if stage == 1 else 34.0 + stance_bonus
 	request.action_kind = AttackRequest.ActionKind.BASIC
 	request.clash_kind = Telegraph.ClashKind.BASIC
+	request.direction = last_attack_direction
 	pending_attack = request
+	if hero_id == "zhang_fei":
+		var rage_attack_speed := _zhang_rage_attack_speed_multiplier()
+		lock /= rage_attack_speed
+		hit_delay /= rage_attack_speed
 	_start_action("basic", lock)
 	hit_delay_remaining = hit_delay
 	combat_action_started.emit("basic_%d" % stage)
@@ -594,12 +813,9 @@ func _release_pending_attack() -> void:
 	if pending_attack == null:
 		return
 	if hero_id == "zhang_fei" and pending_attack.dash_kind in [HeroActor.DashKind.BASIC, HeroActor.DashKind.ACTIVE]:
-		var has_movement_input := current_move_direction.length_squared() > 0.01
-		var jump_distance := (ZHANG_FEI_BASIC_JUMP_DISTANCE if pending_attack.dash_kind == HeroActor.DashKind.BASIC else ZHANG_FEI_ACTIVE_JUMP_DISTANCE) if has_movement_input else 0.0
-		var jump_duration := ZHANG_FEI_BASIC_JUMP_DURATION if pending_attack.dash_kind == HeroActor.DashKind.BASIC else ZHANG_FEI_ACTIVE_JUMP_DURATION
-		if has_movement_input:
-			pending_attack.direction = _eight_way_direction(current_move_direction, last_attack_direction)
-			_update_facing(pending_attack.direction)
+		var jump_distance := _zhang_basic_jump_distance() if pending_attack.dash_kind == HeroActor.DashKind.BASIC else zhang_active_jump_distance
+		var jump_duration := _zhang_basic_jump_duration() if pending_attack.dash_kind == HeroActor.DashKind.BASIC else ZHANG_FEI_ACTIVE_JUMP_DURATION
+		pending_attack.direction = _eight_way_direction(pending_attack.direction, last_attack_direction)
 		pending_attack.origin = position
 		_begin_zhang_fei_jump(pending_attack, jump_distance, jump_duration)
 		pending_attack = null
@@ -627,7 +843,7 @@ func _begin_zhang_fei_jump(request: AttackRequest, distance: float, duration: fl
 	zhang_jump_remaining = duration
 	zhang_jump_duration = duration
 	zhang_jump_total_distance = distance
-	zhang_jump_peak_height = ZHANG_FEI_BASIC_JUMP_HEIGHT if request.dash_kind == HeroActor.DashKind.BASIC else ZHANG_FEI_ACTIVE_JUMP_HEIGHT
+	zhang_jump_peak_height = _zhang_basic_jump_height() if request.dash_kind == HeroActor.DashKind.BASIC else ZHANG_FEI_ACTIVE_JUMP_HEIGHT
 	zhang_jump_request = request
 	zhang_jump_request.one_hit_per_target = true
 
@@ -649,6 +865,15 @@ func _tick_zhang_fei_jump(delta: float) -> void:
 	landing_request.origin = position
 	landing_request.direction = zhang_jump_direction
 	attack_requested.emit(landing_request)
+	if landing_request.label == "丈八跃砸":
+		var forward_impact := AttackRequest.fan(landing_request.origin, landing_request.direction, landing_request.range + _zhang_slam_forward_extension(), deg_to_rad(104.0), landing_request.multiplier * 0.70, landing_request.pierce, "丈八跃砸·前震")
+		forward_impact.inner_radius = landing_request.range
+		forward_impact.knockback = landing_request.knockback * 0.72
+		forward_impact.forced_displacement = landing_request.forced_displacement * 0.68
+		forward_impact.forced_displacement_duration = landing_request.forced_displacement_duration
+		forward_impact.stance_damage = landing_request.stance_damage * 0.62
+		forward_impact.action_kind = AttackRequest.ActionKind.BASIC
+		attack_requested.emit(forward_impact)
 	zhang_jump_request = null
 	zhang_jump_remaining = 0.0
 	zhang_jump_duration = 0.0
@@ -695,10 +920,15 @@ func _configure_zhang_launch(request: AttackRequest, speed_value: float, duratio
 	request.launch_collision_max_targets = collision_targets
 	request.launch_target_limit = target_limit
 	request.launch_relay_count = relay_count
-	if rage_remaining > 0.0 or is_zhang_fei_ultimate_active():
+	if _has_zhang_rage() or is_zhang_fei_ultimate_active():
 		request.launch_speed += 120.0
 		request.launch_collision_damage_multiplier += 0.24
 		request.launch_collision_max_targets += 1
+	if _has_zhang_rage():
+		request.launch_collision_damage_multiplier += zhang_rage_collision_damage_bonus
+		request.launch_speed += zhang_rage_launch_speed_bonus
+		request.launch_collision_max_targets += zhang_rage_collision_target_bonus
+		request.launch_target_limit += zhang_rage_collision_target_bonus
 	if is_zhang_fei_ultimate_active():
 		request.launch_collision_max_targets += 1
 		request.launch_relay_count += 1
@@ -750,9 +980,9 @@ func _ultimate_phase_count() -> int:
 	return 5
 
 func _emit_zhang_fei_ultimate_shockwave() -> void:
-	var request := AttackRequest.fan(position, last_attack_direction, 238.0 + active_range_bonus * 0.35, deg_to_rad(142.0), 3.30 + ultimate_bonus, 22, "万夫莫开·怒喝震阵")
+	var request := AttackRequest.fan(position, last_attack_direction, 238.0 + active_range_bonus * 0.35 + zhang_ultimate_shockwave_range_bonus, deg_to_rad(142.0), 3.30 + ultimate_bonus, 22, "万夫莫开·怒喝震阵")
 	request.fan_knockback = true
-	request.knockback = 920.0 + knockback_bonus
+	request.knockback = 920.0 + knockback_bonus + zhang_ultimate_shockwave_knockback_bonus
 	request.forced_displacement = 132.0
 	request.forced_displacement_duration = 0.22
 	request.stance_damage = 76.0 + stance_bonus
@@ -831,15 +1061,21 @@ func _finish_action() -> void:
 	if current_action == "basic":
 		combat_action_finished.emit("basic_%d" % combo_stage)
 		if has_buffered_basic:
-			var next_direction := _current_basic_input()
-			if next_direction.length_squared() <= 0.01:
-				next_direction = buffered_basic_direction
+			var next_direction := buffered_basic_direction
+			var next_has_direction := buffered_basic_has_direction
 			has_buffered_basic = false
 			combo_stage = (combo_stage % _basic_stage_count()) + 1
-			_update_facing(next_direction)
+			zhang_basic_jump_has_direction = next_has_direction
+			_update_facing(_direction_for_basic_stage(combo_stage, next_direction, last_attack_direction))
 			buffered_basic_direction = Vector2.ZERO
+			buffered_basic_has_direction = false
 			_begin_basic(combo_stage)
 			return
+		# Do not preserve a physical attack stage after the hero returns to idle.
+		# BattleHud owns the separate hit-combo timeout.
+		combo_stage = 0
+		combo_window = 0.0
+		zhang_basic_jump_has_direction = false
 	elif current_action == "active":
 		combat_action_finished.emit("active")
 	clear_basic_attack_movement()
@@ -853,17 +1089,22 @@ func _cancel_basic_for_skill() -> void:
 	hit_delay_remaining = 0.0
 	attack_lock_remaining = 0.0
 	path_dash_request = null
+	path_dash_remaining = 0.0
+	path_dash_speed = 0.0
 	path_dash_distance_remaining = 0.0
 	zhang_jump_request = null
 	zhang_jump_remaining = 0.0
 	zhang_jump_duration = 0.0
+	zhang_jump_speed = 0.0
 	zhang_jump_distance_remaining = 0.0
 	zhang_jump_total_distance = 0.0
 	zhang_jump_peak_height = 0.0
 	combo_window = 0.0
 	has_buffered_basic = false
 	buffered_basic_direction = Vector2.ZERO
+	buffered_basic_has_direction = false
 	combo_stage = 0
+	zhang_basic_jump_has_direction = false
 	current_action = ""
 	clear_basic_attack_movement()
 	action_elapsed = 0.0
@@ -881,14 +1122,149 @@ func _tick_momentum(delta: float, move_direction: Vector2) -> void:
 	previous_move_direction = direction
 
 func _move(direction: Vector2, distance: float) -> void:
+	if is_guard_active():
+		return
 	var normalized := direction.normalized() if direction.length_squared() > 0.01 else Vector2.ZERO
 	position += normalized * distance
 	position.x = clampf(position.x, bounds.position.x + 12.0, bounds.end.x - 12.0)
 	position.y = clampf(position.y, bounds.position.y + 12.0, bounds.end.y - 12.0)
 
 func _update_facing(direction: Vector2) -> void:
+	if is_guard_active():
+		return
 	if direction.length_squared() > 0.01:
 		last_attack_direction = _eight_way_direction(direction, last_attack_direction)
+
+func _update_buffered_basic_direction() -> void:
+	if current_action != "basic" or not has_buffered_basic:
+		return
+	var live_input := _current_basic_input()
+	var next_stage := (combo_stage % _basic_stage_count()) + 1
+	if live_input.length_squared() <= 0.01:
+		buffered_basic_has_direction = _is_zhang_directional_jump_input(next_stage, live_input)
+		return
+	var fallback := buffered_basic_direction if buffered_basic_direction.length_squared() > 0.01 else last_attack_direction
+	buffered_basic_direction = _direction_for_basic_stage(next_stage, live_input, fallback)
+	buffered_basic_has_direction = _is_zhang_directional_jump_input(next_stage, live_input)
+
+func _direction_for_basic_stage(stage: int, direction: Vector2, fallback: Vector2) -> Vector2:
+	if hero_id != "zhang_fei":
+		return _eight_way_direction(direction, fallback)
+	if stage >= 3:
+		var slam_level := _effective_zhang_leaping_slam_level()
+		if slam_level >= 3:
+			return _eight_way_direction(direction, fallback)
+		if slam_level >= 2:
+			return _limited_zhang_jump_direction(direction, fallback)
+	if is_zhang_fei_ultimate_active():
+		return _eight_way_direction(direction, fallback)
+	var horizontal_source := direction if absf(direction.x) > 0.01 else fallback
+	return Vector2.LEFT if horizontal_source.x < 0.0 else Vector2.RIGHT
+
+func _effective_zhang_leaping_slam_level() -> int:
+	return 3 if is_zhang_fei_ultimate_active() else zhang_leaping_slam_level
+
+func _is_zhang_directional_jump_input(stage: int, direction: Vector2) -> bool:
+	return hero_id == "zhang_fei" and stage >= 3 and _effective_zhang_leaping_slam_level() >= 3 and direction.length_squared() > 0.01
+
+func _is_zhang_fei_slam_action() -> bool:
+	return hero_id == "zhang_fei" and current_action == "basic" and combo_stage == 3
+
+func _limited_zhang_jump_direction(direction: Vector2, fallback: Vector2) -> Vector2:
+	var forward := fallback.normalized() if fallback.length_squared() > 0.01 else Vector2.RIGHT
+	var desired := _eight_way_direction(direction, forward)
+	var turn_angle := clampf(wrapf(desired.angle() - forward.angle(), -PI, PI), -PI * 0.25, PI * 0.25)
+	return forward.rotated(turn_angle).normalized()
+
+func _zhang_basic_jump_distance() -> float:
+	match _effective_zhang_leaping_slam_level():
+		2: return ZHANG_FEI_BASIC_SHORT_JUMP_DISTANCE
+		3: return ZHANG_FEI_BASIC_JUMP_DISTANCE if zhang_basic_jump_has_direction else ZHANG_FEI_BASIC_SHORT_JUMP_DISTANCE
+	return 0.0
+
+func _zhang_active_jump_distance_for_charge(charge_ratio: float) -> float:
+	var ratio := clampf(charge_ratio, 0.0, 1.0)
+	var eased_ratio := ratio * ratio * (3.0 - 2.0 * ratio)
+	var maximum_distance := ZHANG_FEI_ACTIVE_UPGRADED_JUMP_DISTANCE if zhang_active_charge_level > 0 else ZHANG_FEI_ACTIVE_JUMP_DISTANCE
+	return lerpf(ZHANG_FEI_ACTIVE_SHORT_JUMP_DISTANCE, maximum_distance, eased_ratio)
+
+func _zhang_active_hold_max_duration() -> float:
+	return ZHANG_FEI_ACTIVE_HOLD_UPGRADED_DURATION if zhang_active_charge_level > 0 else ZHANG_FEI_ACTIVE_HOLD_MAX_DURATION
+
+func _zhang_slam_forward_extension() -> float:
+	match _effective_zhang_leaping_slam_level():
+		1: return 66.0
+		2: return 74.0
+		3: return 82.0
+	return 58.0
+
+func _zhang_basic_jump_duration() -> float:
+	match _effective_zhang_leaping_slam_level():
+		2: return 0.25
+		3: return ZHANG_FEI_BASIC_JUMP_DURATION
+	return 0.26
+
+func _zhang_basic_jump_height() -> float:
+	match _effective_zhang_leaping_slam_level():
+		1: return 30.0
+		2: return 44.0
+		3: return ZHANG_FEI_BASIC_JUMP_HEIGHT
+	return 24.0
+
+func effective_move_speed() -> float:
+	if hero_id == "zhang_fei" and is_zhang_fei_ultimate_active():
+		return speed * (ZHANG_FEI_ULTIMATE_MOVE_SPEED_RATIO + zhang_ultimate_move_speed_bonus) * movement_speed_multiplier()
+	if hero_id == "zhang_fei" and rage_remaining > 0.0:
+		return speed * (1.0 + zhang_rage_move_speed_ratio) * movement_speed_multiplier()
+	return speed * movement_speed_multiplier()
+
+func _has_zhang_rage() -> bool:
+	return hero_id == "zhang_fei" and rage_stacks > 0 and rage_remaining > 0.0
+
+func _grant_zhang_rage_stack() -> void:
+	if hero_id != "zhang_fei":
+		return
+	rage_stacks = mini(ZHANG_RAGE_MAX_STACKS, rage_stacks + 1)
+	rage_remaining = zhang_rage_duration
+
+func _add_zhang_rage_progress(value: int) -> void:
+	if hero_id != "zhang_fei" or value <= 0:
+		return
+	# Kills and successful clashes share one meter. A single clash callback can
+	# only add one packet, so repeated telegraph checks cannot double-count it.
+	rage_hits += value
+	while rage_hits >= zhang_rage_kill_requirement and rage_stacks < ZHANG_RAGE_MAX_STACKS:
+		rage_hits -= zhang_rage_kill_requirement
+		_grant_zhang_rage_stack()
+	if rage_stacks >= ZHANG_RAGE_MAX_STACKS:
+		rage_remaining = zhang_rage_duration
+		rage_hits = mini(rage_hits, maxi(0, zhang_rage_kill_requirement - 1))
+
+func _decay_zhang_rage() -> void:
+	if hero_id != "zhang_fei" or rage_stacks <= 0:
+		rage_remaining = 0.0
+		return
+	rage_stacks = maxi(0, rage_stacks - 1)
+	rage_remaining = zhang_rage_duration if rage_stacks > 0 else 0.0
+
+func _zhang_rage_attack_speed_multiplier() -> float:
+	return 1.0 + float(rage_stacks) * ZHANG_RAGE_ATTACK_SPEED_PER_STACK if hero_id == "zhang_fei" else 1.0
+
+func _zhang_rage_side_rear_damage_multiplier(attack_origin: Vector2) -> float:
+	if not _has_zhang_rage() or attack_origin.length_squared() <= 0.01:
+		return 1.0
+	var incoming := attack_origin - position
+	if incoming.length_squared() <= 0.01:
+		return 1.0
+	var facing := last_attack_direction.normalized()
+	if facing.length_squared() <= 0.01:
+		facing = Vector2.RIGHT
+	if absf(facing.angle_to(incoming.normalized())) <= ZHANG_RAGE_FRONT_HALF_ANGLE:
+		return 1.0
+	return pow(1.0 - ZHANG_RAGE_REAR_DAMAGE_REDUCTION, rage_stacks)
+
+func _zhang_ultimate_duration() -> float:
+	return ZHANG_FEI_ULTIMATE_DURATION + zhang_ultimate_duration_bonus
 
 func _current_basic_input(explicit_direction: Vector2 = Vector2.ZERO) -> Vector2:
 	return explicit_direction if explicit_direction.length_squared() > 0.01 else current_move_direction

@@ -8,20 +8,22 @@ const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
 const PROFILE_PATH := "user://profile.json"
 const PROFILE_BACKUP_PATH := "user://profile.json.bak"
 const PROFILE_TEMP_PATH := "user://profile.json.tmp"
-const CURRENT_SAVE_VERSION := 2
-const PROTOTYPE_HERO_GRANT := ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao", "huang_zhong"]
+const CURRENT_SAVE_VERSION := 6
+const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu"]
 const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := true
 
 var profile: Dictionary = {
 	"save_version": CURRENT_SAVE_VERSION,
 	"military_merit": 0,
-	"unlocked_heroes": ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao", "huang_zhong"],
+	"unlocked_heroes": ["guan_yu"],
 	"completed_chapters": [],
+	"completed_boss_trials": [],
 	"purchased_upgrades": [],
 	"military_strategies": {},
 	"tianji_skills": {"seven_star_lightning": 1},
 	"hero_talents": {"guan_yu": [], "zhang_fei": [], "zhao_yun": [], "ma_chao": [], "huang_zhong": []},
-	"equipped_hero_id": "zhao_yun",
+	"hero_talent_ranks": {"guan_yu": {}, "zhang_fei": {}, "zhao_yun": {}, "ma_chao": {}, "huang_zhong": {}},
+	"equipped_hero_id": "guan_yu",
 	"settings": {"sound_enabled": true, "vibration_enabled": true, "music_volume": 1.0, "sfx_volume": 1.0, "weather_mode": "auto"},
 }
 
@@ -48,18 +50,36 @@ func apply_result(result: Dictionary) -> void:
 		if not completed_chapter_id.is_empty() and not completed.has(completed_chapter_id):
 			completed.append(completed_chapter_id)
 		profile["completed_chapters"] = completed
+		var completed_boss_trial_id := str(result.get("completed_boss_trial", ""))
+		var completed_boss_trials: Array = profile.get("completed_boss_trials", [])
+		if not completed_boss_trial_id.is_empty() and not completed_boss_trials.has(completed_boss_trial_id):
+			completed_boss_trials.append(completed_boss_trial_id)
+		profile["completed_boss_trials"] = completed_boss_trials
 	save_profile()
+
+func grant_military_merit(amount: int) -> int:
+	if amount <= 0:
+		return int(profile.get("military_merit", 0))
+	profile["military_merit"] = int(profile.get("military_merit", 0)) + amount
+	save_profile()
+	return int(profile["military_merit"])
 
 func has_completed_chapter(chapter_id: String) -> bool:
 	_ensure_profile_shape()
 	return (profile.get("completed_chapters", []) as Array).has(chapter_id)
+
+func has_completed_boss_trial(trial_id: String) -> bool:
+	_ensure_profile_shape()
+	return (profile.get("completed_boss_trials", []) as Array).has(trial_id)
 
 func is_story_chapter_unlocked(chapter: int) -> bool:
 	if LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS:
 		return true
 	if chapter <= 1:
 		return true
-	if chapter == 2 and has_completed_chapter("changban"):
+	# Preserve the retired Changban story clear for existing saves, while new
+	# progression unlocks chapter two from the actual first chapter.
+	if chapter == 2 and (has_completed_chapter("story_01") or has_completed_chapter("changban")):
 		return true
 	return has_completed_chapter("story_%02d" % (chapter - 1))
 
@@ -104,8 +124,7 @@ func can_purchase_strategy(strategy_id: String) -> bool:
 	var current_rank := strategy_rank(strategy_id)
 	if definition.is_empty() or current_rank >= int(definition.get("max_rank", 0)):
 		return false
-	var prerequisite_id := MILITARY_STRATEGY.prerequisite_for(strategy_id)
-	if not prerequisite_id.is_empty() and strategy_rank(prerequisite_id) <= 0:
+	if not MILITARY_STRATEGY.prerequisite_satisfied_for(profile, strategy_id):
 		return false
 	return int(profile.get("military_merit", 0)) >= MILITARY_STRATEGY.cost_for(strategy_id, current_rank)
 
@@ -154,9 +173,31 @@ func unlocked_tianji_ids() -> Array[String]:
 	return result
 
 func has_talent(hero_id: String, talent_id: String) -> bool:
+	return talent_rank(hero_id, talent_id) > 0
+
+func talent_rank(hero_id: String, talent_id: String) -> int:
 	_ensure_profile_shape()
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var ranks: Dictionary = all_ranks.get(hero_id, {}) as Dictionary
+	var stored_rank := int(ranks.get(talent_id, 0))
 	var hero_talents: Dictionary = profile.get("hero_talents", {})
-	return (hero_talents.get(hero_id, []) as Array).has(talent_id)
+	var legacy_rank := 1 if (hero_talents.get(hero_id, []) as Array).has(talent_id) else 0
+	return clampi(maxi(stored_rank, legacy_rank), 0, talent_max_rank(hero_id, talent_id))
+
+func talent_max_rank(_hero_id: String, talent_id: String) -> int:
+	var definition: Dictionary = UPGRADE_SYSTEM.DEFINITIONS.get(talent_id, {}) as Dictionary
+	return maxi(1, int(definition.get("shop_max_rank", 1)))
+
+func talent_cost(hero_id: String, talent_id: String, fallback_cost: int = 0) -> int:
+	var definition: Dictionary = UPGRADE_SYSTEM.DEFINITIONS.get(talent_id, {}) as Dictionary
+	var costs: Array = definition.get("shop_costs", []) as Array
+	var current_rank := talent_rank(hero_id, talent_id)
+	if current_rank >= 0 and current_rank < costs.size():
+		return int(costs[current_rank])
+	return fallback_cost
+
+func is_talent_maxed(hero_id: String, talent_id: String) -> bool:
+	return talent_rank(hero_id, talent_id) >= talent_max_rank(hero_id, talent_id)
 
 func is_talent_unlocked_for_purchase(hero_id: String, talent_id: String) -> bool:
 	if has_talent(hero_id, talent_id):
@@ -172,22 +213,46 @@ func is_talent_unlocked_for_purchase(hero_id: String, talent_id: String) -> bool
 				return bool(node.get("is_core", false))
 	return false
 
+func talent_prerequisite_satisfied_for_purchase(hero_id: String, talent_id: String) -> bool:
+	var definition: Dictionary = UPGRADE_SYSTEM.DEFINITIONS.get(talent_id, {}) as Dictionary
+	var prerequisite_id := str(definition.get("requires", ""))
+	if prerequisite_id.is_empty():
+		return true
+	if not is_talent_unlocked_for_purchase(hero_id, prerequisite_id):
+		return false
+	var required_rank := maxi(1, int(definition.get("requires_stacks", 1)))
+	if required_rank <= 1:
+		return true
+	# Core talents have no permanent ranks; their stack requirement is enforced
+	# only during the current battle's upgrade draft.
+	if not has_talent(hero_id, prerequisite_id):
+		return true
+	return talent_rank(hero_id, prerequisite_id) >= required_rank
+
 func purchase_talent(hero_id: String, talent_id: String, cost: int) -> bool:
 	_ensure_profile_shape()
 	var definition: Dictionary = UPGRADE_SYSTEM.DEFINITIONS.get(talent_id, {}) as Dictionary
-	if definition.is_empty() or cost <= 0 or not has_hero(hero_id) or has_talent(hero_id, talent_id) or int(profile.get("military_merit", 0)) < cost:
+	var current_rank := talent_rank(hero_id, talent_id)
+	var max_rank := talent_max_rank(hero_id, talent_id)
+	var next_cost := talent_cost(hero_id, talent_id, cost)
+	if definition.is_empty() or next_cost <= 0 or not has_hero(hero_id) or current_rank >= max_rank or int(profile.get("military_merit", 0)) < next_cost:
 		return false
-	if is_talent_unlocked_for_purchase(hero_id, talent_id):
+	if current_rank <= 0 and is_talent_unlocked_for_purchase(hero_id, talent_id):
 		return false
-	var prerequisite_id := str(definition.get("requires", ""))
-	if not prerequisite_id.is_empty() and not is_talent_unlocked_for_purchase(hero_id, prerequisite_id):
+	if not talent_prerequisite_satisfied_for_purchase(hero_id, talent_id):
 		return false
 	var hero_talents: Dictionary = profile.get("hero_talents", {})
 	var talents: Array = hero_talents.get(hero_id, [])
-	talents.append(talent_id)
+	if not talents.has(talent_id):
+		talents.append(talent_id)
 	hero_talents[hero_id] = talents
 	profile["hero_talents"] = hero_talents
-	profile["military_merit"] = int(profile.get("military_merit", 0)) - cost
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var ranks: Dictionary = all_ranks.get(hero_id, {}) as Dictionary
+	ranks[talent_id] = current_rank + 1
+	all_ranks[hero_id] = ranks
+	profile["hero_talent_ranks"] = all_ranks
+	profile["military_merit"] = int(profile.get("military_merit", 0)) - next_cost
 	save_profile()
 	return true
 
@@ -197,12 +262,14 @@ func has_hero(hero_id: String) -> bool:
 
 func purchase_hero(hero_id: String, cost: int) -> bool:
 	_ensure_profile_shape()
-	if cost <= 0 or not HERO_CATALOG.is_playable(hero_id) or has_hero(hero_id) or int(profile.get("military_merit", 0)) < cost:
+	var hero_definition := HERO_CATALOG.definition_for(hero_id)
+	var required_cost := int(hero_definition.get("unlock_cost", cost))
+	if required_cost <= 0 or not HERO_CATALOG.has_hero(hero_id) or not bool(hero_definition.get("shop_available", true)) or not HERO_CATALOG.is_playable(hero_id) or has_hero(hero_id) or int(profile.get("military_merit", 0)) < required_cost:
 		return false
 	var heroes: Array = profile.get("unlocked_heroes", [])
 	heroes.append(hero_id)
 	profile["unlocked_heroes"] = heroes
-	profile["military_merit"] = int(profile.get("military_merit", 0)) - cost
+	profile["military_merit"] = int(profile.get("military_merit", 0)) - required_cost
 	save_profile()
 	return true
 
@@ -230,7 +297,7 @@ func set_setting_value(setting_id: String, value: Variant) -> void:
 
 func equipped_hero_id() -> String:
 	_ensure_profile_shape()
-	return str(profile.get("equipped_hero_id", "zhao_yun"))
+	return str(profile.get("equipped_hero_id", "guan_yu"))
 
 func equip_hero(hero_id: String) -> bool:
 	_ensure_profile_shape()
@@ -251,6 +318,18 @@ func _migrate_profile() -> bool:
 	if save_version < 2:
 		changed = _migrate_to_version_2() or changed
 		save_version = 2
+	if save_version < 3:
+		changed = _migrate_to_version_3() or changed
+		save_version = 3
+	if save_version < 4:
+		changed = _migrate_to_version_4() or changed
+		save_version = 4
+	if save_version < 5:
+		changed = _migrate_to_version_5() or changed
+		save_version = 5
+	if save_version < 6:
+		changed = _migrate_to_version_6() or changed
+		save_version = 6
 	if save_version != stored_version:
 		profile["save_version"] = save_version
 		changed = true
@@ -261,9 +340,7 @@ func _migrate_to_version_1() -> bool:
 	var changed := false
 	var heroes: Array = profile.get("unlocked_heroes", []) as Array
 	if heroes.is_empty():
-		heroes = ["zhao_yun"]
-		changed = true
-	if _append_unique_ids(heroes, PROTOTYPE_HERO_GRANT):
+		heroes = DEFAULT_NEW_PROFILE_HEROES.duplicate()
 		changed = true
 	profile["unlocked_heroes"] = heroes
 	return changed
@@ -296,16 +373,93 @@ func _migrate_to_version_2() -> bool:
 	profile["military_strategies"] = ranks
 	return changed
 
+func _migrate_to_version_3() -> bool:
+	var changed := false
+	if not profile.has("hero_talent_ranks"):
+		profile["hero_talent_ranks"] = {}
+		changed = true
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var hero_talents: Dictionary = profile.get("hero_talents", {}) as Dictionary
+	for hero_id_variant in HERO_CATALOG.all_ids():
+		var hero_id := str(hero_id_variant)
+		var ranks: Dictionary = all_ranks.get(hero_id, {}) as Dictionary
+		var talents: Array = hero_talents.get(hero_id, []) as Array
+		for talent_id_variant in talents:
+			var talent_id := str(talent_id_variant)
+			if int(ranks.get(talent_id, 0)) <= 0:
+				ranks[talent_id] = 1
+				changed = true
+		all_ranks[hero_id] = ranks
+	profile["hero_talent_ranks"] = all_ranks
+	return changed
+
+func _migrate_to_version_4() -> bool:
+	var changed := false
+	var hero_talents: Dictionary = profile.get("hero_talents", {}) as Dictionary
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var legacy_talents: Array = hero_talents.get("zhang_fei", []) as Array
+	var legacy_ranks: Dictionary = all_ranks.get("zhang_fei", {}) as Dictionary
+	var legacy_level := maxi(int(legacy_ranks.get("zhang_leaping_slam", 0)), 1 if legacy_talents.has("zhang_leaping_slam") else 0)
+	if legacy_level > 0:
+		var migrated_ids := ["zhang_slam_range", "zhang_slam_leap", "zhang_slam_mastery"]
+		var zhang_talents: Array = hero_talents.get("zhang_fei", []) as Array
+		var zhang_ranks: Dictionary = all_ranks.get("zhang_fei", {}) as Dictionary
+		for index in range(mini(legacy_level, migrated_ids.size())):
+			var talent_id := str(migrated_ids[index])
+			if int(zhang_ranks.get(talent_id, 0)) <= 0:
+				zhang_ranks[talent_id] = 1
+				changed = true
+			if not zhang_talents.has(talent_id):
+				zhang_talents.append(talent_id)
+				changed = true
+		hero_talents["zhang_fei"] = zhang_talents
+		all_ranks["zhang_fei"] = zhang_ranks
+	profile["hero_talents"] = hero_talents
+	profile["hero_talent_ranks"] = all_ranks
+	return changed
+
+func _migrate_to_version_5() -> bool:
+	# "震域" was removed from Zhang Fei's public tree.  Give owners the new
+	# first purchasable node so their prior military merit remains represented.
+	var changed := false
+	var hero_talents: Dictionary = profile.get("hero_talents", {}) as Dictionary
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var zhang_talents: Array = hero_talents.get("zhang_fei", []) as Array
+	var zhang_ranks: Dictionary = all_ranks.get("zhang_fei", {}) as Dictionary
+	var owned_legacy_range := zhang_talents.has("zhang_slam_range") or int(zhang_ranks.get("zhang_slam_range", 0)) > 0
+	if not owned_legacy_range:
+		return false
+	if int(zhang_ranks.get("zhang_slam_leap", 0)) <= 0:
+		zhang_ranks["zhang_slam_leap"] = 1
+		changed = true
+	if not zhang_talents.has("zhang_slam_leap"):
+		zhang_talents.append("zhang_slam_leap")
+		changed = true
+	hero_talents["zhang_fei"] = zhang_talents
+	all_ranks["zhang_fei"] = zhang_ranks
+	profile["hero_talents"] = hero_talents
+	profile["hero_talent_ranks"] = all_ranks
+	return changed
+
+func _migrate_to_version_6() -> bool:
+	if profile.has("completed_boss_trials"):
+		return false
+	profile["completed_boss_trials"] = []
+	return true
+
 func _ensure_profile_shape() -> bool:
 	var changed := false
 	if not profile.has("military_merit"):
 		profile["military_merit"] = 0
 		changed = true
 	if not profile.has("unlocked_heroes"):
-		profile["unlocked_heroes"] = ["zhao_yun"]
+		profile["unlocked_heroes"] = DEFAULT_NEW_PROFILE_HEROES.duplicate()
 		changed = true
 	if not profile.has("completed_chapters"):
 		profile["completed_chapters"] = []
+		changed = true
+	if not profile.has("completed_boss_trials"):
+		profile["completed_boss_trials"] = []
 		changed = true
 	if not profile.has("purchased_upgrades"):
 		profile["purchased_upgrades"] = []
@@ -321,11 +475,31 @@ func _ensure_profile_shape() -> bool:
 		var legacy_talents: Array = profile.get("unlocked_talents", [])
 		profile["hero_talents"] = {"zhao_yun": legacy_talents.duplicate()}
 		changed = true
+	var hero_talents: Dictionary = profile.get("hero_talents", {}) as Dictionary
+	if not profile.has("hero_talent_ranks"):
+		profile["hero_talent_ranks"] = {}
+		changed = true
+	var all_talent_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	for hero_id_variant in HERO_CATALOG.all_ids():
+		var hero_id := str(hero_id_variant)
+		if not hero_talents.has(hero_id):
+			hero_talents[hero_id] = []
+			changed = true
+		var ranks: Dictionary = all_talent_ranks.get(hero_id, {}) as Dictionary
+		var talents: Array = hero_talents.get(hero_id, []) as Array
+		for talent_id_variant in talents:
+			var talent_id := str(talent_id_variant)
+			if int(ranks.get(talent_id, 0)) <= 0:
+				ranks[talent_id] = 1
+				changed = true
+		all_talent_ranks[hero_id] = ranks
+	profile["hero_talents"] = hero_talents
+	profile["hero_talent_ranks"] = all_talent_ranks
 	if profile.has("unlocked_talents"):
 		profile.erase("unlocked_talents")
 		changed = true
 	if not profile.has("equipped_hero_id"):
-		profile["equipped_hero_id"] = "zhao_yun"
+		profile["equipped_hero_id"] = "guan_yu"
 		changed = true
 	if not profile.has("settings"):
 		profile["settings"] = {}

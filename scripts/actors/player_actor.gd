@@ -10,28 +10,31 @@ const ULTIMATE_PAUSE_DURATION := 0.12
 const ULTIMATE_FINAL_RECOVERY := 0.20
 const ULTIMATE_DASH_DISTANCE := 185.0
 const ULTIMATE_FINAL_DASH_DISTANCE := 220.0
-const ULTIMATE_DASH_WIDTH := 54.0
+const ULTIMATE_DASH_WIDTH := 88.0
+const ULTIMATE_FINAL_DASH_WIDTH := 104.0
 const ULTIMATE_FINAL_SHOCKWAVE_RANGE := 124.0
 const ULTIMATE_FINAL_SHOCKWAVE_KNOCKBACK := 840.0
-const THIRD_DASH_DISTANCE := 112.0
+const THIRD_DASH_DISTANCE := 132.0
 const THIRD_DASH_DURATION := 0.14
 const THIRD_DASH_WIDTH := 144.0
 const THIRD_DASH_KNOCKBACK := 460.0
 const THIRD_DASH_FORCED_DISPLACEMENT := 60.0
 # The third-strike flare reaches well beyond Zhao Yun's body. Keep the moving
 # line hitbox broad enough to cover the visible spear sweep, especially on X.
-const THIRD_DASH_FRONT_REACH := 132.0
+const THIRD_DASH_FRONT_REACH := 158.0
+const BASIC_STRIKE_RANGE := 144.0
+const BASIC_SWEEP_RADIUS := 120.0
 const ACTIVE_DASH_DISTANCE := 230.0
 const ACTIVE_DASH_DURATION := 0.24
 const ACTIVE_DASH_WIDTH := 78.0
 const FIRST_STRIKE_SHOCKWAVE_RANGE := 76.0
 const FIRST_STRIKE_SHOCKWAVE_KNOCKBACK := 460.0
-const DRAGON_PROGRESS_THRESHOLD := 20
+const DRAGON_PROGRESS_THRESHOLD := 15
 const DRAGON_PROGRESS_PER_ENEMY_DEFEAT := 1
 const DRAGON_PROGRESS_PER_ELITE_HIT := 3
 const DRAGON_PROGRESS_PER_BOSS_HIT := 5
 const DRAGON_MAX_STACKS := 3
-const DRAGON_BASE_DURATION := 3.0
+const DRAGON_BASE_DURATION := 5.0
 const DRAGON_EXTRA_STACK_SPEED := 0.08
 const DRAGON_EXTRA_STACK_PIERCE := 1
 const DRAGON_BASE_SPEED_BONUS := 0.15
@@ -84,7 +87,7 @@ var dragon_timer := 0.0
 var dragon_progress := 0
 var dragon_progress_threshold := DRAGON_PROGRESS_THRESHOLD
 var dragon_stacks := 0
-var dragon_scale_regen_enabled := false
+var dragon_scale_regen_rank := 0
 var dragon_stride_double_enabled := false
 var dragon_stride_three_stack_duration_enabled := false
 var dragon_shield_charge_bonus := 0
@@ -145,6 +148,7 @@ var firewheel_duration_bonus := 0.0
 var firewheel_projectiles_enabled := false
 var firewheel_capstone_enabled := false
 var firewheel_cooldown_remaining := 0.0
+var firewheel_triggered_for_current_dragon := false
 var firewheel_elapsed := 0.0
 var firewheel_pulse_count := 0
 var firewheel_projectile_batch_count := 0
@@ -165,7 +169,10 @@ func _ready() -> void:
 func reset_for_run(world_bounds: Rect2) -> void:
 	bounds = world_bounds
 	var base_stats: Dictionary = HERO_CATALOG.definition_for(hero_id).get("stats", {})
-	position = Vector2(bounds.get_center().x, bounds.end.y - 70.0)
+	# Start near the playable field's center so the opening view is readable and
+	# does not pin the hero to the lower map edge. RunScene still applies obstacle
+	# and mode-specific boundary correction after reset.
+	position = bounds.get_center()
 	base_attack = float(base_stats.get("attack", 14.0))
 	base_defense = float(base_stats.get("defense", 0.0))
 	attack_bonus = 0.0
@@ -191,7 +198,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	dragon_progress = 0
 	dragon_progress_threshold = DRAGON_PROGRESS_THRESHOLD
 	dragon_stacks = 0
-	dragon_scale_regen_enabled = false
+	dragon_scale_regen_rank = 0
 	dragon_stride_double_enabled = false
 	dragon_stride_three_stack_duration_enabled = false
 	dragon_shield_charge_bonus = 0
@@ -254,6 +261,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	firewheel_projectiles_enabled = false
 	firewheel_capstone_enabled = false
 	firewheel_cooldown_remaining = 0.0
+	firewheel_triggered_for_current_dragon = false
 	firewheel_elapsed = 0.0
 	firewheel_pulse_count = 0
 	firewheel_projectile_batch_count = 0
@@ -266,6 +274,24 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	firewheel_ring_remaining = 0.0
 	firewheel_ring_attack = null
 	health_component.reset(float(base_stats.get("health", 120.0)))
+
+func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
+	if health_component == null:
+		return
+	health_component.current = clampf(health_component.maximum * health_ratio, 1.0, health_component.maximum)
+	health_component.health_changed.emit(health_component.current, health_component.maximum)
+	current_action = ""
+	combo_stage = 0
+	combo_window = 0.0
+	attack_lock_remaining = 0.0
+	hit_delay_remaining = 0.0
+	pending_attack = null
+	has_buffered_basic = false
+	basic_attack_movement_remaining = 0.0
+	ultimate_time = 0.0
+	ultimate_segment_index = 0
+	ultimate_state = UltimateState.INACTIVE
+	reset_guard_state()
 
 func configure_hero(selected_hero_id: String) -> void:
 	hero_id = selected_hero_id if HERO_CATALOG.has_hero(selected_hero_id) else "zhao_yun"
@@ -280,7 +306,9 @@ func ultimate_ability_label() -> String:
 	return "七进"
 
 func tick(delta: float, move_direction: Vector2) -> void:
+	tick_movement_slow(delta)
 	current_move_direction = move_direction
+	_update_buffered_basic_direction()
 	tick_active_charge_recovery(delta, _active_cooldown_for_current_state())
 	firewheel_cooldown_remaining = maxf(0.0, firewheel_cooldown_remaining - delta)
 	combo_window = maxf(0.0, combo_window - delta)
@@ -289,6 +317,7 @@ func tick(delta: float, move_direction: Vector2) -> void:
 	dragon_shield_invulnerable_remaining = maxf(0.0, dragon_shield_invulnerable_remaining - delta)
 	if was_dragon_active and dragon_timer <= 0.0:
 		dragon_stacks = 0
+		firewheel_triggered_for_current_dragon = false
 		_try_trigger_dragon_from_progress()
 	movement_recovery_remaining = maxf(0.0, movement_recovery_remaining - delta)
 	breakout_guard_remaining = maxf(0.0, breakout_guard_remaining - delta)
@@ -316,10 +345,10 @@ func tick(delta: float, move_direction: Vector2) -> void:
 			tick_basic_attack_movement(delta, move_direction)
 		elif not is_action_locked():
 			_update_facing_from_movement(move_direction)
-			_move(move_direction, speed * move_multiplier * delta)
+			_move(move_direction, speed * move_multiplier * movement_speed_multiplier() * delta)
 		elif movement_recovery_remaining > 0.0:
 			_update_facing_from_movement(move_direction)
-			_move(move_direction, speed * movement_recovery_multiplier * delta)
+			_move(move_direction, speed * movement_recovery_multiplier * movement_speed_multiplier() * delta)
 	_tick_ultimate(delta, move_direction)
 	if current_action == "firewheel":
 		_tick_firewheel(delta)
@@ -332,7 +361,7 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		_finish_action()
 
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_time > 0.0:
+	if ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked():
 		if current_action == "basic" and combo_stage < BASIC_COMBO_STAGES and not has_buffered_basic:
@@ -348,7 +377,7 @@ func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_charge_count <= 0 or ultimate_time > 0.0:
+	if active_charge_count <= 0 or ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -374,7 +403,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_ultimate(_direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_energy < ULTIMATE_COST or ultimate_time > 0.0:
+	if ultimate_energy < ULTIMATE_COST or ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -423,7 +452,7 @@ func apply_upgrade(upgrade_id: String) -> void:
 		"firewheel_capstone":
 			firewheel_capstone_enabled = true
 		"dragon_focus":
-			dragon_progress_threshold = 18 if dragon_progress_threshold >= DRAGON_PROGRESS_THRESHOLD else 15
+			dragon_progress_threshold = 12 if dragon_progress_threshold >= DRAGON_PROGRESS_THRESHOLD else 9
 			_try_trigger_dragon_from_progress()
 		"dragon_armor":
 			defense_bonus += 8.0
@@ -443,7 +472,7 @@ func apply_upgrade(upgrade_id: String) -> void:
 			health_component.maximum += 18.0
 			health_component.current = minf(health_component.maximum, health_component.current + 18.0)
 		"dragon_scale_regen":
-			dragon_scale_regen_enabled = true
+			dragon_scale_regen_rank = mini(3, dragon_scale_regen_rank + 1)
 		"dragon_focus_guard":
 			dragon_shield_charge_bonus = 3
 			health_component.set_shield_charge_cap(1 + dragon_shield_charge_bonus)
@@ -459,7 +488,8 @@ func apply_upgrade(upgrade_id: String) -> void:
 			active_knockback_bonus += 150.0
 			active_recovery_bonus += 0.14
 		"spear_shadow":
-			spear_shadow_level += 1
+			# 枪影随行是单次战法；旧存档即使带有重复计数，运行时也只保留一层。
+			spear_shadow_level = mini(1, spear_shadow_level + 1)
 		"white_dragon":
 			ultimate_dash_distance_bonus += 24.0
 			add_ultimate_energy(30.0)
@@ -495,12 +525,15 @@ func current_stats() -> Dictionary:
 		"defense": total_defense(),
 		"health": health_component.current,
 		"max_health": health_component.maximum,
-		"move_speed": speed,
-		"basic_range": 120.0 + basic_range_bonus,
+		"move_speed": effective_move_speed(),
+		"basic_range": BASIC_STRIKE_RANGE + basic_range_bonus,
 		"basic_pierce": 2 + basic_pierce_bonus + _dragon_pierce(),
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
+
+func effective_move_speed() -> float:
+	return speed * _dragon_move_multiplier() * movement_speed_multiplier()
 
 func _active_cooldown_for_current_state() -> float:
 	return active_cooldown_duration
@@ -513,6 +546,9 @@ func dragon_stack_count() -> int:
 
 func hud_status_effects() -> Array[Dictionary]:
 	var effects: Array[Dictionary] = []
+	var slow_effect := movement_slow_hud_effect()
+	if not slow_effect.is_empty():
+		effects.append(slow_effect)
 	if has_dragon():
 		effects.append({
 			"id": "dragon",
@@ -533,7 +569,7 @@ func hud_status_effects() -> Array[Dictionary]:
 			"duration": DRAGON_SHIELD_INVULNERABILITY_DURATION,
 			"color": Color("f3ca54"),
 		})
-	elif health_component.shield_charges > 0 and not has_dragon():
+	elif health_component.shield_charges > 0:
 		effects.append({
 			"id": "dragon_shield",
 			"icon": "甲",
@@ -642,12 +678,13 @@ func grant_breakout_guard() -> void:
 func has_breakout_guard() -> bool:
 	return breakout_guard_remaining > 0.0 and breakout_guard_charges > 0
 
-func receive_damage(amount: float, source: String) -> float:
+func receive_damage(amount: float, source: String, _attack_origin: Vector2 = Vector2.ZERO) -> float:
 	if dragon_shield_invulnerable_remaining > 0.0:
 		return 0.0
 	if is_firewheel_invulnerable():
 		return 0.0
-	if source != "boss" and ultimate_state != UltimateState.INACTIVE:
+	# 七进七出期间对所有伤害来源免疫，包括领主攻击。
+	if ultimate_state != UltimateState.INACTIVE:
 		return 0.0
 	if source != "boss" and has_breakout_guard():
 		breakout_guard_charges -= 1
@@ -661,12 +698,16 @@ func receive_damage(amount: float, source: String) -> float:
 		damaged.emit(applied_damage)
 	return applied_damage
 
+func interrupt_basic_attack() -> void:
+	if current_action == "basic" or combo_stage > 0 or combo_window > 0.0:
+		_cancel_basic_for_skill()
+
 func on_enemy_defeated(enemy_type: int) -> void:
 	add_dragon_progress(DRAGON_PROGRESS_PER_ENEMY_DEFEAT)
 	apply_military_enemy_defeat_reward(enemy_type)
 	var restored_health := false
-	if dragon_scale_regen_enabled and enemy_type != EnemySimulation.EnemyType.ELITE and randf() < 0.08:
-		health_component.current = minf(health_component.maximum, health_component.current + 1.0)
+	if dragon_scale_regen_rank > 0 and enemy_type != EnemySimulation.EnemyType.ELITE and randf() < 0.05 + float(dragon_scale_regen_rank) * 0.03:
+		health_component.current = minf(health_component.maximum, health_component.current + float(dragon_scale_regen_rank))
 		restored_health = true
 	if triumph_enabled and enemy_type == EnemySimulation.EnemyType.ELITE:
 		health_component.current = minf(health_component.maximum, health_component.current + 18.0)
@@ -689,6 +730,8 @@ func on_weapon_clash_success(perfect: bool, skill_clash: bool) -> void:
 	active_cooldown = maxf(0.0, active_cooldown - active_cooldown_duration * 0.20)
 
 func trigger_dragon() -> void:
+	if dragon_stacks <= 0:
+		firewheel_triggered_for_current_dragon = false
 	dragon_stacks = mini(DRAGON_MAX_STACKS, dragon_stacks + 1)
 	dragon_timer = _dragon_duration()
 	if dragon_stacks == 1:
@@ -781,8 +824,9 @@ func _begin_ultimate_dash(move_direction: Vector2) -> void:
 	ultimate_dash_speed = dash_distance / ULTIMATE_DASH_DURATION
 	ultimate_phase_remaining = ULTIMATE_DASH_DURATION
 	var is_final_dash := ultimate_segment_index == ULTIMATE_SEGMENTS - 1
+	var dash_width := ULTIMATE_FINAL_DASH_WIDTH if is_final_dash else ULTIMATE_DASH_WIDTH
 	var multiplier := 6.40 if is_final_dash else 4.20
-	var request := AttackRequest.line(dash_origin, ultimate_dash_direction, dash_distance, ULTIMATE_DASH_WIDTH, multiplier + ultimate_damage_bonus, 12 + basic_pierce_bonus + _dragon_pierce(), "七进七出")
+	var request := AttackRequest.line(dash_origin, ultimate_dash_direction, dash_distance, dash_width, multiplier + ultimate_damage_bonus, 12 + basic_pierce_bonus + _dragon_pierce(), "七进七出")
 	request.action_kind = AttackRequest.ActionKind.ULTIMATE
 	request.dash_kind = HeroActor.DashKind.ULTIMATE
 	request.stance_damage = 22.0
@@ -813,7 +857,7 @@ func _begin_basic(stage: int) -> void:
 	current_action = "basic"
 	begin_basic_attack_movement()
 	projectile_guard_blocks_remaining = PROJECTILE_GUARD_BLOCK_LIMIT if projectile_guard_level > 0 else 0
-	combo_window = 0.58
+	combo_window = 0.0
 	has_buffered_basic = false
 	buffered_basic_direction = Vector2.ZERO
 	pending_first_strike_shockwave = null
@@ -823,7 +867,7 @@ func _begin_basic(stage: int) -> void:
 		1:
 			attack_lock_remaining = 0.30
 			hit_delay_remaining = 0.10
-			request = AttackRequest.line(position, last_attack_direction, 120.0 + basic_range_bonus, 56.0, 1.0, 2 + basic_pierce_bonus + _dragon_pierce(), "点刺")
+			request = AttackRequest.line(position, last_attack_direction, BASIC_STRIKE_RANGE + basic_range_bonus, 56.0, 1.0, 2 + basic_pierce_bonus + _dragon_pierce(), "点刺")
 			request.stance_damage = 10.0
 			request.knockback = 130.0
 			pending_first_strike_shockwave = AttackRequest.circle(position, FIRST_STRIKE_SHOCKWAVE_RANGE, 0.28, 12, "枪势震退")
@@ -834,7 +878,7 @@ func _begin_basic(stage: int) -> void:
 		2:
 			attack_lock_remaining = 0.40
 			hit_delay_remaining = 0.16
-			request = AttackRequest.fan(position, last_attack_direction, 105.0 + basic_range_bonus + sweep_range_bonus, deg_to_rad(120.0 + sweep_angle_bonus), 1.1, 5 + basic_pierce_bonus + _dragon_pierce(), "横扫")
+			request = AttackRequest.fan(position, last_attack_direction, BASIC_SWEEP_RADIUS + basic_range_bonus + sweep_range_bonus, deg_to_rad(120.0 + sweep_angle_bonus), 1.1, 5 + basic_pierce_bonus + _dragon_pierce(), "横扫")
 			request.stance_damage = 15.0
 			request.knockback = 260.0 + sweep_knockback_bonus
 			_configure_breakout_knockback(request, 3, 3.0)
@@ -853,6 +897,7 @@ func _begin_basic(stage: int) -> void:
 	pending_attack = request
 
 func _begin_firewheel() -> void:
+	firewheel_triggered_for_current_dragon = true
 	current_action = "firewheel"
 	combo_stage = 4
 	combo_window = 0.0
@@ -861,10 +906,6 @@ func _begin_firewheel() -> void:
 	combat_action_started.emit("firewheel")
 	pending_attack = null
 	pending_first_strike_shockwave = null
-	dragon_timer = 0.0
-	dragon_stacks = 0
-	dragon_shield_invulnerable_remaining = 0.0
-	health_component.shield_charges = 0
 	firewheel_elapsed = 0.0
 	firewheel_pulse_count = 0
 	firewheel_projectile_batch_count = 0
@@ -1027,7 +1068,7 @@ func _launch_firewheel_ring() -> void:
 	firewheel_ring_attack.forced_displacement_duration = 0.10
 	firewheel_ring_attack.visual_emitted = true
 	firewheel_ring_attack.suppress_impact_feedback = true
-	visual_effect_started.emit("firewheel_ring", origin, direction, travel_distance)
+	visual_effect_started.emit("firewheel_ring", origin, direction, travel_distance, {})
 
 func _tick_firewheel_ring(delta: float) -> void:
 	var travel_distance := minf(FIREWHEEL_RING_SPEED * delta, firewheel_ring_remaining)
@@ -1101,7 +1142,9 @@ func _cancel_basic_for_skill() -> void:
 	hit_delay_remaining = 0.0
 	path_dash_remaining = 0.0
 	path_dash_duration = 0.0
+	path_dash_distance = 0.0
 	path_dash_travel_remaining = 0.0
+	path_dash_speed = 0.0
 	path_dash_request = null
 	path_dash_finish = null
 	attack_lock_remaining = 0.0
@@ -1153,27 +1196,32 @@ func _finish_action() -> void:
 		return
 	if current_action == "basic":
 		combat_action_finished.emit("basic_%d" % combo_stage)
-	if current_action == "basic" and combo_stage == BASIC_COMBO_STAGES and firewheel_enabled and firewheel_cooldown_remaining <= 0.0 and has_dragon():
+	if current_action == "basic" and combo_stage == BASIC_COMBO_STAGES and firewheel_enabled and not firewheel_triggered_for_current_dragon and firewheel_cooldown_remaining <= 0.0 and has_dragon():
 		has_buffered_basic = false
 		clear_basic_attack_movement()
 		_begin_firewheel()
 		return
 	if current_action == "basic" and has_buffered_basic:
-		var next_direction := _current_basic_input()
-		if next_direction.length_squared() <= 0.01:
-			next_direction = buffered_basic_direction
+		var next_direction := buffered_basic_direction
 		has_buffered_basic = false
 		buffered_basic_direction = Vector2.ZERO
 		_update_facing_from_movement(next_direction)
 		combo_stage = (combo_stage % BASIC_COMBO_STAGES) + 1
 		_begin_basic(combo_stage)
 		return
+	if current_action == "basic":
+		# Only input buffered during the preceding animation may continue a
+		# physical attack chain. The HUD hit-combo counter is independent.
+		combo_stage = 0
+		combo_window = 0.0
 	clear_basic_attack_movement()
 	if current_action == "active":
 		combat_action_finished.emit("active")
 	current_action = ""
 
 func _move(direction: Vector2, distance: float) -> void:
+	if is_guard_active():
+		return
 	var normalized := direction.normalized() if direction.length() > 0.1 else Vector2.ZERO
 	position += normalized * distance
 	position.x = clampf(position.x, bounds.position.x + 12.0, bounds.end.x - 12.0)
@@ -1209,8 +1257,18 @@ func _configure_dragon_breakout_knockback(request: AttackRequest) -> void:
 	request.empowered_knockback_multiplier = 2.5
 
 func _update_facing_from_movement(move_direction: Vector2) -> void:
+	if is_guard_active():
+		return
 	if absf(move_direction.x) > 0.1:
 		last_attack_direction = Vector2.LEFT if move_direction.x < 0.0 else Vector2.RIGHT
+
+func _update_buffered_basic_direction() -> void:
+	if current_action != "basic" or not has_buffered_basic:
+		return
+	var live_input := _current_basic_input()
+	if live_input.length_squared() <= 0.01:
+		return
+	buffered_basic_direction = _eight_way_direction(live_input, buffered_basic_direction if buffered_basic_direction.length_squared() > 0.01 else last_attack_direction)
 
 func _current_basic_input(explicit_direction: Vector2 = Vector2.ZERO) -> Vector2:
 	return explicit_direction if explicit_direction.length_squared() > 0.01 else current_move_direction

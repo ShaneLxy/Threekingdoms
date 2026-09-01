@@ -10,16 +10,19 @@ config_version=5
 
 [application]
 
-config/name="三国 破阵无双"
+config/name="三国:破阵无双"
 run/main_scene="res://scenes/home/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
+config/icon="res://assets/art/ui/title/android_icon/android_icon_legacy.png"
 
 [autoload]
 
 SaveService="*res://autoload/save_service.gd"
+AdService="*res://autoload/ad_service.gd"
 AudioService="*res://autoload/audio_service.gd"
 LoadingOverlay="*res://autoload/loading_overlay.gd"
 SceneRouter="*res://autoload/scene_router.gd"
+HapticService="*res://autoload/haptic_service.gd"
 
 [display]
 

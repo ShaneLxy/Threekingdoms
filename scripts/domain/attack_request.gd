@@ -8,9 +8,12 @@ var shape: Shape = Shape.LINE
 var origin := Vector2.ZERO
 var direction := Vector2.UP
 var range := 0.0
+var inner_radius := 0.0
 var width := 0.0
 var half_angle := 0.0
 var multiplier := 1.0
+var center_damage_radius := 0.0
+var center_damage_multiplier := 1.0
 var pierce := 1
 var knockback := 0.0
 var ignore_knockback_resistance := false
@@ -94,3 +97,8 @@ static func circle(at: Vector2, radius: float, damage_multiplier: float, max_tar
 	request.pierce = max_targets
 	request.label = name
 	return request
+
+func damage_multiplier_at(point: Vector2) -> float:
+	if shape == Shape.CIRCLE and center_damage_radius > 0.0 and point.distance_squared_to(origin) <= center_damage_radius * center_damage_radius:
+		return multiplier * maxf(1.0, center_damage_multiplier)
+	return multiplier
