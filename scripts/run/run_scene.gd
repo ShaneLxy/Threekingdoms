@@ -23,10 +23,12 @@ const HERO_ATTACK_SHOUT_CHANCE := 0.20
 const ELITE_ACTOR_SCENE := preload("res://scenes/actors/elite_actor.tscn")
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
-const BATTLE_WEATHER_MODES := ["sunny", "rain", "storm"]
-const BOSS_TRIAL_STARTING_UPGRADES := 3
-const BOSS_TRIAL_ELITE_LEVEL_REWARD := 3
-const UPGRADE_REFRESH_LIMIT := 2
+const BATTLE_WEATHER_MODES := ["sunny", "rain", "storm", "snow"]
+const BOSS_TRIAL_STARTING_UPGRADES := 5
+const BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT := 5
+const BOSS_TRIAL_UPGRADE_OPTION_COUNT := 3
+const BOSS_TRIAL_UPGRADE_SELECTION_LIMIT := 1
+const UPGRADE_REFRESH_LIMIT := 5
 const WEAPON_CLASH_WINDOW := 0.28
 const PERFECT_WEAPON_CLASH_WINDOW := 0.10
 const NORMAL_CLASH_STANCE_DAMAGE := 18.0
@@ -45,12 +47,14 @@ const BOSS_DEFEAT_MERIT := 220.0
 const BOSS_TRIAL_ID := "lvbu"
 const BOSS_TRIAL_BOSS_DEFEAT_MERIT := 1100.0
 const BOSS_TRIAL_FIRST_CLEAR_MERIT := 600.0
-const UPGRADE_AD_REFRESH_LIMIT := 3
+# Rewarded refreshes are temporarily hidden. Keep the counter for runtime
+# compatibility so the ad path can be restored without changing draft flow.
+const UPGRADE_AD_REFRESH_LIMIT := 0
 const ENDLESS_MILESTONE_TIMES := [300.0, 600.0, 900.0, 1200.0]
 const ENDLESS_MILESTONE_REWARDS := [120.0, 160.0, 200.0, 260.0]
 
 @onready var renderer: BattleRenderer = $BattleRenderer
-@onready var player: HeroActor = $Player
+@onready var player: HeroActor = $Player as HeroActor  # 使用 as 转换以避免类型错误
 var battle_camera: Camera2D
 @onready var boss: BossActor = $Boss
 @onready var enemies: EnemySimulation = $EnemySimulation
@@ -58,7 +62,7 @@ var battle_camera: Camera2D
 @onready var upgrades: UpgradeSystem = $UpgradeSystem
 @onready var tianji: TianjiSystem = $TianjiSystem
 @onready var director: RunDirector = $RunDirector
-@onready var loot = $LootSystem
+@onready var loot: LootSystem = $LootSystem
 @onready var input_router: InputRouter = $InputRouter
 @onready var hud: BattleHud = $HudLayer/BattleHud
 @onready var ultimate_cutin: UltimateCutin = $UltimateCutinLayer/UltimateCutin
@@ -71,7 +75,7 @@ var restart_settlement_started := false
 var paused := false
 var player_death_cinematic_active := false
 var revive_prompt_active := false
-var revive_used := false
+var revive_count := 0
 var pending_defeat_message := ""
 var victory_cinematic_active := false
 var victory_phase := ""
@@ -83,6 +87,7 @@ var run_defeated_count := 0
 var run_damage_taken := 0.0
 var hitstop_remaining := 0.0
 var clash_slow_remaining := 0.0
+const DUEL_HIT_LOG_PATH := "user://duel_hit_debug.log"
 var run_gold := 0
 var run_merit_fraction := 0.0
 var endless_milestone_index := 0
@@ -97,7 +102,6 @@ var active_obstacles: Array[Rect2] = []
 var boss_trial_upgrades_remaining := 0
 var boss_trial_advance_after_upgrade := false
 var boss_trial_advance_after_levels := false
-var boss_trial_advance_after_boss := false
 var player_action_clash_consumed := false
 var guard_perfect_telegraphs: Dictionary = {}
 var guard_named_reward_consumed := false
@@ -108,7 +112,19 @@ var current_upgrade_level := 1
 var current_upgrade_options: Array[String] = []
 var current_upgrade_selection_limit := 1
 var current_upgrade_selection_count := 0
+var opening_strategy_selected := false
+var run_strategy_id := UpgradeSystem.DRAFT_TENDENCY_BALANCED
 var duel_formation_was_sealed := false
+var overtime_settlement_active := false
+var overtime_settlement_remaining := 0.0
+var pending_named_formations: Array[Dictionary] = []
+var pending_named_formation_safe_remaining := 0.0
+var armed_named_formation: Dictionary = {}
+var named_formation_warning_remaining := 0.0
+const OVERTIME_SETTLEMENT_DELAY := 5.0
+const MAX_REVIVES_PER_RUN := 2
+const NAMED_FORMATION_WARNING_DURATION := 3.0
+const NAMED_FORMATION_POST_COMBAT_DELAY := 12.0
 
 func _ready() -> void:
 	AudioService.stop_hero_firewheel_loop()
@@ -119,17 +135,27 @@ func _ready() -> void:
 	upgrade_refreshes_remaining = UPGRADE_REFRESH_LIMIT
 	upgrade_ad_refreshes_remaining = UPGRADE_AD_REFRESH_LIMIT
 	revive_prompt_active = false
-	revive_used = false
+	revive_count = 0
 	result_double_claimed = false
 	duel_formation_was_sealed = false
+	overtime_settlement_active = false
+	overtime_settlement_remaining = 0.0
+	pending_named_formations.clear()
+	pending_named_formation_safe_remaining = 0.0
+	armed_named_formation.clear()
+	named_formation_warning_remaining = 0.0
+	_reset_duel_hit_debug_log()
 	var profile := SaveService.load_profile()
 	run_mode = SceneRouter.active_mode
 	endless_milestone_index = 0
 	active_world_bounds = _world_bounds_for_mode(run_mode)
 	active_obstacles = BATTLEFIELD_LAYOUT.obstacle_rects_for(_active_battlefield_id(), active_world_bounds)
 	boss_trial_advance_after_levels = false
-	boss_trial_advance_after_boss = false
 	_install_equipped_hero(SaveService.equipped_hero_id())
+	if not _battle_dependencies_ready():
+		set_process(false)
+		LoadingOverlay.finish_transition()
+		return
 	boss.set_movement_bounds(active_world_bounds.grow(-NAMED_SPAWN_MARGIN))
 	enemies.reset(active_world_bounds, run_mode)
 	enemies.set_navigation_obstacles(active_obstacles)
@@ -144,6 +170,7 @@ func _ready() -> void:
 	_configure_battle_camera()
 	director.configure_performance_profile(OS.has_feature("mobile"))
 	director.configure_account_progress(profile)
+	director.set_enemy_simulation(enemies)
 	director.reset(active_world_bounds, run_mode, _active_battlefield_id(), SceneRouter.active_story_chapter)
 	if director.is_boss_trial():
 		for _level in range(2, director.level + 1):
@@ -152,13 +179,14 @@ func _ready() -> void:
 	enemies.set_difficulty_ramp(director.difficulty_multiplier())
 	upgrades.configure_talent_pool(profile, player.hero_id)
 	upgrades.configure_tianji_pool(profile)
+	upgrades.set_draft_tendency(UpgradeSystem.DRAFT_TENDENCY_BALANCED)
 	upgrades.randomize_seed()
 	# Keep the complete artwork visible while the simulation remains constrained
 	# to the central stone arena.
 	var renderer_bounds := BOSS_TRIAL_WORLD_BOUNDS if director.is_boss_trial() else active_world_bounds
 	renderer.configure(renderer_bounds, enemies, player, boss, telegraphs, loot, elites, _active_battlefield_id())
 	renderer.set_battle_camera(battle_camera)
-	renderer.set_weather_mode(_battle_weather_for(profile))
+	renderer.set_weather_mode("sunny" if run_mode == "endless" else _battle_weather_for(profile))
 	tianji.configure(player, enemies, elites, boss, battle_camera, upgrades.tianji_slot_capacity())
 	hud.configure(player, boss, director, elites, tianji)
 	if not active_obstacles.is_empty():
@@ -168,6 +196,7 @@ func _ready() -> void:
 	input_router.configure(player, hud)
 	player.attack_requested.connect(_on_player_attack)
 	player.visual_effect_started.connect(_on_player_visual_effect_started)
+	player.camera_shake_requested.connect(_on_player_camera_shake)
 	player.combat_action_started.connect(_on_player_combat_action_started)
 	player.combat_action_finished.connect(_on_player_combat_action_finished)
 	player.ultimate_ready.connect(_on_ultimate_ready)
@@ -180,14 +209,20 @@ func _ready() -> void:
 	enemies.enemy_attack_cancelled.connect(_on_enemy_attack_cancelled)
 	enemies.enemy_death_collision.connect(_on_enemy_death_collision)
 	enemies.banner_command_requested.connect(_on_banner_command)
+	enemies.named_formation_broken.connect(_on_named_formation_broken)
+	enemies.named_formation_gate_changed.connect(_on_named_formation_gate_changed)
+	enemies.named_formation_break_opened.connect(_on_named_formation_break_opened)
 	director.spawn_requested.connect(_on_spawn_requested)
+	director.formation_requested.connect(_on_formation_requested)
 	director.elite_requested.connect(_on_elite_requested)
 	director.boss_requested.connect(_on_boss_requested)
 	director.level_up.connect(_on_level_up)
 	director.stage_changed.connect(hud.set_message)
+	director.weather_changed.connect(renderer.set_weather_mode)
 	director.threat_tier_changed.connect(_on_threat_tier_changed)
 	boss.telegraph_requested.connect(_add_telegraph)
 	boss.skill_impact_requested.connect(_on_named_skill_impact)
+	boss.rush_started.connect(_on_boss_rush_started)
 	boss.summon_requested.connect(_on_boss_summon)
 	boss.phase_changed.connect(_on_boss_phase)
 	boss.defeated.connect(_on_boss_defeated)
@@ -197,6 +232,7 @@ func _ready() -> void:
 	tianji.fire_rain_meteor_started.connect(_on_fire_rain_meteor_started)
 	hud.upgrade_selected.connect(_on_upgrade_selected)
 	hud.upgrade_refresh_requested.connect(_on_upgrade_refresh_requested)
+	hud.run_strategy_selected.connect(_on_run_strategy_selected)
 	hud.revive_requested.connect(_on_revive_requested)
 	hud.revive_declined.connect(_on_revive_declined)
 	hud.result_reward_requested.connect(_on_result_reward_requested)
@@ -215,8 +251,9 @@ func _ready() -> void:
 	input_router.guard_requested.connect(_on_guard_requested)
 	input_router.weapon_stance_requested.connect(_on_weapon_stance_requested)
 	input_router.pause_requested.connect(_on_pause_requested)
-	if director.is_boss_trial():
-		call_deferred("_start_boss_trial")
+	upgrade_open = true
+	input_router.set_input_enabled(false)
+	call_deferred("_open_run_strategy_choice")
 	# SceneRouter closes the departure overlay only after it confirms this scene
 	# is active. Keep direct scene launches and restarts compatible without
 	# allowing _ready() to report a false "战场已就绪" during a pending switch.
@@ -237,9 +274,23 @@ func _install_equipped_hero(requested_hero_id: String) -> void:
 		push_warning("No playable actor scene configured for %s; falling back to Zhao Yun." % hero_id)
 		hero_id = "zhao_yun"
 		actor_scene_path = HERO_CATALOG.actor_scene_for(hero_id)
-	if player.scene_file_path != actor_scene_path:
-		var actor_scene := load(actor_scene_path) as PackedScene
-		var replacement := actor_scene.instantiate() as HeroActor if actor_scene != null else null
+	if not is_instance_valid(player):
+		var invalid_player_node := get_node_or_null("Player")
+		if invalid_player_node != null:
+			remove_child(invalid_player_node)
+			invalid_player_node.queue_free()
+		player = null
+		var initial_player := _instantiate_hero_actor(actor_scene_path)
+		if initial_player == null and hero_id != "zhao_yun":
+			hero_id = "zhao_yun"
+			actor_scene_path = HERO_CATALOG.actor_scene_for(hero_id)
+			initial_player = _instantiate_hero_actor(actor_scene_path)
+		if initial_player != null:
+			initial_player.name = "Player"
+			add_child(initial_player)
+			player = initial_player
+	if player != null and player.scene_file_path != actor_scene_path:
+		var replacement := _instantiate_hero_actor(actor_scene_path)
 		if replacement == null:
 			push_error("Failed to create hero actor from %s." % actor_scene_path)
 			return
@@ -251,10 +302,57 @@ func _install_equipped_hero(requested_hero_id: String) -> void:
 		replacement.name = "Player"
 		player = replacement
 		previous_player.queue_free()
-	player.configure_hero(hero_id)
-	battle_camera = player.get_node_or_null("BattleCamera") as Camera2D
+	if player != null:
+		player.configure_hero(hero_id)
+	battle_camera = player.get_node_or_null("BattleCamera") as Camera2D if player != null else null
 	if battle_camera == null:
 		push_error("Hero actor %s must provide a BattleCamera child." % hero_id)
+
+func _instantiate_hero_actor(actor_scene_path: String) -> HeroActor:
+	if actor_scene_path.is_empty():
+		return null
+	var actor_scene := load(actor_scene_path) as PackedScene
+	if actor_scene == null:
+		push_error("Unable to load hero actor scene: %s" % actor_scene_path)
+		return null
+	var actor := actor_scene.instantiate()
+	var hero_actor := actor as HeroActor
+	if hero_actor == null:
+		if actor != null:
+			actor.queue_free()
+		push_error("Hero actor scene does not extend HeroActor: %s" % actor_scene_path)
+	return hero_actor
+
+func _battle_dependencies_ready() -> bool:
+	var missing: Array[String] = []
+	if not is_instance_valid(player):
+		missing.append("Player")
+	if not is_instance_valid(boss):
+		missing.append("Boss")
+	if not is_instance_valid(enemies):
+		missing.append("EnemySimulation")
+	if not is_instance_valid(combat):
+		missing.append("CombatSystem")
+	if not is_instance_valid(upgrades):
+		missing.append("UpgradeSystem")
+	if not is_instance_valid(tianji):
+		missing.append("TianjiSystem")
+	if not is_instance_valid(director):
+		missing.append("RunDirector")
+	if not is_instance_valid(loot):
+		missing.append("LootSystem")
+	if not is_instance_valid(input_router):
+		missing.append("InputRouter")
+	if not is_instance_valid(renderer):
+		missing.append("BattleRenderer")
+	if not is_instance_valid(hud):
+		missing.append("BattleHud")
+	if not is_instance_valid(ultimate_cutin):
+		missing.append("UltimateCutin")
+	if missing.is_empty():
+		return true
+	push_error("Battle scene cannot start; missing dependencies: %s" % ", ".join(missing))
+	return false
 
 func _process(delta: float) -> void:
 	if paused:
@@ -268,8 +366,11 @@ func _process(delta: float) -> void:
 		renderer.tick_player_death_cinematic(delta)
 		if renderer.is_player_death_cinematic_finished():
 			player_death_cinematic_active = false
-			revive_prompt_active = true
-			hud.show_revive_prompt()
+			if revive_count < MAX_REVIVES_PER_RUN:
+				revive_prompt_active = true
+				hud.show_revive_prompt(MAX_REVIVES_PER_RUN - revive_count)
+			else:
+				_finish_run(false, pending_defeat_message)
 		return
 	if revive_prompt_active:
 		return
@@ -291,6 +392,7 @@ func _process(delta: float) -> void:
 	_tick_player_action_clash()
 	_tick_player_move_audio(simulation_delta, move_direction)
 	_update_battle_camera(simulation_delta)
+	director.set_spawn_view_rect(_battle_visible_world_rect())
 	director.tick(delta, enemies.active_count, player.position)
 	_tick_endless_milestones()
 	enemies.set_battle_elapsed(director.elapsed)
@@ -303,12 +405,12 @@ func _process(delta: float) -> void:
 		if enemies.is_duel_formation_sealed() and not duel_formation_was_sealed:
 			duel_formation_was_sealed = true
 			AudioService.start_enemy_duel_cheers()
-			hud.set_message("斗将阵成：击破敌将，方可破阵")
+			hud.begin_duel_hints()
 		elif not enemies.is_duel_formation_sealed() and duel_formation_was_sealed:
 			_stop_duel_formation_audio()
 	elif duel_formation_was_sealed:
 		_stop_duel_formation_audio()
-	var nearby_radius := player.nearby_enemy_radius()
+	var nearby_radius: float = player.nearby_enemy_radius()
 	var nearby_enemy_count := enemies.count_active_within(player.position, nearby_radius)
 	for elite in elites:
 		if is_instance_valid(elite) and elite.active and elite.position.distance_to(player.position) <= nearby_radius:
@@ -320,23 +422,67 @@ func _process(delta: float) -> void:
 	var named_move_origins := _capture_named_positions()
 	_tick_named_enemies(simulation_delta)
 	_resolve_named_obstacles(named_move_origins)
+	_tick_pending_named_formation(delta)
 	tianji.tick(simulation_delta)
 	_tick_telegraphs(simulation_delta)
 	if director.is_time_over():
-		if run_mode == "story":
-			if director.story_requires_boss_defeat() and boss.active:
-				var required_boss_name := "夏侯惇" if director.boss_archetype_id() == "xiahou_dun" else "张郃"
-				_finish_run(false, "未能击破%s，战场防线失守" % required_boss_name)
-			elif not boss.active:
-				_finish_run(true, director.story_completion_message())
-		elif not boss.active:
-			_finish_run(true, "无尽试炼完成，军功已结算")
+		if not boss.active and not boss.is_dying():
+			_finish_run(true, director.story_completion_message() if run_mode == "story" else "无尽试炼完成，军功已结算")
+		else:
+			_tick_overtime_settlement(delta)
 
 func _on_spawn_requested(enemy_type: int, at: Vector2) -> void:
 	# 军旗兵暂未开放，防止旧配置或遗留波次将其生成到战场。
 	if enemy_type == EnemySimulation.EnemyType.BANNER:
 		return
 	enemies.spawn(enemy_type, at)
+
+func _on_formation_requested(_formation_id: String, _at: Vector2) -> void:
+	# 铁桶阵已取消；保留信号接收端，兼容旧关卡配置而不创建任何阵型。
+	return
+
+func _on_named_formation_broken(formation_id: String) -> void:
+	var formation_name := _named_formation_name(formation_id)
+	hud.set_message("%s已破，敌阵溃散" % formation_name)
+
+func _on_named_formation_gate_changed(_at: Vector2) -> void:
+	if enemies != null and enemies.is_named_formation_active() and enemies.named_formation_id() == "bagua":
+		hud.set_message("八卦阵生门轮换：追击青色阵眼")
+
+func _on_named_formation_break_opened(formation_id: String) -> void:
+	var formation_name := _named_formation_name(formation_id)
+	hud.set_message("%s破阵窗口开启：剩余15秒，优先攻击高亮阵眼" % formation_name)
+
+func _tick_pending_named_formation(delta: float) -> void:
+	# 队列只曾用于铁桶阵。清理旧会话或旧配置遗留请求，避免再次触发已下线的玩法。
+	pending_named_formations.clear()
+	armed_named_formation.clear()
+	pending_named_formation_safe_remaining = 0.0
+	named_formation_warning_remaining = 0.0
+
+func _is_named_formation_start_safe() -> bool:
+	if enemies == null or boss == null:
+		return false
+	if enemies.is_duel_formation_active() or boss.active or boss.is_dying():
+		return false
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active:
+			return false
+	return true
+
+func _named_formation_name(formation_id: String) -> String:
+	match formation_id:
+		"eight_gates": return "八门金锁阵"
+		"fish_scale": return "鱼鳞阵"
+		"bagua": return "八卦阵"
+	return "敌军阵法"
+
+func _named_formation_start_message(formation_id: String) -> String:
+	match formation_id:
+		"eight_gates": return "八门金锁阵成阵：外圈盾墙封门，内格枪弓协击"
+		"fish_scale": return "鱼鳞阵成阵：盾墙错列成鳞，两翼骑兵沿通道突入"
+		"bagua": return "八卦阵成阵：回字迷宫闭合，追踪轮换阵眼破阵"
+	return "%s成阵" % _named_formation_name(formation_id)
 
 func _on_threat_tier_changed(tier: int) -> void:
 	enemies.set_threat_tier(tier)
@@ -372,8 +518,8 @@ func _resolve_enemy_obstacles(origins: Array[Vector2]) -> void:
 		return
 	for enemy_id in range(EnemySimulation.CAPACITY):
 		if enemies.is_active(enemy_id):
-			var origin := origins[enemy_id] if enemy_id < origins.size() else enemies.positions[enemy_id]
-			var destination := enemies.positions[enemy_id]
+			var origin: Vector2 = origins[enemy_id] if enemy_id < origins.size() else enemies.positions[enemy_id]
+			var destination: Vector2 = enemies.positions[enemy_id]
 			var resolved := _resolve_movement_against_obstacles(origin, destination, _enemy_collision_radius(enemies.get_type(enemy_id)))
 			if destination.distance_to(origin) > 2.0 and resolved.distance_to(origin) < destination.distance_to(origin) * 0.55:
 				enemies.mark_navigation_blocked(enemy_id)
@@ -445,7 +591,7 @@ func _on_elite_requested(elite_id: String, _scheduled_at: Vector2) -> void:
 	elites.append(elite)
 	if not director.is_boss_trial() and not enemies.is_duel_formation_active():
 		enemies.begin_duel_formation(player.position)
-		director.set_spawn_suppressed(true)
+		director.set_spawn_background_mode(true)
 		_stop_duel_formation_audio()
 	renderer.set_elites(elites)
 	hud.set_elites(elites)
@@ -468,20 +614,27 @@ func _configure_battle_camera() -> void:
 	battle_camera.force_update_scroll()
 
 func _update_battle_camera(delta: float) -> void:
-	var target_offset := player.last_attack_direction.x * CAMERA_LOOK_AHEAD
+	var target_offset: float = player.last_attack_direction.x * CAMERA_LOOK_AHEAD
 	battle_camera.position.x = move_toward(battle_camera.position.x, target_offset, 300.0 * delta)
 
-func _update_named_target_indicators() -> void:
+func _battle_visible_world_rect() -> Rect2:
+	if battle_camera == null:
+		return Rect2()
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return
+		return Rect2()
 	var zoom := battle_camera.zoom
 	var visible_world_size := Vector2(
 		viewport_size.x / maxf(0.01, zoom.x),
 		viewport_size.y / maxf(0.01, zoom.y)
 	)
+	return Rect2(battle_camera.get_screen_center_position() - visible_world_size * 0.5, visible_world_size)
+
+func _update_named_target_indicators() -> void:
+	var visible_world_rect := _battle_visible_world_rect()
+	if visible_world_rect.size.x <= 0.0 or visible_world_rect.size.y <= 0.0:
+		return
 	var screen_center := battle_camera.get_screen_center_position()
-	var visible_world_rect := Rect2(screen_center - visible_world_size * 0.5, visible_world_size)
 	var targets: Array[Dictionary] = []
 	if boss.active and _is_named_target_offscreen(boss.position, visible_world_rect):
 		targets.append(_named_target_indicator(boss.position, screen_center, "boss"))
@@ -526,7 +679,7 @@ func _on_boss_requested(_scheduled_at: Vector2) -> void:
 	AudioService.play_boss_entrance_voice()
 	if not director.is_boss_trial() and not enemies.is_duel_formation_active():
 		enemies.begin_duel_formation(player.position)
-		director.set_spawn_suppressed(true)
+		director.set_spawn_background_mode(true)
 		_stop_duel_formation_audio()
 	hud.set_message("%s·%s 现身 · 敌军正在列阵" % [boss.display_name(), boss.weapon_title()])
 
@@ -607,6 +760,10 @@ func _on_player_visual_effect_started(effect_id: String, _origin: Vector2, _dire
 	if effect_id in ["guan_drag_wave", "guan_active_wave", "guan_wusheng_wave", "guan_fourth_wave"]:
 		AudioService.play_guan_yu_blade_wave()
 
+func _on_player_camera_shake(strength: float) -> void:
+	if renderer != null and is_instance_valid(renderer):
+		renderer.add_named_skill_shake(strength)
+
 func _on_player_attack(request: AttackRequest) -> void:
 	if request.label in ["丈八跃砸", "据水断桥·跃砸"]:
 		AudioService.play_zhang_fei_ground_slam()
@@ -622,9 +779,11 @@ func _on_player_attack(request: AttackRequest) -> void:
 	for elite in elites:
 		var elite_id := elite.get_instance_id()
 		var can_hit_elite := not request.one_hit_per_target or not request.hit_elite_ids.has(elite_id)
-		if can_hit_elite and not clashed_elite_ids.has(elite_id) and elite.active and combat.request_hits_point(request, elite.position):
-			if enemies.is_duel_formation_active() and not enemies.is_duel_formation_sealed():
-				continue
+		var elite_geometry_hit := elite.active and combat.request_hits_point(request, elite.position)
+		if enemies.is_duel_formation_active() and elite.active:
+			_log_duel_named_hit("elite", elite.display_name(), request, elite.position, elite_geometry_hit, elite.is_cast_invulnerable(), elite.current_action, elite.health_component.current, -1.0)
+		if can_hit_elite and not clashed_elite_ids.has(elite_id) and elite_geometry_hit:
+			# 垂直盾墙系统：精英总是可以被攻击到，不再有圆形盾墙的阻挡逻辑
 			if request.displacement_only:
 				_apply_elite_guard_knockback(elite, request)
 				request.hit_elite_ids[elite_id] = true
@@ -635,6 +794,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 			elite_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, elite_damage)
 			var elite_result := elite.receive_player_hit(elite_damage)
 			var elite_actual_damage := float(elite_result.get("damage", 0.0))
+			if enemies.is_duel_formation_active():
+				_log_duel_named_hit("elite_result", elite.display_name(), request, elite.position, true, elite.is_cast_invulnerable(), elite.current_action, elite.health_component.current, elite_actual_damage, elite_result)
 			if elite_actual_damage > 0.0:
 				combo_hit_count += 1
 			if elite_actual_damage > 0.0 and request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
@@ -652,7 +813,11 @@ func _on_player_attack(request: AttackRequest) -> void:
 			player.on_named_target_hit(HeroActor.NamedTargetKind.ELITE, request, elite_actual_damage)
 			player.record_named_target_combat_hit(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, elite_actual_damage)
 	var can_hit_boss := not request.one_hit_per_target or not request.hit_boss
-	if can_hit_boss and not clashed_boss and boss.active and combat.request_hits_point(request, boss.position) and (not enemies.is_duel_formation_active() or enemies.is_duel_formation_sealed()):
+	var boss_geometry_hit := boss.active and combat.request_hits_point(request, boss.position)
+	if enemies.is_duel_formation_active() and boss.active:
+		_log_duel_named_hit("boss", boss.display_name(), request, boss.position, boss_geometry_hit, boss.is_cast_invulnerable(), boss.current_action, boss.health_component.current, -1.0)
+	if can_hit_boss and not clashed_boss and boss_geometry_hit:
+		# 垂直盾墙系统：领主总是可以被攻击到，不再需要等待决斗封闭
 		if request.displacement_only:
 			_apply_boss_guard_knockback(request)
 			request.hit_boss = true
@@ -664,6 +829,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 			var vulnerable_stance_damage := (request.stance_damage if request.stance_damage > 0.0 else BossActor.VULNERABLE_DEFAULT_STANCE_DAMAGE) if boss.is_vulnerable() else 0.0
 			var boss_result := boss.receive_player_hit(boss_damage, vulnerable_stance_damage)
 			var boss_actual_damage := float(boss_result.get("damage", 0.0))
+			if enemies.is_duel_formation_active():
+				_log_duel_named_hit("boss_result", boss.display_name(), request, boss.position, true, boss.is_cast_invulnerable(), boss.current_action, boss.health_component.current, boss_actual_damage, boss_result)
 			if boss_actual_damage > 0.0:
 				combo_hit_count += 1
 			if boss_actual_damage > 0.0 and request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
@@ -700,6 +867,39 @@ func _on_player_attack(request: AttackRequest) -> void:
 		hitstop_remaining = maxf(hitstop_remaining, hitstop)
 		renderer.add_impact(player.position, request.label, hit_count)
 		request.impact_emitted = true
+
+func _reset_duel_hit_debug_log() -> void:
+	var file := FileAccess.open(DUEL_HIT_LOG_PATH, FileAccess.WRITE)
+	if file == null:
+		push_warning("无法创建斗将受击日志：%s" % DUEL_HIT_LOG_PATH)
+		return
+	file.store_line(JSON.stringify({
+		"event": "run_started",
+		"timestamp": Time.get_datetime_string_from_system(),
+		"path": DUEL_HIT_LOG_PATH,
+	}))
+
+func _log_duel_named_hit(kind: String, target_name: String, request: AttackRequest, target_position: Vector2, geometry_hit: bool, cast_invulnerable: bool, action: String, health_before_or_current: float, actual_damage: float, result: Dictionary = {}) -> void:
+	var file := FileAccess.open(DUEL_HIT_LOG_PATH, FileAccess.READ_WRITE)
+	if file == null:
+		return
+	file.seek_end()
+	file.store_line(JSON.stringify({
+		"event": kind,
+		"run_time": director.elapsed if director != null else -1.0,
+		"target": target_name,
+		"attack": request.label,
+		"shape": request.shape,
+		"origin": {"x": request.origin.x, "y": request.origin.y},
+		"target_position": {"x": target_position.x, "y": target_position.y},
+		"geometry_hit": geometry_hit,
+		"cast_invulnerable": cast_invulnerable,
+		"current_action": action,
+		"health": health_before_or_current,
+		"actual_damage": actual_damage,
+		"invulnerable_result": bool(result.get("invulnerable", false)),
+		"duel_sealed": enemies.is_duel_formation_sealed() if enemies != null else false,
+	}))
 
 func _tick_player_action_clash() -> void:
 	# Offensive weapon clashes are retained as dormant compatibility code.
@@ -770,7 +970,7 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 	return result
 
 func _try_resolve_late_weapon_clash(telegraph: Telegraph) -> bool:
-	var clash_kind := player.current_weapon_clash_type()
+	var clash_kind: int = player.current_weapon_clash_type()
 	if telegraph.clash_kind != clash_kind or clash_kind == Telegraph.ClashKind.NONE or not telegraph.hits_point(player.position):
 		return false
 	if telegraph.source == "boss" and boss.active and player.can_weapon_clash_target(boss.position):
@@ -822,7 +1022,7 @@ func _is_light_enemy_clash_telegraph(telegraph: Telegraph) -> bool:
 func _can_clash_light_enemy(request: AttackRequest, enemy_id: int) -> bool:
 	if not enemies.is_active(enemy_id) or not combat.request_hits_point(request, enemies.positions[enemy_id]):
 		return false
-	var toward_enemy := enemies.positions[enemy_id] - player.position
+	var toward_enemy: Vector2 = enemies.positions[enemy_id] - player.position
 	if toward_enemy.length_squared() <= 0.01:
 		return true
 	return request.direction.dot(toward_enemy.normalized()) >= -0.10
@@ -899,7 +1099,7 @@ func _apply_boss_stance_break_knockback(request: AttackRequest) -> bool:
 	if force <= 0.0:
 		return false
 	var direction := _named_knockback_direction(request, boss.position)
-	var impact_position := boss.position
+	var impact_position: Vector2 = boss.position
 	var displacement := boss.apply_stance_break_knockback(direction, force, request.forced_displacement)
 	boss.position = _clamp_named_spawn(boss.position)
 	if displacement > 0.0:
@@ -1014,7 +1214,7 @@ func _audio_action_id_for_request(request: AttackRequest) -> String:
 func _tick_player_move_audio(delta: float, move_direction: Vector2) -> void:
 	var moved := player.position.distance_squared_to(player_last_audio_position) > 0.01
 	player_last_audio_position = player.position
-	var is_regular_movement := moved and move_direction.length_squared() > 0.01 and not player.is_attacking() and (player.ultimate_time <= 0.0 or player.is_zhang_fei_ultimate_active()) and not player.is_path_dashing()
+	var is_regular_movement: bool = moved and move_direction.length_squared() > 0.01 and not player.is_attacking() and (player.ultimate_time <= 0.0 or player.is_zhang_fei_ultimate_active()) and not player.is_path_dashing()
 	if not is_regular_movement:
 		move_sound_cooldown = 0.0
 		return
@@ -1104,11 +1304,17 @@ func _on_ultimate_started() -> void:
 func _on_enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int, ultimate_energy: float) -> void:
 	_cancel_enemy_telegraphs(enemy_id)
 	run_defeated_count += 1
+	var death_action_kind := enemies.consume_death_action_kind(enemy_id)
 	if enemies.consume_duel_fodder_reward(enemy_id):
 		return
 	loot.drop_loot(at, experience, enemies.gold_reward(enemy_type))
-	player.add_ultimate_energy(ultimate_energy)
-	player.on_enemy_defeated(enemy_type)
+	# Regular soldiers only have a 50% chance to drop ultimate energy. Elite
+	# simulation enemies remain guaranteed drops through the same callback.
+	if enemy_type == EnemySimulation.EnemyType.ELITE or randf() < 0.50:
+		player.add_ultimate_energy(ultimate_energy)
+	player.on_enemy_defeated(enemy_type, not tianji.is_resolving_damage(), death_action_kind)
+	if director.is_time_over() and overtime_settlement_active and _overtime_high_enemy_count() <= 0:
+		overtime_settlement_remaining = minf(overtime_settlement_remaining, OVERTIME_SETTLEMENT_DELAY)
 
 func _on_enemy_death_collision(at: Vector2, direction: Vector2) -> void:
 	renderer.add_death_collision(at, direction)
@@ -1169,7 +1375,7 @@ func _on_enemy_attack(enemy_id: int, origin: Vector2, target: Vector2, enemy_typ
 				telegraph = Telegraph.line(origin, target - origin, 140.0, 32.0, windup, damage * 0.88, source)
 	elif enemy_type == EnemySimulation.EnemyType.CAVALRY:
 		if attack_kind == EnemySimulation.ATTACK_KIND_CAVALRY_CHARGE:
-			telegraph = Telegraph.line(origin, target - origin, 184.0, 42.0, windup, damage * 1.32, source)
+			telegraph = Telegraph.line(origin, target - origin, EnemySimulation.CAVALRY_CHARGE_DISTANCE + 24.0, 48.0, windup, damage * 1.42, source)
 			telegraph.clash_kind = Telegraph.ClashKind.ACTIVE
 			telegraph.clashable = true
 		else:
@@ -1179,10 +1385,11 @@ func _on_enemy_attack(enemy_id: int, origin: Vector2, target: Vector2, enemy_typ
 	elif enemy_type == EnemySimulation.EnemyType.ELITE:
 		telegraph = Telegraph.line(origin, target - origin, 145.0, 30.0, windup, damage, source)
 	elif enemy_type == EnemySimulation.EnemyType.SHIELD:
-		var shield_direction := (enemies.duel_formation_center() - origin).normalized() if attack_kind == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH else (target - origin).normalized()
+		var shield_direction := (enemies.duel_formation_center() - origin).normalized() if attack_kind == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH else ((enemies.named_formation_center() - origin).normalized() if attack_kind == EnemySimulation.ATTACK_KIND_NAMED_SHIELD_PUSH else ((enemies.iron_bucket_center_for_enemy(enemy_id) - origin).normalized() if attack_kind == EnemySimulation.ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH else (target - origin).normalized()))
 		if shield_direction.length_squared() <= 0.01:
 			shield_direction = Vector2.RIGHT
-		telegraph = Telegraph.fan(origin, shield_direction, 82.0 if attack_kind == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH else 72.0, deg_to_rad(78.0), windup, 1.0 if attack_kind == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH else damage, source)
+		var is_formation_shield_push := attack_kind in [EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH, EnemySimulation.ATTACK_KIND_NAMED_SHIELD_PUSH, EnemySimulation.ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH]
+		telegraph = Telegraph.fan(origin, shield_direction, 82.0 if is_formation_shield_push else 72.0, deg_to_rad(78.0), windup, 1.0 if is_formation_shield_push else damage, source)
 	else:
 		telegraph = Telegraph.circle(target, 38.0, windup, damage, source)
 	var threat_kind := Telegraph.ThreatKind.ACTIVE if attack_kind in [EnemySimulation.ATTACK_KIND_HALBERD_BRACE, EnemySimulation.ATTACK_KIND_SPEAR_FORMATION, EnemySimulation.ATTACK_KIND_CAVALRY_CHARGE] else Telegraph.ThreatKind.BASIC
@@ -1262,14 +1469,19 @@ func _on_elite_telegraph(telegraph: Telegraph) -> void:
 func _on_named_skill_impact(strength: float) -> void:
 	renderer.add_named_skill_shake(strength)
 
+func _on_boss_rush_started(at: Vector2, direction: Vector2, segment: int) -> void:
+	if boss.archetype == BossActor.Archetype.LV_BU:
+		renderer.add_lv_bu_rush_effect(at, direction, segment)
+
 func _on_elite_defeated(elite: EliteActor) -> void:
 	_cancel_elite_telegraphs(elite.telegraph_source)
 	run_defeated_count += 1
 	loot.drop_loot(elite.position, 12, 60)
 	player.add_ultimate_energy(12.0)
-	player.on_enemy_defeated(EnemySimulation.EnemyType.ELITE)
+	player.on_enemy_defeated(EnemySimulation.EnemyType.ELITE, not tianji.is_resolving_damage())
 	if director.is_boss_trial():
-		player.apply_boss_trial_defeat_recovery()
+		if not tianji.is_resolving_damage():
+			player.apply_boss_trial_defeat_recovery()
 	hud.set_message("精英击破：%s" % elite.display_name())
 	renderer.add_elite_corpse(elite)
 	elites.erase(elite)
@@ -1278,20 +1490,24 @@ func _on_elite_defeated(elite: EliteActor) -> void:
 	elite.call_deferred("queue_free")
 	if director.is_boss_trial():
 		boss_trial_advance_after_levels = true
-		director.grant_levels(BOSS_TRIAL_ELITE_LEVEL_REWARD)
+		director.grant_levels(BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT)
 	elif elites.is_empty() and not boss.active:
 		enemies.clear_duel_formation()
-		director.set_spawn_suppressed(false)
+		director.set_spawn_background_mode(false)
 		_stop_duel_formation_audio()
 
 func _add_telegraph(telegraph: Telegraph) -> void:
-	if telegraphs.size() >= 22:
+	# Radial Lu Bu thrusts intentionally keep all eight lanes visible at once;
+	# the normal named-threat cap would otherwise discard the final three lanes.
+	var is_lv_bu_cyclone := telegraph.source == "boss" and telegraph.visual_kind == "lvbu_cyclone_thrust"
+	if telegraphs.size() >= (30 if is_lv_bu_cyclone else 22):
 		return
-	if _is_named_threat_source(telegraph.source) and _named_threat_count() >= 5:
+	if _is_named_threat_source(telegraph.source) and _named_threat_count() >= 5 and not is_lv_bu_cyclone:
 		return
 	telegraphs.append(telegraph)
 
 func _tick_telegraphs(delta: float) -> void:
+	var resolved_hit_groups: Dictionary = {}
 	for index in range(telegraphs.size() - 1, -1, -1):
 		var telegraph := telegraphs[index]
 		if telegraph.source_enemy_id >= 0 and not enemies.is_active(telegraph.source_enemy_id):
@@ -1299,13 +1515,23 @@ func _tick_telegraphs(delta: float) -> void:
 			continue
 		telegraph.remaining -= delta
 		if telegraph.remaining <= 0.0:
+			var hit_group: String = telegraph.hit_group
+			if hit_group != "" and resolved_hit_groups.has(hit_group):
+				telegraphs.remove_at(index)
+				continue
 			if _try_resolve_guard(telegraph):
+				if hit_group != "":
+					resolved_hit_groups[hit_group] = true
 				telegraphs.remove_at(index)
 				continue
 			if _try_resolve_late_weapon_clash(telegraph):
+				if hit_group != "":
+					resolved_hit_groups[hit_group] = true
 				telegraphs.remove_at(index)
 				continue
 			if _telegraph_hits_player(telegraph):
+				if hit_group != "":
+					resolved_hit_groups[hit_group] = true
 				if _try_block_projectile_telegraph(telegraph):
 					hud.set_message(player.projectile_guard_block_message())
 					telegraphs.remove_at(index)
@@ -1313,22 +1539,26 @@ func _tick_telegraphs(delta: float) -> void:
 				# Lu Bu's skyfall uses geometric contact as its hit condition. A
 				# shield or invulnerability frame may prevent HP loss, but it does
 				# not turn a landing inside the target area into a miss.
-				if telegraph.visual_kind == "lvbu_skyfall" and boss.active:
-					boss.record_ultimate_hit_player()
-				var damage_taken := player.receive_damage(telegraph.damage, telegraph.source, _telegraph_attack_origin(telegraph))
+				if telegraph.source == "boss" and telegraph.threat_kind == Telegraph.ThreatKind.UNBLOCKABLE and boss.active:
+					boss.record_unblockable_hit_player()
+				var shield_charges_before: int = player.health_component.shield_charges if player.health_component != null else 0
+				var damage_taken: float = player.receive_damage(telegraph.damage, telegraph.source, _telegraph_attack_origin(telegraph))
 				if damage_taken > 0.0 and telegraph.movement_slow_duration > 0.0 and telegraph.movement_slow_multiplier < 1.0:
 					player.apply_movement_slow(telegraph.movement_slow_multiplier, telegraph.movement_slow_duration)
-				if telegraph.source == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH and telegraph.source_enemy_id >= 0 and enemies.is_active(telegraph.source_enemy_id):
-					var push_direction := (enemies.duel_formation_center() - player.position).normalized()
-					player.apply_duel_push(push_direction, 72.0)
+				if telegraph.source in [EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH, EnemySimulation.ATTACK_KIND_NAMED_SHIELD_PUSH, EnemySimulation.ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH] and telegraph.source_enemy_id >= 0 and enemies.is_active(telegraph.source_enemy_id):
+					var push_center := enemies.duel_formation_center() if telegraph.source == EnemySimulation.ATTACK_KIND_DUEL_SHIELD_PUSH else (enemies.named_formation_center() if telegraph.source == EnemySimulation.ATTACK_KIND_NAMED_SHIELD_PUSH else enemies.iron_bucket_center_for_enemy(telegraph.source_enemy_id))
+					var push_direction := (player.position - push_center).normalized() if telegraph.source == EnemySimulation.ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH else (push_center - player.position).normalized()
+					player.apply_duel_push(push_direction, 72.0 * player.incoming_knockback_multiplier(_telegraph_attack_origin(telegraph)))
 				if player_death_cinematic_active:
 					telegraphs.clear()
 					return
 				if telegraph.source == "boss":
 					if damage_taken > 0.0:
 						hud.set_message("%s命中：-%d 生命" % [boss.display_name(), int(damage_taken)])
+					elif player.health_component != null and player.health_component.shield_charges < shield_charges_before:
+						hud.set_message("护体抵挡了%s的攻击" % boss.display_name())
 					else:
-						hud.set_message("龙胆护体抵挡了%s的攻击" % boss.display_name())
+						hud.set_message("%s的攻击未造成伤害" % boss.display_name())
 			telegraphs.remove_at(index)
 
 func _tick_named_enemies(delta: float) -> void:
@@ -1483,7 +1713,7 @@ func _try_block_projectile_telegraph(telegraph: Telegraph) -> bool:
 		return false
 	if not player.try_block_frontal_projectile(enemies.positions[telegraph.source_enemy_id]):
 		return false
-	var block_direction := (enemies.positions[telegraph.source_enemy_id] - player.position).normalized()
+	var block_direction: Vector2 = (enemies.positions[telegraph.source_enemy_id] - player.position).normalized()
 	if block_direction.length_squared() <= 0.01:
 		block_direction = player.last_attack_direction.normalized()
 	if block_direction.length_squared() <= 0.01:
@@ -1521,7 +1751,9 @@ func _try_resolve_guard(telegraph: Telegraph) -> bool:
 		_finalize_guard_minor(telegraph)
 	if telegraph.source_enemy_id >= 0 and enemies.is_active(telegraph.source_enemy_id):
 		var enemy_type := enemies.get_type(telegraph.source_enemy_id)
-		if enemy_type == EnemySimulation.EnemyType.ARCHER:
+		if enemy_type == EnemySimulation.EnemyType.CAVALRY:
+			enemies.resolve_cavalry_clash(telegraph.source_enemy_id, player.guard_direction)
+		elif enemy_type == EnemySimulation.EnemyType.ARCHER:
 			renderer.cancel_next_archer_projectile(telegraph.source_enemy_id)
 		elif enemy_type == EnemySimulation.EnemyType.CROSSBOW:
 			renderer.cancel_next_crossbow_bolt(telegraph.source_enemy_id)
@@ -1537,6 +1769,8 @@ func _is_guardable_telegraph(telegraph: Telegraph) -> bool:
 	if telegraph.source_enemy_id < 0 or not enemies.is_active(telegraph.source_enemy_id):
 		return false
 	var enemy_type := enemies.get_type(telegraph.source_enemy_id)
+	if enemy_type == EnemySimulation.EnemyType.CAVALRY and telegraph.source == EnemySimulation.ATTACK_KIND_CAVALRY_CHARGE:
+		return true
 	return enemy_type == EnemySimulation.EnemyType.ARCHER or enemy_type == EnemySimulation.EnemyType.CROSSBOW
 
 func _finalize_guard_named_block(at: Vector2, perfect: bool, target_name: String, stance_broken: bool, named_target: Node) -> void:
@@ -1573,13 +1807,36 @@ func _open_level_up(level: int) -> void:
 	upgrade_open = true
 	AudioService.set_tianji_sounds_paused(true)
 	current_upgrade_level = level
-	current_upgrade_selection_limit = upgrades.upgrade_selection_limit()
+	var option_count := _upgrade_option_count_for_current_run()
+	current_upgrade_selection_limit = _upgrade_selection_limit_for_current_run()
 	current_upgrade_selection_count = 0
-	current_upgrade_options = upgrades.draft(level, upgrades.upgrade_option_count())
+	upgrades.begin_draft()
+	current_upgrade_options = upgrades.draft(level, option_count)
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
 	input_router.set_input_enabled(false)
 	hud.set_message("等级提升：Lv.%d" % level)
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
+
+func _open_run_strategy_choice() -> void:
+	if finished or opening_strategy_selected:
+		return
+	upgrade_open = true
+	input_router.set_input_enabled(false)
+	hud.set_message("出战筹谋")
+	hud.show_run_strategy_choice()
+
+func _on_run_strategy_selected(strategy_id: String) -> void:
+	if opening_strategy_selected:
+		return
+	opening_strategy_selected = true
+	run_strategy_id = strategy_id
+	upgrades.set_draft_tendency(run_strategy_id)
+	if director.is_boss_trial():
+		_start_boss_trial()
+		return
+	upgrade_open = false
+	input_router.set_input_enabled(true)
+	hud.set_message("本局策略：%s" % ("战法" if run_strategy_id == UpgradeSystem.DRAFT_TENDENCY_TALENT else ("天机" if run_strategy_id == UpgradeSystem.DRAFT_TENDENCY_TIANJI else "均衡")))
 
 func _start_boss_trial() -> void:
 	if not director.is_boss_trial():
@@ -1597,9 +1854,11 @@ func _open_boss_trial_upgrade() -> void:
 	upgrade_open = true
 	AudioService.set_tianji_sounds_paused(true)
 	current_upgrade_level = director.level
-	current_upgrade_selection_limit = upgrades.upgrade_selection_limit()
+	var option_count := _upgrade_option_count_for_current_run()
+	current_upgrade_selection_limit = _upgrade_selection_limit_for_current_run()
 	current_upgrade_selection_count = 0
-	current_upgrade_options = upgrades.draft(current_upgrade_level, upgrades.upgrade_option_count())
+	upgrades.begin_draft()
+	current_upgrade_options = upgrades.draft(current_upgrade_level, option_count)
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
 	input_router.set_input_enabled(false)
 	var stage_label := "精英击破：选择强化" if boss_trial_advance_after_upgrade else "战前整备：%d选%d" % [current_upgrade_options.size(), current_upgrade_selection_limit]
@@ -1607,21 +1866,17 @@ func _open_boss_trial_upgrade() -> void:
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
 
 func _on_upgrade_refresh_requested() -> void:
-	if not upgrade_open or current_upgrade_selection_count > 0 or AdService.is_showing_rewarded_video():
+	if not upgrade_open or current_upgrade_selection_count > 0:
 		return
 	if upgrade_refreshes_remaining > 0:
 		upgrade_refreshes_remaining -= 1
 		hud.set_upgrade_refreshes_remaining(upgrade_refreshes_remaining)
-		_refresh_upgrade_choices("已刷新%d选%d（剩余 %d 次）" % [upgrades.upgrade_option_count(), upgrades.upgrade_selection_limit(), upgrade_refreshes_remaining])
-		return
-	if upgrade_ad_refreshes_remaining > 0:
-		hud.set_message("正在加载广告…")
-		AdService.show_rewarded_video(AdService.PLACEMENT_UPGRADE_REFRESH)
+		_refresh_upgrade_choices("已刷新%d选%d（剩余 %d 次）" % [_upgrade_option_count_for_current_run(), _upgrade_selection_limit_for_current_run(), upgrade_refreshes_remaining])
 
 func _refresh_upgrade_choices(message: String = "") -> void:
 	if not message.is_empty():
 		hud.set_message(message)
-	var refreshed_options := upgrades.draft(current_upgrade_level, upgrades.upgrade_option_count())
+	var refreshed_options := upgrades.draft(current_upgrade_level, _upgrade_option_count_for_current_run())
 	var attempts := 0
 	while _same_upgrade_choices(refreshed_options, current_upgrade_options) and attempts < 6:
 		refreshed_options = upgrades.draft(current_upgrade_level, upgrades.upgrade_option_count())
@@ -1629,6 +1884,12 @@ func _refresh_upgrade_choices(message: String = "") -> void:
 	current_upgrade_options = refreshed_options
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
+
+func _upgrade_option_count_for_current_run() -> int:
+	return BOSS_TRIAL_UPGRADE_OPTION_COUNT if director.is_boss_trial() else upgrades.upgrade_option_count()
+
+func _upgrade_selection_limit_for_current_run() -> int:
+	return BOSS_TRIAL_UPGRADE_SELECTION_LIMIT if director.is_boss_trial() else upgrades.upgrade_selection_limit()
 
 func _same_upgrade_choices(first: Array[String], second: Array[String]) -> bool:
 	if first.size() != second.size():
@@ -1669,12 +1930,7 @@ func _on_upgrade_selected(upgrade_id: String) -> void:
 		AudioService.set_tianji_sounds_paused(false)
 		input_router.set_input_enabled(true)
 		if should_advance:
-			if boss_trial_advance_after_boss:
-				boss_trial_advance_after_boss = false
-				if director.advance_boss_after_defeat():
-					return
-			else:
-				director.advance_boss_trial_after_elite()
+			director.advance_boss_trial_after_named_defeat()
 		else:
 			director.begin_boss_trial()
 		return
@@ -1687,7 +1943,7 @@ func _on_upgrade_selected(upgrade_id: String) -> void:
 	AudioService.set_tianji_sounds_paused(false)
 	input_router.set_input_enabled(true)
 	if should_advance_trial:
-		director.advance_boss_trial_after_elite()
+		director.advance_boss_trial_after_named_defeat()
 
 func _on_pause_requested() -> void:
 	if paused or finished or upgrade_open or player_death_cinematic_active or ultimate_cutin.is_playing():
@@ -1762,7 +2018,7 @@ func _on_player_died() -> void:
 	renderer.begin_player_death_cinematic(player.hero_id)
 
 func _on_revive_requested() -> void:
-	if not revive_prompt_active or revive_used or AdService.is_showing_rewarded_video():
+	if not revive_prompt_active or revive_count >= MAX_REVIVES_PER_RUN or AdService.is_showing_rewarded_video():
 		return
 	hud.set_message("正在加载广告…")
 	AdService.show_rewarded_video(AdService.PLACEMENT_REVIVE)
@@ -1790,8 +2046,8 @@ func _on_rewarded_video_completed(placement: String, rewarded: bool, message: St
 			hud.set_message(message if not message.is_empty() else "广告未完成，未刷新选项")
 		return
 	if placement == AdService.PLACEMENT_REVIVE:
-		if rewarded and revive_prompt_active and not revive_used:
-			revive_used = true
+		if rewarded and revive_prompt_active and revive_count < MAX_REVIVES_PER_RUN:
+			revive_count += 1
 			revive_prompt_active = false
 			hud.hide_revive_prompt()
 			renderer.end_player_death_cinematic()
@@ -1816,21 +2072,23 @@ func _on_boss_defeated() -> void:
 	var defeated_boss_name := boss.display_name()
 	_cancel_boss_telegraphs()
 	enemies.clear_duel_formation()
-	director.set_spawn_suppressed(false)
+	director.set_spawn_background_mode(false)
 	_stop_duel_formation_audio()
 	run_defeated_count += 1
 	var boss_merit := BOSS_TRIAL_BOSS_DEFEAT_MERIT if director.is_boss_trial() else BOSS_DEFEAT_MERIT
 	_grant_run_merit(boss_merit)
-	player.apply_military_boss_defeat_reward()
+	player.apply_military_boss_defeat_reward(not tianji.is_resolving_damage())
 	if director.is_boss_trial():
-		player.apply_boss_trial_defeat_recovery()
-		# Pause between non-final lords for one upgrade draft. The draft uses
-		# UpgradeSystem's configured option count, so four/five-choice military
-		# upgrades apply in the trial as well.
-		if director.boss_trial_stage < 5:
-			boss_trial_advance_after_boss = true
-			_begin_boss_trial_upgrades(1, true)
+		if not tianji.is_resolving_damage():
+			player.apply_boss_trial_defeat_recovery()
+		# The first two trial rounds grant five full levels and their associated drafts.
+		if director.boss_trial_stage < RunDirector.BOSS_TRIAL_FINAL_STAGE:
+			boss_trial_advance_after_levels = true
+			director.grant_levels(BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT)
 			return
+	if director.is_time_over():
+		_finish_run(true, director.story_completion_message() if run_mode == "story" else "无尽试炼完成，军功已结算")
+		return
 	if director.advance_boss_after_defeat():
 		return
 	if director.is_boss_trial():
@@ -1842,6 +2100,46 @@ func _on_boss_defeated() -> void:
 	elif run_mode == "story":
 		battlefield_result = "%s败退，%s" % [defeated_boss_name, director.story_completion_message()]
 	_finish_run(true, battlefield_result)
+
+func _tick_overtime_settlement(delta: float) -> void:
+	if finished:
+		return
+	director.set_spawn_suppressed(true)
+	if not overtime_settlement_active:
+		if _overtime_high_enemy_count() <= 0:
+			if run_mode == "story":
+				_finish_run(true, director.story_completion_message())
+			else:
+				_finish_run(true, "无尽试炼完成，军功已结算")
+			return
+		overtime_settlement_active = true
+		overtime_settlement_remaining = -1.0
+		hud.set_message("战场时间结束，清理完高级敌人后结算")
+		return
+	if overtime_settlement_remaining < 0.0:
+		if _overtime_high_enemy_count() > 0:
+			return
+		overtime_settlement_remaining = OVERTIME_SETTLEMENT_DELAY
+		hud.set_message("高级敌人已清剿，战场将在 %.0f 秒后结算" % OVERTIME_SETTLEMENT_DELAY)
+		return
+	overtime_settlement_remaining = maxf(0.0, overtime_settlement_remaining - delta)
+	if overtime_settlement_remaining > 0.0:
+		return
+	overtime_settlement_active = false
+	if run_mode == "story":
+		_finish_run(true, director.story_completion_message())
+	else:
+		_finish_run(true, "无尽试炼完成，军功已结算")
+
+func _overtime_high_enemy_count() -> int:
+	var count := enemies.count_active_type(EnemySimulation.EnemyType.CAVALRY)
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active:
+			count += 1
+	if boss.active or boss.is_dying():
+		count += 1
+	return count
+
 
 func _is_named_threat_source(source: String) -> bool:
 	return source == "boss" or source.begins_with("elite:")
@@ -1880,6 +2178,7 @@ func _finish_run(victory: bool, message: String) -> void:
 
 func _begin_victory_cinematic(message: String) -> void:
 	victory_cinematic_active = true
+	player.force_idle_state()
 	victory_phase = "hold"
 	victory_phase_remaining = VICTORY_CINEMATIC_HOLD_DURATION
 	victory_message = message
@@ -1979,6 +2278,7 @@ func _complete_run(victory: bool, message: String, stats: Dictionary = {}) -> vo
 
 func _stop_duel_formation_audio() -> void:
 	duel_formation_was_sealed = false
+	hud.end_duel_hints()
 	AudioService.stop_enemy_duel_cheers()
 
 func _run_merit_multiplier() -> float:
@@ -2004,8 +2304,21 @@ func _clear_military_merit_reward(victory: bool) -> float:
 		return 0.0 if SaveService.has_completed_boss_trial(BOSS_TRIAL_ID) else BOSS_TRIAL_FIRST_CLEAR_MERIT
 	if run_mode == "endless":
 		return 0.0
-	var chapter := clampi(SceneRouter.active_story_chapter, 1, STORY_CLEAR_MERIT.size())
+	var chapter := _visible_story_chapter_index(SceneRouter.active_story_chapter)
 	return STORY_CLEAR_MERIT[chapter - 1]
+
+func _visible_story_chapter_index(internal_chapter: int) -> int:
+	match internal_chapter:
+		1:
+			return 1
+		3:
+			return 2
+		4:
+			return 3
+		5:
+			return 3
+		_:
+			return clampi(internal_chapter, 1, STORY_CLEAR_MERIT.size())
 
 func _tick_endless_milestones() -> void:
 	if run_mode != "endless" or director == null:

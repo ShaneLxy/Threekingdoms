@@ -11,6 +11,9 @@ const BASIC_ATTACK_MOVEMENT_SPEED_RATIO := 0.42
 const GUARD_ACTIVE_DURATION := 0.30
 const GUARD_COOLDOWN_DURATION := 1.00
 const GUARD_FRONT_HALF_ANGLE := deg_to_rad(90.0)
+const GUARD_TIME_EPSILON := 0.00001
+const DAMAGE_FALLOFF_START_DISTANCE := 180.0
+const DAMAGE_FALLOFF_END_DISTANCE := 720.0
 
 # Shared contract for every playable hero. Individual heroes own their combo,
 # passive, skill state, and presentation while the battle scene consumes this API.
@@ -25,6 +28,7 @@ signal died()
 signal protection_broken()
 signal damaged(amount: float)
 signal visual_effect_started(effect_id: String, origin: Vector2, direction: Vector2, travel_distance: float, metadata: Dictionary)
+signal camera_shake_requested(strength: float)
 signal combat_action_started(action_id: String)
 signal combat_action_finished(action_id: String)
 
@@ -50,8 +54,6 @@ var health_component: HealthComponent
 var military_named_damage_ratio := 0.0
 var military_pierce_bonus := 0
 var military_elite_heal_ratio := 0.0
-var military_kill_heal_chance := 0.0
-var military_kill_heal_amount := 0.0
 var military_level_heal_ratio := 0.0
 var military_energy_gain_multiplier := 1.0
 var military_elite_energy_bonus := 0.0
@@ -104,10 +106,21 @@ func movement_speed_multiplier() -> float:
 	return movement_slow_multiplier if movement_slow_remaining > 0.0 else 1.0
 
 func tick_guard(delta: float) -> void:
-	var was_active := guard_active_remaining > 0.0
+	if is_defeated():
+		guard_active_remaining = 0.0
+		guard_cooldown_remaining = 0.0
+		return
+	# Treat sub-frame floating point residue as elapsed. This matters for the
+	# exact 0.30s/1.00s boundaries when callers advance the simulation in
+	# multiple decimal-sized steps (for example 0.29 + 0.01).
+	var was_active := guard_active_remaining > GUARD_TIME_EPSILON
 	var next_active_remaining := guard_active_remaining - delta
-	guard_active_remaining = maxf(0.0, next_active_remaining)
-	if was_active and guard_active_remaining <= 0.0:
+	if was_active and next_active_remaining <= GUARD_TIME_EPSILON:
+		guard_active_remaining = 0.0
+		# A simulation step can cross the end of the protection window. Carry
+		# that overflow into the cooldown so its clock starts at the exact
+		# 0.30s boundary instead of waiting for the next frame.
+		var cooldown_elapsed := maxf(0.0, -next_active_remaining)
 		if guard_cooldown_refresh_pending:
 			# A named-enemy guard reward makes the button available as soon as
 			# the current 0.3 second protection window has ended.
@@ -116,12 +129,16 @@ func tick_guard(delta: float) -> void:
 		else:
 			# The cooldown starts after the invulnerability window, so the full
 			# button-to-button cycle is 1.3 seconds.
-			guard_cooldown_remaining = maxf(0.0, GUARD_COOLDOWN_DURATION + next_active_remaining)
+			guard_cooldown_remaining = maxf(0.0, GUARD_COOLDOWN_DURATION - cooldown_elapsed)
 	elif not was_active:
-		guard_cooldown_remaining = maxf(0.0, guard_cooldown_remaining - delta)
+		guard_active_remaining = 0.0
+		var next_cooldown_remaining := guard_cooldown_remaining - delta
+		guard_cooldown_remaining = 0.0 if next_cooldown_remaining <= GUARD_TIME_EPSILON else next_cooldown_remaining
+	else:
+		guard_active_remaining = next_active_remaining
 
 func request_guard(direction: Vector2 = Vector2.ZERO) -> bool:
-	if not can_use_guard() or ultimate_time > 0.0:
+	if not can_use_guard() or (ultimate_time > 0.0 and not allows_guard_during_ultimate()):
 		return false
 	if is_action_locked() and current_action != "basic" and current_action != "drag_charge":
 		return false
@@ -141,10 +158,28 @@ func request_guard(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func can_use_guard() -> bool:
-	return guard_active_remaining <= 0.0 and guard_cooldown_remaining <= 0.0 and ultimate_time <= 0.0 and (health_component == null or health_component.current > 0.0)
+	return guard_active_remaining <= 0.0 and guard_cooldown_remaining <= 0.0 and (ultimate_time <= 0.0 or allows_guard_during_ultimate()) and (health_component == null or health_component.current > 0.0)
+
+func allows_guard_during_ultimate() -> bool:
+	return false
 
 func is_guard_active() -> bool:
 	return guard_active_remaining > 0.0
+
+func is_defeated() -> bool:
+	return health_component != null and health_component.current <= 0.0
+
+func incoming_damage_multiplier(attack_origin: Vector2) -> float:
+	if attack_origin.length_squared() <= 0.01:
+		return 1.0
+	var distance := position.distance_to(attack_origin)
+	var progress := clampf(inverse_lerp(DAMAGE_FALLOFF_START_DISTANCE, DAMAGE_FALLOFF_END_DISTANCE, distance), 0.0, 1.0)
+	# Smoothstep keeps nearby hits readable while preserving a meaningful 10%
+	# floor for attacks that land near the edge of the arena.
+	return lerpf(1.0, 0.10, progress * progress * (3.0 - 2.0 * progress))
+
+func incoming_knockback_multiplier(attack_origin: Vector2) -> float:
+	return incoming_damage_multiplier(attack_origin)
 
 func guard_elapsed() -> float:
 	return GUARD_ACTIVE_DURATION - guard_active_remaining
@@ -209,7 +244,7 @@ func request_active(_direction: Vector2 = Vector2.ZERO) -> bool:
 	return false
 
 func can_use_active() -> bool:
-	return active_charge_count > 0 and ultimate_time <= 0.0 and (not is_action_locked() or current_action == "basic")
+	return not is_defeated() and active_charge_count > 0 and ultimate_time <= 0.0 and (not is_action_locked() or current_action == "basic")
 
 func active_charges_label() -> String:
 	return "%d/%d" % [active_charge_count, active_charge_capacity]
@@ -289,8 +324,6 @@ func _apply_military_strategy(profile: Dictionary) -> void:
 	military_named_damage_ratio = float(effects.get("named_damage_ratio", 0.0))
 	military_pierce_bonus = int(effects.get("pierce_bonus", 0))
 	military_elite_heal_ratio = float(effects.get("elite_heal_ratio", 0.0))
-	military_kill_heal_chance = float(effects.get("kill_heal_chance", 0.0))
-	military_kill_heal_amount = float(effects.get("kill_heal_amount", 0.0))
 	military_level_heal_ratio = float(effects.get("level_heal_ratio", 0.0))
 	military_energy_gain_multiplier = float(effects.get("ultimate_energy_ratio", 1.0))
 	military_elite_energy_bonus = float(effects.get("elite_ultimate_energy", 0.0))
@@ -313,19 +346,17 @@ func apply_military_level_up_benefits() -> void:
 	health_component.current = minf(health_component.maximum, health_component.current + health_component.maximum * military_level_heal_ratio)
 	health_component.health_changed.emit(health_component.current, health_component.maximum)
 
-func apply_military_enemy_defeat_reward(enemy_type: int) -> void:
-	_apply_military_kill_recovery()
+func apply_military_enemy_defeat_reward(enemy_type: int, allow_recovery: bool = true) -> void:
 	if enemy_type != EnemySimulation.EnemyType.ELITE:
 		return
-	if military_elite_heal_ratio > 0.0 and health_component != null:
+	if allow_recovery and military_elite_heal_ratio > 0.0 and health_component != null:
 		health_component.current = minf(health_component.maximum, health_component.current + health_component.maximum * military_elite_heal_ratio)
 		health_component.health_changed.emit(health_component.current, health_component.maximum)
 	if military_elite_energy_bonus > 0.0:
 		add_ultimate_energy(military_elite_energy_bonus)
 
-func apply_military_boss_defeat_reward() -> void:
-	_apply_military_kill_recovery()
-	if military_elite_heal_ratio > 0.0 and health_component != null:
+func apply_military_boss_defeat_reward(allow_recovery: bool = true) -> void:
+	if allow_recovery and military_elite_heal_ratio > 0.0 and health_component != null:
 		health_component.current = minf(health_component.maximum, health_component.current + health_component.maximum * military_elite_heal_ratio)
 		health_component.health_changed.emit(health_component.current, health_component.maximum)
 
@@ -342,17 +373,6 @@ func apply_boss_trial_defeat_recovery() -> float:
 	health_component.current = minf(health_component.maximum, health_component.current + recovery)
 	health_component.health_changed.emit(health_component.current, health_component.maximum)
 	return health_component.current - before
-
-func _apply_military_kill_recovery() -> void:
-	if health_component == null or military_kill_heal_chance <= 0.0 or military_kill_heal_amount <= 0.0:
-		return
-	if randf() >= military_kill_heal_chance:
-		return
-	var recovered_health := minf(health_component.maximum, health_component.current + military_kill_heal_amount)
-	if recovered_health <= health_component.current:
-		return
-	health_component.current = recovered_health
-	health_component.health_changed.emit(health_component.current, health_component.maximum)
 
 func apply_upgrade(_upgrade_id: String) -> void:
 	apply_common_upgrade(_upgrade_id)
@@ -412,8 +432,13 @@ func on_weapon_clash_success(perfect: bool, _skill_clash: bool) -> void:
 func on_light_weapon_clash_success() -> void:
 	pass
 
-func on_enemy_defeated(_enemy_type: int) -> void:
+func on_enemy_defeated(_enemy_type: int, _allow_recovery: bool = true, _action_kind: int = AttackRequest.ActionKind.NONE) -> void:
 	pass
+
+func force_idle_state() -> void:
+	# Victory presentation must not leave a gameplay attack frame on screen.
+	current_action = ""
+	clear_basic_attack_movement()
 
 func on_named_target_hit(_target_kind: int, _request: AttackRequest, _damage: float) -> void:
 	pass
@@ -432,6 +457,18 @@ func nearby_enemy_radius() -> float:
 
 func receive_damage(_amount: float, _source: String, _attack_origin: Vector2 = Vector2.ZERO) -> float:
 	return 0.0
+
+func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
+	if health_component == null:
+		return
+	health_component.current = clampf(health_component.maximum * health_ratio, 1.0, health_component.maximum)
+	health_component.health_changed.emit(health_component.current, health_component.maximum)
+	current_action = ""
+	combo_stage = 0
+	basic_attack_movement_remaining = 0.0
+	ultimate_time = 0.0
+	ultimate_segment_index = 0
+	reset_guard_state()
 
 func ultimate_cost() -> float:
 	return 0.0
@@ -565,6 +602,18 @@ func dragon_stack_count() -> int:
 
 func hud_status_effects() -> Array[Dictionary]:
 	return []
+
+func common_shield_hud_effect() -> Dictionary:
+	if health_component == null or health_component.shield_charges <= 0:
+		return {}
+	return {
+		"id": "dragon_shield",
+		"icon": "护",
+		"label": "护体",
+		"stacks": health_component.shield_charges,
+		"timed": false,
+		"color": Color("76d6ed"),
+	}
 
 func movement_slow_hud_effect() -> Dictionary:
 	if movement_slow_remaining <= 0.0:

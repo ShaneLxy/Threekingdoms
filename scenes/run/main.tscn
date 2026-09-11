@@ -1,64 +1,65 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene format=3 uid="uid://bepmbp86vga2x"]
 
-[ext_resource type="Script" path="res://scripts/run/run_scene.gd" id="1_run"]
-[ext_resource type="Script" path="res://scripts/presentation/battle_renderer.gd" id="2_renderer"]
+[ext_resource type="Script" uid="uid://yppd0tjlpwqp" path="res://scripts/run/run_scene.gd" id="1_run"]
+[ext_resource type="Script" uid="uid://ysyfags7cldv" path="res://scripts/presentation/battle_renderer.gd" id="2_renderer"]
 [ext_resource type="PackedScene" path="res://scenes/actors/player_actor.tscn" id="3_player"]
 [ext_resource type="PackedScene" path="res://scenes/actors/boss_actor.tscn" id="4_boss"]
-[ext_resource type="Script" path="res://scripts/systems/enemy_simulation.gd" id="5_enemy"]
-[ext_resource type="Script" path="res://scripts/systems/combat_system.gd" id="6_combat"]
-[ext_resource type="Script" path="res://scripts/systems/upgrade_system.gd" id="7_upgrade"]
-[ext_resource type="Script" path="res://scripts/systems/run_director.gd" id="8_director"]
-[ext_resource type="Script" path="res://scripts/ui/battle_hud.gd" id="9_hud"]
-[ext_resource type="Script" path="res://scripts/run/input_router.gd" id="10_input"]
-[ext_resource type="Script" path="res://scripts/systems/loot_system.gd" id="11_loot"]
-[ext_resource type="Script" path="res://scripts/ui/ultimate_cutin.gd" id="12_cutin"]
-[ext_resource type="Script" path="res://scripts/systems/tianji_system.gd" id="13_tianji"]
+[ext_resource type="Script" uid="uid://dlvjdi2wamju0" path="res://scripts/systems/enemy_simulation.gd" id="5_enemy"]
+[ext_resource type="Script" uid="uid://c0dusjcta4qxo" path="res://scripts/systems/combat_system.gd" id="6_combat"]
+[ext_resource type="Script" uid="uid://bpm56wyy58atp" path="res://scripts/systems/upgrade_system.gd" id="7_upgrade"]
+[ext_resource type="Script" uid="uid://dpdpdg4jpaotl" path="res://scripts/systems/run_director.gd" id="8_director"]
+[ext_resource type="Script" uid="uid://ccpnosrrpsfy2" path="res://scripts/ui/battle_hud.gd" id="9_hud"]
+[ext_resource type="Script" uid="uid://0cqgruqxgc4y" path="res://scripts/run/input_router.gd" id="10_input"]
+[ext_resource type="Script" uid="uid://of827w7ckvro" path="res://scripts/systems/loot_system.gd" id="11_loot"]
+[ext_resource type="Script" uid="uid://bpkdth07s52jr" path="res://scripts/ui/ultimate_cutin.gd" id="12_cutin"]
+[ext_resource type="Script" uid="uid://b3l4l0gbea4po" path="res://scripts/systems/tianji_system.gd" id="13_tianji"]
 
-[node name="RunScene" type="Node2D"]
+[node name="RunScene" type="Node2D" unique_id=1466211227]
 script = ExtResource("1_run")
 
-[node name="BattleRenderer" type="Node2D" parent="."]
+[node name="BattleRenderer" type="Node2D" parent="." unique_id=1115489216]
 script = ExtResource("2_renderer")
 
-[node name="Player" parent="." instance=ExtResource("3_player")]
+[node name="Player" parent="." unique_id=1345982672 instance=ExtResource("3_player")]
 
-[node name="Boss" parent="." instance=ExtResource("4_boss")]
+[node name="Boss" parent="." unique_id=868626924 instance=ExtResource("4_boss")]
 
-[node name="EnemySimulation" type="Node" parent="."]
+[node name="EnemySimulation" type="Node" parent="." unique_id=560271489]
 script = ExtResource("5_enemy")
 
-[node name="CombatSystem" type="Node" parent="."]
+[node name="CombatSystem" type="Node" parent="." unique_id=1869544889]
 script = ExtResource("6_combat")
 
-[node name="UpgradeSystem" type="Node" parent="."]
+[node name="UpgradeSystem" type="Node" parent="." unique_id=175215273]
 script = ExtResource("7_upgrade")
 
-[node name="TianjiSystem" type="Node" parent="."]
+[node name="TianjiSystem" type="Node" parent="." unique_id=1055303307]
 script = ExtResource("13_tianji")
 
-[node name="RunDirector" type="Node" parent="."]
+[node name="RunDirector" type="Node" parent="." unique_id=590726810]
 script = ExtResource("8_director")
 
-[node name="LootSystem" type="Node" parent="."]
+[node name="LootSystem" type="Node" parent="." unique_id=960345287]
 script = ExtResource("11_loot")
 
-[node name="InputRouter" type="Node" parent="."]
+[node name="InputRouter" type="Node" parent="." unique_id=1179043767]
 script = ExtResource("10_input")
 
-[node name="HudLayer" type="CanvasLayer" parent="."]
+[node name="HudLayer" type="CanvasLayer" parent="." unique_id=421307315]
 layer = 5
 
-[node name="BattleHud" type="Control" parent="HudLayer"]
-layout_mode = 0
+[node name="BattleHud" type="Control" parent="HudLayer" unique_id=1913734467]
+layout_mode = 3
+anchors_preset = 0
 offset_right = 1280.0
 offset_bottom = 720.0
 mouse_filter = 2
 script = ExtResource("9_hud")
 
-[node name="UltimateCutinLayer" type="CanvasLayer" parent="."]
+[node name="UltimateCutinLayer" type="CanvasLayer" parent="." unique_id=646938269]
 layer = 20
 
-[node name="UltimateCutin" type="Control" parent="UltimateCutinLayer"]
+[node name="UltimateCutin" type="Control" parent="UltimateCutinLayer" unique_id=1744661792]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

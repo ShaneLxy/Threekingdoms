@@ -9,7 +9,8 @@ const SCENE_SWITCH_TIMEOUT := 8.0
 const SCENE_LOAD_TIMEOUT := 45.0
 const MINIMUM_LOADING_DURATION := 1.5
 const SCENE_SWITCH_DISPLAY_DELAY := 0.10
-const STORY_BATTLEFIELD_IDS := ["xinye", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou"]
+const STORY_BATTLEFIELD_IDS := ["xinye", "huoshaoxinye", "dangyangduanhou"]
+const STORY_VISIBLE_TO_INTERNAL_CHAPTER := [1, 3, 5]
 
 var active_mode := "story"
 var active_battlefield_id := "changban"
@@ -41,9 +42,20 @@ func _process(delta: float) -> void:
 func start_run(mode: String, battlefield_id: String = "changban", story_chapter: int = 1) -> void:
 	if scene_transition_pending:
 		return
+	if mode == "story" and not SaveService.is_story_chapter_unlocked(story_chapter):
+		return
+	if mode == "endless" and not SaveService.is_battlefield_unlocked("changban"):
+		return
+	if mode == "boss_trial" and not SaveService.is_battlefield_unlocked("hulao"):
+		return
 	active_mode = mode
-	active_story_chapter = clampi(story_chapter, 1, 5)
-	active_battlefield_id = STORY_BATTLEFIELD_IDS[active_story_chapter - 1] if active_mode == "story" else battlefield_id
+	if active_mode == "story":
+		var visible_index := clampi(story_chapter, 1, STORY_VISIBLE_TO_INTERNAL_CHAPTER.size()) - 1
+		active_story_chapter = STORY_VISIBLE_TO_INTERNAL_CHAPTER[visible_index]
+		active_battlefield_id = STORY_BATTLEFIELD_IDS[visible_index]
+	else:
+		active_story_chapter = clampi(story_chapter, 1, 5)
+		active_battlefield_id = battlefield_id
 	_begin_scene_transition(RUN_SCENE, "正在点兵 · 奔赴战场")
 
 func _begin_scene_transition(scene_path: String, message: String) -> void:
@@ -70,12 +82,19 @@ func _start_threaded_scene_load() -> void:
 	if transition_target_scene_path.is_empty():
 		transition_target_scene_path = RUN_SCENE
 		pending_scene_path = transition_target_scene_path
-	var error := ResourceLoader.load_threaded_request(transition_target_scene_path, "PackedScene", false, ResourceLoader.CACHE_MODE_REUSE)
-	if error != OK:
-		push_error("Unable to start scene load %s (error %d)" % [transition_target_scene_path, error])
+	# Loading the run scene through the threaded API can race Godot's first
+	# texture import/script parse. That race leaves valid PNG resources looking
+	# unavailable and makes the scene fail before RunScene._ready() runs. The
+	# loading overlay is already visible by this deferred callback, so perform a
+	# single deterministic load and keep the rest of the transition asynchronous
+	# from the player's perspective.
+	var loaded_scene := ResourceLoader.load(transition_target_scene_path, "PackedScene", ResourceLoader.CACHE_MODE_REUSE) as PackedScene
+	if loaded_scene == null:
+		push_error("Unable to load scene %s" % transition_target_scene_path)
 		_abort_scene_transition("无法载入战场，请重试")
 		return
-	transition_load_started = true
+	transition_scene_pack = loaded_scene
+	transition_load_started = false
 
 func _poll_threaded_scene_load(delta: float) -> void:
 	transition_elapsed += maxf(0.0, delta)
@@ -85,6 +104,15 @@ func _poll_threaded_scene_load(delta: float) -> void:
 			transition_switch_delay = SCENE_SWITCH_DISPLAY_DELAY
 			transition_watchdog = 0.0
 			LoadingOverlay.set_progress(99.0, "正在进入战场")
+		else:
+			_update_loading_progress()
+		return
+	if transition_scene_pack != null:
+		if transition_elapsed >= MINIMUM_LOADING_DURATION:
+			transition_state = TRANSITION_SWITCHING
+			transition_switch_delay = SCENE_SWITCH_DISPLAY_DELAY
+			transition_watchdog = 0.0
+			LoadingOverlay.set_progress(100.0, "战场已就绪")
 		else:
 			_update_loading_progress()
 		return
@@ -216,6 +244,12 @@ func open_map_editor() -> void:
 
 func finish_run(result: Dictionary) -> void:
 	var resolved_result := result.duplicate(true)
-	if active_mode == "story":
-		resolved_result["completed_chapter"] = "story_%02d" % active_story_chapter
+	var completed_chapter_id := completed_story_chapter_id()
+	if not completed_chapter_id.is_empty():
+		resolved_result["completed_chapter"] = completed_chapter_id
 	SaveService.apply_result(resolved_result)
+
+func completed_story_chapter_id() -> String:
+	if active_mode != "story":
+		return ""
+	return "story_%02d" % active_story_chapter

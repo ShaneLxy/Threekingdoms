@@ -3,7 +3,7 @@ extends HeroActor
 
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 
-const ULTIMATE_COST := 40.0
+const ULTIMATE_COST := 60.0
 const ULTIMATE_SEGMENTS := 7
 const ULTIMATE_DASH_DURATION := 0.18
 const ULTIMATE_PAUSE_DURATION := 0.12
@@ -36,7 +36,6 @@ const DRAGON_PROGRESS_PER_BOSS_HIT := 5
 const DRAGON_MAX_STACKS := 3
 const DRAGON_BASE_DURATION := 5.0
 const DRAGON_EXTRA_STACK_SPEED := 0.08
-const DRAGON_EXTRA_STACK_PIERCE := 1
 const DRAGON_BASE_SPEED_BONUS := 0.15
 const DRAGON_SPEED_BONUS_CAP := 1.20
 const DRAGON_SHIELD_INVULNERABILITY_DURATION := 5.0
@@ -47,7 +46,7 @@ const FIREWHEEL_STARTUP_DURATION := 0.32
 const FIREWHEEL_SPIN_DURATION := 0.48
 const FIREWHEEL_RECOVERY_DURATION := 0.18
 const FIREWHEEL_COOLDOWN_DURATION := 5.0
-const FIREWHEEL_DURATION_UPGRADE_BONUS := 0.24
+const FIREWHEEL_DURATION_UPGRADE_BONUS := 0.5
 const FIREWHEEL_RANGE := 112.0
 const FIREWHEEL_PULSE_TIMES := [0.36, 0.60]
 const FIREWHEEL_EXTENDED_PULSE_TIME := 0.88
@@ -62,15 +61,19 @@ const FIREWHEEL_PROJECTILE_DAMAGE_MULTIPLIER := 0.35
 const FIREWHEEL_PROJECTILE_KNOCKBACK := 180.0
 const FIREWHEEL_CAPSTONE_SPIN_END_TIME := 3.0
 const FIREWHEEL_CAPSTONE_PROJECTILE_BATCH_TIMES := [0.42, 0.96, 1.50, 2.04, 2.58]
+const FIREWHEEL_CAPSTONE_PULSE_TIMES := [0.36, 0.84, 1.32, 1.80, 2.28, 2.76]
+const FIREWHEEL_CAPSTONE_PULSE_DAMAGE_MULTIPLIERS := [0.66, 0.70, 0.74, 0.78, 0.82, 0.86]
 const FIREWHEEL_CAPSTONE_PROJECTILES_PER_BATCH := 6
 const FIREWHEEL_CAPSTONE_PROJECTILE_SIZE_MULTIPLIER := 4.0
 const FIREWHEEL_CAPSTONE_PROJECTILE_DAMAGE_MULTIPLIER := 0.14
-const FIREWHEEL_FINISHER_DURATION := 0.30
-const FIREWHEEL_FINISHER_RELEASE_TIME := 0.15
+const FIREWHEEL_FINISHER_DURATION := 0.65
+const FIREWHEEL_FINISHER_RELEASE_TIME := 0.50
 const FIREWHEEL_RING_SPEED := 420.0
 const FIREWHEEL_RING_HIT_RADIUS := 68.0
 const FIREWHEEL_RING_DAMAGE_MULTIPLIER := 2.50
 const FIREWHEEL_RING_KNOCKBACK := 440.0
+const FIREWHEEL_CAPSTONE_PULSE_RADIUS := 180.0
+const FIREWHEEL_CAPSTONE_PULSE_SHAKE_STRENGTH := 6.0
 const BASIC_COMBO_STAGES := 3
 const WEAPON_CLASH_ACTIVE_DURATION := 0.18
 const WEAPON_CLASH_REACH := 168.0
@@ -190,6 +193,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	ultimate_segment_index = 0
 	ultimate_phase_remaining = 0.0
 	ultimate_dash_direction = Vector2.RIGHT
+	reset_guard_state()
 	ultimate_dash_remaining_distance = 0.0
 	ultimate_dash_speed = 0.0
 	active_dash_direction = Vector2.RIGHT
@@ -306,6 +310,8 @@ func ultimate_ability_label() -> String:
 	return "七进"
 
 func tick(delta: float, move_direction: Vector2) -> void:
+	if is_defeated():
+		return
 	tick_movement_slow(delta)
 	current_move_direction = move_direction
 	_update_buffered_basic_direction()
@@ -337,7 +343,7 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		combo_stage = 0
 	if was_waiting_for_hit and hit_delay_remaining <= 0.0:
 		_release_pending_attack()
-	if ultimate_time <= 0.0:
+	if ultimate_time <= 0.0 and not is_guard_active():
 		var move_multiplier := _dragon_move_multiplier()
 		if path_dash_remaining > 0.0:
 			_tick_path_dash(delta)
@@ -361,7 +367,7 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		_finish_action()
 
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_time > 0.0 or is_guard_active():
+	if is_defeated() or ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked():
 		if current_action == "basic" and combo_stage < BASIC_COMBO_STAGES and not has_buffered_basic:
@@ -377,7 +383,7 @@ func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_charge_count <= 0 or ultimate_time > 0.0 or is_guard_active():
+	if is_defeated() or active_charge_count <= 0 or ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -403,7 +409,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_ultimate(_direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_energy < ULTIMATE_COST or ultimate_time > 0.0 or is_guard_active():
+	if is_defeated() or ultimate_energy < ULTIMATE_COST or ultimate_time > 0.0 or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -433,15 +439,15 @@ func apply_upgrade(upgrade_id: String) -> void:
 			basic_range_bonus += 28.0
 			basic_pierce_bonus += 2
 		"sweeping_wind":
-			sweep_range_bonus += 32.0
-			sweep_angle_bonus += 30.0
+			sweep_range_bonus += 10.0
+			sweep_angle_bonus += 15.0
 			sweep_knockback_bonus += 130.0
 		"sweeping_guard":
 			projectile_guard_level = maxi(projectile_guard_level, 1)
 		"sweeping_guard_large":
 			projectile_guard_level = 2
 		"dash_echo":
-			third_lunge_bonus += 46.0
+			third_lunge_bonus += 25.0
 			third_recovery_bonus += 0.08
 		"firewheel":
 			firewheel_enabled = true
@@ -569,15 +575,8 @@ func hud_status_effects() -> Array[Dictionary]:
 			"duration": DRAGON_SHIELD_INVULNERABILITY_DURATION,
 			"color": Color("f3ca54"),
 		})
-	elif health_component.shield_charges > 0:
-		effects.append({
-			"id": "dragon_shield",
-			"icon": "甲",
-			"label": "龙甲",
-			"stacks": health_component.shield_charges,
-			"timed": false,
-			"color": Color("76d6ed"),
-		})
+	elif not common_shield_hud_effect().is_empty():
+		effects.append(common_shield_hud_effect())
 	return effects
 
 func add_dragon_progress(value: int) -> void:
@@ -679,6 +678,8 @@ func has_breakout_guard() -> bool:
 	return breakout_guard_remaining > 0.0 and breakout_guard_charges > 0
 
 func receive_damage(amount: float, source: String, _attack_origin: Vector2 = Vector2.ZERO) -> float:
+	if is_defeated():
+		return 0.0
 	if dragon_shield_invulnerable_remaining > 0.0:
 		return 0.0
 	if is_firewheel_invulnerable():
@@ -690,7 +691,7 @@ func receive_damage(amount: float, source: String, _attack_origin: Vector2 = Vec
 		breakout_guard_charges -= 1
 		protection_broken.emit()
 		return 0.0
-	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense())
+	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense()) * incoming_damage_multiplier(_attack_origin)
 	if dragon_timer > 0.0 and dragon_damage_reduction > 0.0:
 		reduced_amount *= 1.0 - dragon_damage_reduction
 	var applied_damage := health_component.take_damage(reduced_amount)
@@ -702,19 +703,36 @@ func interrupt_basic_attack() -> void:
 	if current_action == "basic" or combo_stage > 0 or combo_window > 0.0:
 		_cancel_basic_for_skill()
 
-func on_enemy_defeated(enemy_type: int) -> void:
+func on_enemy_defeated(enemy_type: int, allow_recovery: bool = true, _action_kind: int = AttackRequest.ActionKind.NONE) -> void:
 	add_dragon_progress(DRAGON_PROGRESS_PER_ENEMY_DEFEAT)
-	apply_military_enemy_defeat_reward(enemy_type)
+	apply_military_enemy_defeat_reward(enemy_type, allow_recovery)
 	var restored_health := false
-	if dragon_scale_regen_rank > 0 and enemy_type != EnemySimulation.EnemyType.ELITE and randf() < 0.05 + float(dragon_scale_regen_rank) * 0.03:
+	if allow_recovery and dragon_scale_regen_rank > 0 and enemy_type != EnemySimulation.EnemyType.ELITE and randf() < 0.05 + float(dragon_scale_regen_rank) * 0.03:
 		health_component.current = minf(health_component.maximum, health_component.current + float(dragon_scale_regen_rank))
 		restored_health = true
-	if triumph_enabled and enemy_type == EnemySimulation.EnemyType.ELITE:
+	if allow_recovery and triumph_enabled and enemy_type == EnemySimulation.EnemyType.ELITE:
 		health_component.current = minf(health_component.maximum, health_component.current + 18.0)
 		restored_health = true
+	if triumph_enabled and enemy_type == EnemySimulation.EnemyType.ELITE:
 		add_ultimate_energy(12.0)
 	if restored_health:
 		health_component.health_changed.emit(health_component.current, health_component.maximum)
+
+func force_idle_state() -> void:
+	super.force_idle_state()
+	combo_window = 0.0
+	combo_stage = 0
+	ultimate_state = UltimateState.INACTIVE
+	ultimate_time = 0.0
+	ultimate_phase_remaining = 0.0
+	ultimate_dash_remaining_distance = 0.0
+	pending_attack = null
+	pending_first_strike_shockwave = null
+	path_dash_remaining = 0.0
+	path_dash_request = null
+	path_dash_finish = null
+	has_buffered_basic = false
+	movement_recovery_remaining = 0.0
 
 func on_named_target_hit(target_kind: int, request: AttackRequest, damage: float) -> void:
 	if damage <= 0.0 or not request.grants_special_target_dragon_progress:
@@ -918,12 +936,13 @@ func _begin_firewheel() -> void:
 func _tick_firewheel(delta: float) -> void:
 	firewheel_elapsed += delta
 	var pulse_times: Array[float] = []
-	for pulse_time in FIREWHEEL_PULSE_TIMES:
+	var configured_pulse_times: Array = FIREWHEEL_CAPSTONE_PULSE_TIMES if firewheel_capstone_enabled else FIREWHEEL_PULSE_TIMES
+	for pulse_time in configured_pulse_times:
 		pulse_times.append(float(pulse_time))
-	if firewheel_duration_bonus > 0.0:
+	if not firewheel_capstone_enabled and firewheel_duration_bonus > 0.0:
 		pulse_times.append(FIREWHEEL_EXTENDED_PULSE_TIME)
 	while firewheel_pulse_count < pulse_times.size() and firewheel_elapsed >= pulse_times[firewheel_pulse_count]:
-		_emit_firewheel_pulse(firewheel_pulse_count)
+		_emit_firewheel_pulse(firewheel_pulse_count, firewheel_capstone_enabled)
 		firewheel_pulse_count += 1
 	var projectile_batch_limit := FIREWHEEL_CAPSTONE_PROJECTILE_BATCH_TIMES.size() if firewheel_capstone_enabled else FIREWHEEL_PROJECTILE_BATCH_COUNT
 	while firewheel_projectiles_enabled and firewheel_projectile_batch_count < projectile_batch_limit and firewheel_elapsed >= _firewheel_projectile_batch_time(firewheel_projectile_batch_count):
@@ -931,17 +950,25 @@ func _tick_firewheel(delta: float) -> void:
 		firewheel_projectile_batch_count += 1
 	_tick_pending_firewheel_projectiles(delta)
 
-func _emit_firewheel_pulse(pulse_index: int) -> void:
+func _emit_firewheel_pulse(pulse_index: int, capstone: bool = false) -> void:
 	var multiplier := 1.20 if pulse_index == 0 else (1.45 if pulse_index == 1 else 1.60)
-	var request := AttackRequest.circle(position, FIREWHEEL_RANGE, multiplier, 18 + basic_pierce_bonus + _dragon_pierce(), "哪吒火轮")
+	var radius := FIREWHEEL_RANGE
+	var label := "哪吒火轮"
+	if capstone:
+		multiplier = float(FIREWHEEL_CAPSTONE_PULSE_DAMAGE_MULTIPLIERS[mini(pulse_index, FIREWHEEL_CAPSTONE_PULSE_DAMAGE_MULTIPLIERS.size() - 1)])
+		radius = FIREWHEEL_CAPSTONE_PULSE_RADIUS
+		label = "风火贯阵·旋枪"
+	var request := AttackRequest.circle(position, radius, multiplier, 18 + basic_pierce_bonus + _dragon_pierce(), label)
 	request.action_kind = AttackRequest.ActionKind.PASSIVE
-	request.stance_damage = 5.0
+	request.stance_damage = 8.0 if capstone else 5.0
 	request.direction = last_attack_direction
-	request.knockback = 680.0
-	request.forced_displacement = 84.0
+	request.knockback = 320.0 if capstone else 680.0
+	request.forced_displacement = 44.0 if capstone else 84.0
 	request.forced_displacement_duration = 0.12
 	request.prevent_elite_knockback = true
 	attack_requested.emit(request)
+	if capstone and request.total_hits > 0:
+		camera_shake_requested.emit(FIREWHEEL_CAPSTONE_PULSE_SHAKE_STRENGTH)
 
 func _queue_firewheel_projectile_batch() -> void:
 	var projectile_count := FIREWHEEL_CAPSTONE_PROJECTILES_PER_BATCH if firewheel_capstone_enabled else FIREWHEEL_PROJECTILES_PER_BATCH
@@ -1220,7 +1247,7 @@ func _finish_action() -> void:
 	current_action = ""
 
 func _move(direction: Vector2, distance: float) -> void:
-	if is_guard_active():
+	if is_defeated() or is_guard_active():
 		return
 	var normalized := direction.normalized() if direction.length() > 0.1 else Vector2.ZERO
 	position += normalized * distance
@@ -1280,9 +1307,7 @@ func _eight_way_direction(direction: Vector2, fallback: Vector2) -> Vector2:
 	return Vector2.from_angle(snapped_angle)
 
 func _dragon_pierce() -> int:
-	if not has_dragon():
-		return 0
-	return 2 + maxi(0, dragon_stacks - 1) * DRAGON_EXTRA_STACK_PIERCE
+	return 0
 
 func _dragon_move_multiplier() -> float:
 	if not has_dragon():

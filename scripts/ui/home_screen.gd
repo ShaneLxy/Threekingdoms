@@ -85,6 +85,12 @@ const GOLD := Color("d5af66")
 const GOLD_BRIGHT := Color("f4d58d")
 const DRAGON_BLUE := Color("63b9df")
 const MUTED := Color("829099")
+const HERO_SELECT_SKILL_TYPE_COLORS := {
+	"普攻": Color("e2b85f"),
+	"被动": Color("67c9b0"),
+	"主动": Color("63b9df"),
+	"无双": Color("d76b5e"),
+}
 const HERO_TREE_NODE_SIZE := Vector2(156.0, 64.0)
 const HERO_TREE_NODE_GAP := 16.0
 const HERO_TREE_BRANCH_START_X := 140.0
@@ -133,7 +139,7 @@ const BATTLEFIELD_DEFINITIONS := {
 		"title": "长坂坡",
 		"chapter": "主线 第一章",
 		"description": "雪夜兵海，持续迎击敌军。",
-		"tags": ["雪夜", "盾弓"],
+		"tags": ["雪夜"],
 		"implemented": true,
 	},
 	"bowangpo": {
@@ -154,13 +160,40 @@ const BATTLEFIELD_DEFINITIONS := {
 	},
 }
 const STORY_CHAPTER_DEFINITIONS := {
-	"story_01": {"chapter": "第一章", "title": "新野练兵", "description": "熟悉近战推进与破阵。", "tags": ["约5分钟", "刀盾", "初阵"], "duration": "约5分钟", "battlefield_id": "xinye"},
-	"story_02": {"chapter": "第二章", "title": "博望坡·火攻", "description": "火攻破敌，击退曹军前锋。", "tags": ["约6分钟", "火攻", "枪盾"], "duration": "约6分钟", "battlefield_id": "bowangpo"},
-	"story_03": {"chapter": "第三章", "title": "火烧新野", "description": "掩护撤离，突破追兵。", "tags": ["约6.5分钟", "撤离", "弓手"], "duration": "约6.5分钟", "battlefield_id": "huoshaoxinye"},
-	"story_04": {"chapter": "第四章", "title": "襄阳撤退", "description": "护送南撤，阻截合围。", "tags": ["约8分钟", "护送", "戟卫"], "duration": "约8分钟", "battlefield_id": "xiangyangchetui"},
-	"story_05": {"chapter": "第五章", "title": "当阳断后", "description": "断后掩护，穿越当阳。", "tags": ["约9分钟", "骑兵", "断后"], "duration": "约9分钟", "battlefield_id": "dangyangduanhou"},
+	"story_01": {"id": "story_01", "chapter": "第一章", "title": "新野练兵", "description": "熟悉近战推进与破阵。", "tags": ["约5分钟"], "duration": "约5分钟", "battlefield_id": "xinye"},
+	"story_03": {"id": "story_03", "chapter": "第二章", "title": "火烧新野", "description": "掩护撤离，突破追兵。", "tags": ["约6.5分钟"], "duration": "约6.5分钟", "battlefield_id": "huoshaoxinye"},
+	"story_04": {"id": "story_04", "chapter": "第三章", "title": "襄阳撤退", "description": "护送南撤，阻截合围。", "tags": ["约8分钟"], "duration": "约8分钟", "battlefield_id": "xiangyangchetui"},
+	"story_05": {"id": "story_05", "chapter": "第三章", "title": "当阳断后", "description": "断后掩护，穿越当阳。", "tags": ["约9分钟"], "duration": "约9分钟", "battlefield_id": "dangyangduanhou"},
 }
-const STORY_CHAPTER_IDS: Array[String] = ["story_01", "story_02", "story_03", "story_04", "story_05"]
+const STORY_CHAPTER_IDS: Array[String] = ["story_01", "story_03", "story_05"]
+const STORY_CHAPTER_DIFFICULTIES := {
+	"story_01": "简易",
+	"story_03": "困难",
+	"story_05": "极难",
+}
+const TUTORIAL_FINAL_STAGE := 20
+const TUTORIAL_HINTS := {
+	0: "欢迎来到《三国·破阵无双》！本教程将带你熟悉军需、战法与出征流程。",
+	1: "请点击“军需”按钮，进入军需商城。",
+	2: "这里是军需商城，可以招募武将、解锁专属战法，并用军功逐步提升战法阶数。点击左侧“下一步>”继续。",
+	3: "军需商城可解锁武将专属战法。请先查看关羽的“拖刀计”。",
+	4: "这是关羽的“拖刀计”详情页：它会强化关羽的主动突进与持续作战能力，购买后可在战斗的升级选择技能中获得。点击左侧“下一步>”继续。",
+	5: "请点击购买按钮，解锁关羽的“拖刀计”。",
+	6: "接下来查看张飞的专属战法。",
+	7: "请查看张飞的“丈八跃砸·跃步”。",
+	8: "这是张飞的“丈八跃砸·跃步”详情页：它会强化张飞的跃砸招式，购买后可在战斗中进一步提升爆发。点击左侧“下一步>”继续。",
+	9: "请点击购买按钮，解锁张飞的“丈八跃砸·跃步”。",
+	10: "军需中的“军略”是全武将永久生效的成长模块，可以强化资源获取、战斗能力和阵容运转。请点击“军略”进入页面。",
+	11: "这里是军略页面：不同分支分别强化攻伐、固守、调度与统御，研习后会永久作用于所有武将。点击左侧“下一步>”继续。",
+	12: "请点击“天机”进入天机阵法页面。",
+	13: "这里是天机阵法页面：可以永久解锁并升阶阵法，战斗中通过升级选择技能启用阵法效果，形成适合本局的战术组合。点击左侧“下一步>”继续。",
+	14: "天机阵法介绍完毕，请点击“返回”回到主菜单。",
+	15: "准备出征！请点击“出征”进入剧情战役。",
+	16: "请选择第一章“新野练兵”。",
+	17: "已选好关卡，请点击右下角“出征”进入五虎点将页面。",
+	18: "这里是“五虎点将”页面：可以查看武将信息、切换出战武将，并确认本局的出战阵容。点击左侧“下一步>”继续。",
+	19: "阵容确认后，请点击右上角“出征”开始战斗。",
+}
 
 var page := "main"
 var expedition_tab := "story"
@@ -219,6 +252,14 @@ var hero_select_portrait_shader: Shader
 var hero_select_touch_index := -1
 var hero_select_drag_start := Vector2.ZERO
 var hero_select_mouse_dragging := false
+var tutorial_overlay: ColorRect
+var tutorial_panel: Panel
+var tutorial_target: Control
+var tutorial_skip_button: Button
+var tutorial_target_highlight: Panel
+var tutorial_target_original_z_index := 0
+var tutorial_target_original_mouse_filter := Control.MOUSE_FILTER_PASS
+var tutorial_highlight_elapsed := 0.0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -269,6 +310,11 @@ func _process(delta: float) -> void:
 		hero_select_idle_elapsed += delta
 		_update_hero_select_idle_sprite()
 		needs_redraw = true
+	if is_instance_valid(tutorial_target_highlight):
+		tutorial_highlight_elapsed += delta
+		var pulse := 0.5 + 0.5 * sin(tutorial_highlight_elapsed * TAU / 0.9)
+		tutorial_target_highlight.modulate.a = 0.55 + pulse * 0.45
+		needs_redraw = true
 	if title_menu_fade_remaining > 0.0:
 		title_menu_fade_remaining = maxf(0.0, title_menu_fade_remaining - delta)
 		needs_redraw = true
@@ -306,6 +352,36 @@ func _enter_from_title() -> void:
 func _show_main() -> void:
 	page = "main"
 	profile = SaveService.load_profile()
+	var resume_stage := SaveService.tutorial_stage()
+	if resume_stage == 14:
+		SaveService.set_tutorial_stage(15)
+		profile = SaveService.load_profile()
+		resume_stage = 15
+	if resume_stage in [2, 3, 6, 7, 10]:
+		if resume_stage in [6, 7]:
+			selected_shop_hero_id = "zhang_fei"
+		_show_shop("heroes")
+		return
+	elif resume_stage in [4, 5]:
+		_show_shop("heroes")
+		call_deferred("_resume_tutorial_talent", "guan_yu", "guan_drag_blade")
+		return
+	elif resume_stage in [8, 9]:
+		_show_shop("heroes")
+		call_deferred("_resume_tutorial_talent", "zhang_fei", "zhang_slam_leap")
+		return
+	elif resume_stage in [11, 12]:
+		_show_shop("strategies")
+		return
+	elif resume_stage in [13, 14]:
+		_show_shop("tianji")
+		return
+	elif resume_stage in [16, 17]:
+		_show_expedition("story")
+		return
+	elif resume_stage in [18, 19]:
+		_show_hero_select("story", "xinye", "story")
+		return
 	notice = ""
 	_clear_title_frame_cache()
 	if title_frame_layer != null:
@@ -318,15 +394,22 @@ func _show_main() -> void:
 	_create_button("出征", "剧情战役、无尽与试炼", Vector2(command_x, command_y), _show_modes, HOME_ACTION_BUTTON_SIZE, false, 20)
 	_create_button("军需", "武将、战法与军略", Vector2(command_x, command_y + HOME_ACTION_BUTTON_SIZE.y + HOME_ACTION_BUTTON_GAP), _show_shop, HOME_ACTION_BUTTON_SIZE, false, 20)
 	var margin := _safe_margin()
+	var settings_x := size.x - margin - 118.0
+	var utility_x := settings_x - 132.0
 	if SceneRouter.is_map_editor_available():
-		_create_button("地图编辑器", "战场布局与障碍", Vector2(size.x - margin - 250.0, 76.0), _open_map_editor, Vector2(132.0, 44.0), false, 14)
-	_create_button("设置", "", Vector2(size.x - margin - 118.0, 76.0), _show_settings, Vector2(118.0, 44.0), false, 16)
+		_create_button("地图编辑器", "战场布局与障碍", Vector2(utility_x - 144.0, 76.0), _open_map_editor, Vector2(132.0, 44.0), false, 14)
+	_create_button("设置", "", Vector2(settings_x, 76.0), _show_settings, Vector2(118.0, 44.0), false, 16)
+	if _is_desktop_build():
+		_create_button("新手教程", "", Vector2(utility_x, 76.0), _restart_tutorial_from_menu, Vector2(118.0, 44.0), false, 14)
+	_tutorial_refresh()
 	queue_redraw()
 
 func _open_map_editor() -> void:
 	SceneRouter.open_map_editor()
 
 func _show_modes() -> void:
+	if SaveService.tutorial_stage() == 15:
+		SaveService.set_tutorial_stage(16)
 	_show_expedition()
 
 func _show_expedition(tab: String = "story") -> void:
@@ -338,16 +421,26 @@ func _show_expedition(tab: String = "story") -> void:
 	var tabs_width := EXPEDITION_TAB_SIZE.x * 3.0 + 20.0 * 2.0
 	var tab_start := Vector2(size.x * 0.5 - tabs_width * 0.5, 88.0)
 	var story_tab := _create_button("剧情战役", "", tab_start, Callable(self, "_show_expedition").bind("story"), EXPEDITION_TAB_SIZE, false, 17)
-	var endless_tab := _create_button("无尽模式", "", tab_start + Vector2(EXPEDITION_TAB_SIZE.x + 20.0, 0.0), Callable(self, "_show_expedition").bind("endless"), EXPEDITION_TAB_SIZE, false, 17)
-	var trial_tab := _create_button("名将斗阵", "", tab_start + Vector2((EXPEDITION_TAB_SIZE.x + 20.0) * 2.0, 0.0), Callable(self, "_show_expedition").bind("boss_trial"), EXPEDITION_TAB_SIZE, false, 17)
+	var endless_unlocked := SaveService.is_battlefield_unlocked("changban")
+	var trial_unlocked := SaveService.is_battlefield_unlocked("hulao")
+	var endless_tab := _create_button("无尽模式", "" if endless_unlocked else "通关第三关解锁", tab_start + Vector2(EXPEDITION_TAB_SIZE.x + 20.0, 0.0), Callable(self, "_show_expedition").bind("endless"), EXPEDITION_TAB_SIZE, not endless_unlocked, 17 if endless_unlocked else 13)
+	var trial_tab := _create_button("名将斗阵", "" if trial_unlocked else "通关第三关解锁", tab_start + Vector2((EXPEDITION_TAB_SIZE.x + 20.0) * 2.0, 0.0), Callable(self, "_show_expedition").bind("boss_trial"), EXPEDITION_TAB_SIZE, not trial_unlocked, 17 if trial_unlocked else 13)
+	if not endless_unlocked:
+		_set_button_locked_visual(endless_tab)
+	if not trial_unlocked:
+		_set_button_locked_visual(trial_tab)
 	var active_tab := story_tab if expedition_tab == "story" else (endless_tab if expedition_tab == "endless" else trial_tab)
 	active_tab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_set_button_owned_visual(active_tab)
+	if (active_tab == endless_tab and not endless_unlocked) or (active_tab == trial_tab and not trial_unlocked):
+		_set_button_locked_visual(active_tab)
+	else:
+		_set_button_owned_visual(active_tab)
 	match expedition_tab:
 		"story": _populate_story_expedition()
 		"endless": _populate_endless_expedition()
 		"boss_trial": _populate_boss_trial_expedition()
 	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
+	_tutorial_refresh()
 	queue_redraw()
 
 func _populate_story_expedition() -> void:
@@ -362,7 +455,8 @@ func _populate_story_expedition() -> void:
 		if not unlocked:
 			_set_button_locked_visual(chapter_button)
 		elif selected:
-			chapter_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if not (SaveService.tutorial_stage() == 16 and chapter_id == "story_01"):
+				chapter_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_set_button_owned_visual(chapter_button)
 	var selected_definition := _story_chapter_definition(selected_story_chapter_id)
 	var selected_index := STORY_CHAPTER_IDS.find(selected_story_chapter_id)
@@ -378,23 +472,28 @@ func _populate_endless_expedition() -> void:
 	var definition := _battlefield_definition(selected_endless_battlefield_id)
 	var usable := bool(definition.get("implemented", false)) and SaveService.is_battlefield_unlocked(selected_endless_battlefield_id)
 	var status := "可用" if usable else ("筹备中" if SaveService.is_battlefield_unlocked(selected_endless_battlefield_id) else "通关长坂坡解锁")
+	if not SaveService.is_battlefield_unlocked(selected_endless_battlefield_id):
+		status = "通关剧情第三关后解锁"
 	var battlefield_button := _create_button(str(definition.get("title", selected_endless_battlefield_id)), status, _expedition_route_button_position(0), Callable(self, "_select_endless_battlefield").bind(selected_endless_battlefield_id), EXPEDITION_ROUTE_BUTTON_SIZE, not usable, 15)
 	if not usable:
 		_set_button_locked_visual(battlefield_button)
 	else:
 		battlefield_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_set_button_owned_visual(battlefield_button)
-	_create_button("出征", "20分钟 · 兵海", _expedition_preview_rect().end - Vector2(258.0, 66.0), _start_selected_endless, Vector2(236.0, 52.0), false, 16)
+	_create_button("出征", "20分钟 · 兵海" if usable else "通关剧情第三关后解锁", _expedition_preview_rect().end - Vector2(258.0, 66.0), _start_selected_endless, Vector2(236.0, 52.0), not usable, 16)
 
 func _populate_boss_trial_expedition() -> void:
 	var preview := _expedition_preview_rect()
-	_create_button("进入试炼", "5级开局 · 三次整备", preview.end - Vector2(258.0, 66.0), _start_boss_trial, Vector2(236.0, 52.0), false, 16)
+	var unlocked := SaveService.is_battlefield_unlocked("hulao")
+	_create_button("进入试炼", "20级开局 · 三轮斗将" if unlocked else "通关剧情第三关后解锁", preview.end - Vector2(258.0, 66.0), _start_boss_trial, Vector2(236.0, 52.0), not unlocked, 16)
 
 func _select_story_chapter(chapter_id: String) -> void:
 	var chapter_index := STORY_CHAPTER_IDS.find(chapter_id)
 	if chapter_index < 0 or not SaveService.is_story_chapter_unlocked(chapter_index + 1):
 		return
 	selected_story_chapter_id = chapter_id
+	if SaveService.tutorial_stage() == 16 and chapter_id == "story_01":
+		SaveService.set_tutorial_stage(17)
 	_show_expedition("story")
 
 func _select_endless_battlefield(battlefield_id: String) -> void:
@@ -438,6 +537,9 @@ func _show_shop(section: String = "heroes") -> void:
 	shop_section = section if section in ["heroes", "strategies", "tianji"] else "heroes"
 	var restore_scroll := int(shop_scroll_positions.get(shop_section, 0))
 	profile = SaveService.load_profile()
+	if SaveService.tutorial_stage() == 1 and shop_section == "heroes":
+		SaveService.set_tutorial_stage(2)
+		profile = SaveService.load_profile()
 	notice = ""
 	_clear_buttons()
 	if opening_shop and shop_section == "heroes":
@@ -469,19 +571,24 @@ func _show_shop(section: String = "heroes") -> void:
 		"heroes": _populate_hero_shop()
 		"strategies": _populate_strategy_shop()
 		"tianji": _populate_tianji_shop()
-	var merit_ad_button := _create_button("+", "", Vector2(size.x - _safe_margin() - 38.0, 20.0), _request_shop_merit_ad, Vector2(38.0, 38.0), false, 28)
-	merit_ad_button.tooltip_text = "观看广告获得 500 军功"
 	call_deferred("_restore_shop_scroll", shop_section, restore_scroll)
 	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
+	call_deferred("_tutorial_refresh_shop")
 	queue_redraw()
 
 func _show_shop_heroes() -> void:
+	if SaveService.tutorial_stage() == 3 and shop_section == "heroes":
+		selected_shop_hero_id = "guan_yu"
 	_show_shop("heroes")
 
 func _show_shop_strategies() -> void:
+	if SaveService.tutorial_stage() == 10:
+		SaveService.set_tutorial_stage(11)
 	_show_shop("strategies")
 
 func _show_shop_tianji() -> void:
+	if SaveService.tutorial_stage() == 12:
+		SaveService.set_tutorial_stage(13)
 	_show_shop("tianji")
 
 func _request_shop_merit_ad() -> void:
@@ -693,6 +800,11 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 	if page != "shop" or shop_section != "heroes":
 		return
 	_close_talent_detail()
+	_clear_tutorial_overlay()
+	if SaveService.tutorial_stage() == 3 and hero_id == "guan_yu" and talent_id == "guan_drag_blade":
+		SaveService.set_tutorial_stage(4)
+	elif SaveService.tutorial_stage() == 7 and hero_id == "zhang_fei" and talent_id == "zhang_slam_leap":
+		SaveService.set_tutorial_stage(8)
 	var definition: Dictionary = UpgradeSystem.DEFINITIONS.get(talent_id, {}) as Dictionary
 	if definition.is_empty():
 		return
@@ -759,7 +871,7 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 		status_label.text = "默认开放"
 		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
 	elif is_run_upgrade:
-		status_label.text = "解锁前置战法后，在局内随机抉择中获得"
+		status_label.text = "解锁前置战法后，在战斗中的升级选择技能中获得"
 		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
 	elif maxed:
 		status_label.text = "已满阶  %d / %d" % [rank, max_rank]
@@ -784,9 +896,31 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 	var close_button := _create_button("取消", "", Vector2(36.0 + (content_width - 12.0) * 0.5, action_y), _close_talent_detail, Vector2((content_width - 12.0) * 0.5, 44.0), false, 16, dialog, false)
 	close_button.add_theme_stylebox_override("normal", _make_box_style(Color("17242a"), DRAGON_BLUE, 2))
 	close_button.add_theme_stylebox_override("hover", _make_box_style(Color("20343c"), DRAGON_BLUE, 3))
+	if SaveService.tutorial_stage() == 5 and hero_id == "guan_yu" and talent_id == "guan_drag_blade":
+		_tutorial_show_for_control(purchase_button, TUTORIAL_HINTS[5])
+	elif SaveService.tutorial_stage() == 9 and hero_id == "zhang_fei" and talent_id == "zhang_slam_leap":
+		_tutorial_show_for_control(purchase_button, TUTORIAL_HINTS[9])
+	if SaveService.tutorial_stage() in [4, 5, 8, 9]:
+		_tutorial_refresh()
 
 func _buy_talent_from_detail(hero_id: String, talent_id: String, cost: int) -> void:
+	var previous_rank := SaveService.talent_rank(hero_id, talent_id)
+	var tutorial_purchase := (SaveService.tutorial_stage() == 5 and hero_id == "guan_yu" and talent_id == "guan_drag_blade") or (SaveService.tutorial_stage() == 9 and hero_id == "zhang_fei" and talent_id == "zhang_slam_leap")
+	if tutorial_purchase and previous_rank <= 0:
+		var required_cost := SaveService.talent_cost(hero_id, talent_id, cost)
+		var current_merit := int(SaveService.load_profile().get("military_merit", 0))
+		if current_merit < required_cost:
+			SaveService.grant_military_merit(required_cost - current_merit)
 	_buy_talent(hero_id, talent_id, cost)
+	var purchased := SaveService.talent_rank(hero_id, talent_id) > previous_rank
+	if purchased and SaveService.tutorial_stage() == 5 and talent_id == "guan_drag_blade":
+		SaveService.set_tutorial_stage(6)
+		_show_shop("heroes")
+		return
+	if purchased and SaveService.tutorial_stage() == 9 and talent_id == "zhang_slam_leap":
+		SaveService.set_tutorial_stage(10)
+		_show_shop("heroes")
+		return
 	# _buy_talent rebuilds the page; reopen the same detail so the player can
 	# continue comparing ranks without losing their place in the tree.
 	_show_talent_detail(hero_id, talent_id, cost, false, false)
@@ -1018,6 +1152,8 @@ func _select_shop_hero(hero_id: String) -> void:
 	if not RELEASE_HERO_IDS.has(hero_id):
 		return
 	selected_shop_hero_id = hero_id
+	if SaveService.tutorial_stage() == 6 and hero_id == "zhang_fei":
+		SaveService.set_tutorial_stage(7)
 	_show_shop("heroes")
 
 func _populate_strategy_shop() -> void:
@@ -1117,7 +1253,7 @@ func _strategy_branch_for_id(branch_id: String) -> Dictionary:
 func _populate_tianji_shop() -> void:
 	var current_merit := int(profile.get("military_merit", 0))
 	var strategy_effects := MILITARY_STRATEGY.effects_for_profile(profile)
-	var choice_label := "%d选%d" % [int(strategy_effects.get("upgrade_option_count", 3)), int(strategy_effects.get("upgrade_selection_count", 1))]
+	var choice_label := "升级选择技能"
 	var tianji_info := Label.new()
 	tianji_info.text = "天机祭坛 · 永久解锁与升阶 · 战斗中通过%s启阵" % choice_label
 	tianji_info.position = Vector2(56.0, 204.0)
@@ -1302,7 +1438,7 @@ func _show_tianji_detail(skill_id: String, feedback: String = "") -> void:
 		status_label.text = "军功不足 · 还差 %d" % (cost - current_merit)
 		status_label.add_theme_color_override("font_color", Color("e67363"))
 	else:
-		status_label.text = "解锁后将在战斗中通过随机抉择“启阵”"
+		status_label.text = "解锁后将在战斗中的升级选择技能中启阵"
 		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
 	dialog.add_child(status_label)
 	var action_y := dialog_size.y - 62.0
@@ -1496,6 +1632,12 @@ func _show_hero_select(mode: String, battlefield_id: String, return_tab: String,
 	depart_button.z_index = 24
 	var back_button := _create_button("返回", "", Vector2(_safe_margin(), top_action_y), Callable(self, "_show_expedition").bind(hero_select_return_tab), Vector2(126.0, 46.0))
 	back_button.z_index = 24
+	# Reaching the Five Tiger selection page is the tutorial's completion point.
+	# Mark it before refreshing the page so a restart cannot resume the old
+	# final tutorial overlay on this screen.
+	if not SaveService.tutorial_completed() and SaveService.tutorial_stage() >= 17 and SaveService.tutorial_stage() < TUTORIAL_FINAL_STAGE:
+		SaveService.complete_tutorial()
+	_tutorial_refresh()
 	queue_redraw()
 
 func _show_hero_select_from_details() -> void:
@@ -1510,6 +1652,8 @@ func _begin_selected_run() -> void:
 	var hero_id := _selected_hero_id()
 	if not _is_release_hero_available(hero_id) or not SaveService.equip_hero(hero_id):
 		return
+	if SaveService.tutorial_stage() == 19:
+		SaveService.complete_tutorial()
 	departure_loading = true
 	for button in buttons:
 		if is_instance_valid(button):
@@ -1524,6 +1668,8 @@ func _start_selected_story() -> void:
 	if chapter_index < 0 or not SaveService.is_story_chapter_unlocked(chapter_index + 1):
 		return
 	selected_run_story_chapter = chapter_index + 1
+	if SaveService.tutorial_stage() == 17 and selected_story_chapter_id == "story_01":
+		SaveService.set_tutorial_stage(18)
 	_show_hero_select("story", _story_battlefield_id(selected_run_story_chapter), "story")
 
 func _story_battlefield_id(chapter: int) -> String:
@@ -1531,23 +1677,23 @@ func _story_battlefield_id(chapter: int) -> String:
 		1:
 			return "xinye"
 		2:
-			return "bowangpo_story"
-		3:
 			return "huoshaoxinye"
-		4:
-			return "xiangyangchetui"
-		5:
+		3:
 			return "dangyangduanhou"
 		_:
-			return "dangyangduanhou"
+			return "xinye"
 
 func _start_endless() -> void:
 	SceneRouter.start_run("endless", "changban")
 
 func _start_selected_endless() -> void:
+	if not SaveService.is_battlefield_unlocked("changban"):
+		return
 	_show_hero_select("endless", "changban", "endless")
 
 func _start_boss_trial() -> void:
+	if not SaveService.is_battlefield_unlocked("hulao"):
+		return
 	_show_hero_select("boss_trial", "hulao", "boss_trial")
 
 func _buy_strategy(strategy_id: String) -> void:
@@ -1765,7 +1911,7 @@ func _populate_hero_select_slots() -> void:
 func _populate_hero_select_skill_labels(stats_rect: Rect2, hero: Dictionary) -> void:
 	if not RELEASE_HERO_IDS.has(str(hero.get("id", ""))):
 		return
-	var section_label := UITheme.label("技能", 20, Color("d9e5df"))
+	var section_label := UITheme.label("技能 · 战斗方式", 19, Color("e7d6aa"))
 	var skill_top := stats_rect.position.y + 164.0
 	section_label.position = Vector2(stats_rect.position.x + 22.0, skill_top)
 	section_label.size = Vector2(stats_rect.size.x - 44.0, 22.0)
@@ -1773,42 +1919,81 @@ func _populate_hero_select_skill_labels(stats_rect: Rect2, hero: Dictionary) -> 
 	section_label.z_index = 6
 	add_child(section_label)
 	page_controls.append(section_label)
+	var section_divider := ColorRect.new()
+	section_divider.position = Vector2(stats_rect.position.x + 22.0, skill_top + 27.0)
+	section_divider.size = Vector2(stats_rect.size.x - 44.0, 1.0)
+	section_divider.color = Color(0.83, 0.68, 0.38, 0.38)
+	section_divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	section_divider.z_index = 6
+	add_child(section_divider)
+	page_controls.append(section_divider)
 
 	var skills: Array = hero.get("skills", []) as Array
 	var visible_skill_count := mini(4, skills.size())
 	if visible_skill_count <= 0:
 		return
-	var rows_top := skill_top + 24.0
-	var available_rows_height := maxf(visible_skill_count * 60.0, stats_rect.end.y - rows_top - 8.0)
-	var row_height := clampf(available_rows_height / float(visible_skill_count), 60.0, 72.0)
+	var rows_top := skill_top + 36.0
+	var available_rows_height := maxf(visible_skill_count * 64.0, stats_rect.end.y - rows_top - 8.0)
+	var row_height := clampf(available_rows_height / float(visible_skill_count), 64.0, 78.0)
 	for index in range(visible_skill_count):
 		var skill: Dictionary = skills[index] as Dictionary
 		var row_y := rows_top + float(index) * row_height
-		var row := Control.new()
+		var skill_type := str(skill.get("type", "技能"))
+		var skill_name := str(skill.get("name", ""))
+		var type_prefix := "%s·" % skill_type
+		if skill_name.begins_with(type_prefix):
+			skill_name = skill_name.substr(type_prefix.length())
+		var type_color: Color = HERO_SELECT_SKILL_TYPE_COLORS.get(skill_type, Color("9fb3b8"))
+		var row := Panel.new()
 		row.position = Vector2(stats_rect.position.x + 22.0, row_y)
 		row.size = Vector2(stats_rect.size.x - 44.0, row_height - 2.0)
 		row.clip_contents = true
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Keep the card passive for clicks, but allow hover so the full text
+		# tooltip can be inspected when the two-line summary is abbreviated.
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		row.z_index = 6
+		row.add_theme_stylebox_override("panel", UITheme.flat_box_style(Color(type_color.r, type_color.g, type_color.b, 0.075), Color(type_color.r, type_color.g, type_color.b, 0.34), 1))
 		add_child(row)
 		page_controls.append(row)
 
-		var title_label := UITheme.label("%s  %s" % [str(skill.get("type", "技能")), str(skill.get("name", ""))], 17, Color("d6e5e2"))
-		title_label.position = Vector2.ZERO
-		title_label.size = Vector2(row.size.x, 23.0)
+		var type_marker := ColorRect.new()
+		type_marker.position = Vector2(0.0, 9.0)
+		type_marker.size = Vector2(4.0, maxf(22.0, row.size.y - 18.0))
+		type_marker.color = type_color
+		type_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(type_marker)
+
+		var type_label := UITheme.label(skill_type, 13, type_color.lightened(0.12))
+		type_label.position = Vector2(14.0, 6.0)
+		type_label.size = Vector2(52.0, 20.0)
+		type_label.clip_text = true
+		type_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(type_label)
+
+		var title_label := UITheme.label(skill_name, 17, Color("f0e6ce"))
+		title_label.position = Vector2(68.0, 4.0)
+		title_label.size = Vector2(row.size.x - 82.0, 23.0)
 		title_label.clip_text = true
 		title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(title_label)
 
-		var description_text := _wrap_hero_skill_text(str(skill.get("description", "")), row.size.x, 16)
-		var description_label := UITheme.label(description_text, 16, Color("aebfc2"))
-		description_label.position = Vector2(0.0, 23.0)
-		description_label.size = Vector2(row.size.x, maxf(26.0, row.size.y - 23.0))
+		var full_description := str(skill.get("description", ""))
+		var wrapped_description := _wrap_hero_skill_text(full_description, row.size.x - 28.0, 14)
+		var description_lines := wrapped_description.split("\n")
+		var description_text := wrapped_description
+		if description_lines.size() > 2:
+			description_text = "%s\n%s…" % [description_lines[0], description_lines[1].trim_suffix("…")]
+		var description_label := UITheme.label(description_text, 14, Color("aebfc2"))
+		description_label.position = Vector2(14.0, 27.0)
+		description_label.size = Vector2(row.size.x - 28.0, maxf(26.0, row.size.y - 29.0))
 		description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description_label.clip_text = true
+		description_label.max_lines_visible = 2
 		description_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		description_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		description_label.tooltip_text = full_description
+		description_label.mouse_filter = Control.MOUSE_FILTER_PASS
 		row.add_child(description_label)
+		row.tooltip_text = full_description
 
 func _wrap_hero_skill_text(text: String, max_width: float, font_size: int) -> String:
 	var font := UITheme.default_font()
@@ -1822,6 +2007,29 @@ func _wrap_hero_skill_text(text: String, max_width: float, font_size: int) -> St
 		var candidate := current + character
 		var candidate_width := font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 		if not current.is_empty() and candidate_width > max_width:
+			lines.append(current)
+			current = character
+		else:
+			current = candidate
+	if not current.is_empty() or lines.is_empty():
+		lines.append(current)
+	return "\n".join(lines)
+
+func _wrap_tutorial_text(text: String, max_width: float, font_size: int) -> String:
+	# Chinese text has no spaces for word wrapping, so measure and break it one
+	# character at a time to keep every line inside the tutorial panel.
+	var font := UITheme.default_font()
+	var lines: Array[String] = []
+	var current := ""
+	var safe_width := maxf(1.0, max_width)
+	for character in text:
+		if character == "\n":
+			lines.append(current)
+			current = ""
+			continue
+		var candidate := current + character
+		var candidate_width := font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+		if not current.is_empty() and candidate_width > safe_width:
 			lines.append(current)
 			current = character
 		else:
@@ -2144,7 +2352,348 @@ func _set_button_selected_visual(button: Button) -> void:
 	button.add_theme_stylebox_override("hover", _make_box_style(Color("6d5425"), Color("fff0a8"), 3))
 	button.add_theme_stylebox_override("pressed", _make_box_style(Color("473718"), Color("fff0a8"), 3))
 
+func _tutorial_refresh_shop() -> void:
+	_tutorial_refresh()
+
+func _tutorial_refresh() -> void:
+	_clear_tutorial_overlay()
+	var stage := SaveService.tutorial_stage()
+	if SaveService.tutorial_completed() or stage >= TUTORIAL_FINAL_STAGE:
+		return
+	var target: Control = null
+	var message := str(TUTORIAL_HINTS.get(stage, ""))
+	match stage:
+		0:
+			_tutorial_show_message(message, null, "", Callable())
+			return
+		1:
+			if page == "main":
+				target = _find_button_with_title("军需")
+		2:
+			if page == "shop" and shop_section == "heroes":
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		3:
+			if page == "shop" and shop_section == "heroes":
+				if SaveService.has_talent("guan_yu", "guan_drag_blade"):
+					SaveService.set_tutorial_stage(6)
+					call_deferred("_tutorial_refresh")
+					return
+				target = _find_button_with_title("拖刀计")
+		4:
+			if page == "shop" and shop_section == "heroes" and is_instance_valid(talent_detail_dialog):
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		5:
+			if page == "shop" and shop_section == "heroes" and is_instance_valid(talent_detail_dialog):
+				target = _find_button_with_prefix("购买")
+		6:
+			if page == "shop" and shop_section == "heroes":
+				target = _find_button_with_title("张飞")
+		7:
+			if page == "shop" and shop_section == "heroes":
+				if SaveService.has_talent("zhang_fei", "zhang_slam_leap"):
+					SaveService.set_tutorial_stage(10)
+					call_deferred("_tutorial_refresh")
+					return
+				target = _find_button_with_title("丈八跃砸·跃步")
+		8:
+			if page == "shop" and shop_section == "heroes" and is_instance_valid(talent_detail_dialog):
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		9:
+			if page == "shop" and shop_section == "heroes" and is_instance_valid(talent_detail_dialog):
+				target = _find_button_with_prefix("购买")
+		10:
+			if page == "shop" and shop_section == "heroes":
+				target = _find_button_with_title("军略")
+		11:
+			if page == "shop" and shop_section == "strategies":
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		12:
+			if page == "shop" and shop_section == "strategies":
+				target = _find_button_with_title("天机")
+		13:
+			if page == "shop" and shop_section == "tianji":
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		14:
+			if page == "shop" and shop_section == "tianji":
+				target = _find_button_with_title("返回")
+		15:
+			if page == "main":
+				target = _find_button_with_title("出征")
+		16:
+			if page == "expedition" and expedition_tab == "story":
+				target = _find_button_with_title("新野练兵")
+		17:
+			if page == "expedition" and expedition_tab == "story":
+				target = _find_button_with_title("出征")
+		18:
+			if page == "hero_select":
+				_tutorial_show_message(message, null, "", Callable())
+				return
+		19:
+			if page == "hero_select":
+				target = _find_button_with_title("出征")
+	if target != null:
+		_tutorial_show_for_control(target, message)
+
+func _tutorial_stage_has_next(stage: int) -> bool:
+	return stage in [0, 2, 4, 8, 11, 13, 18]
+
+func _tutorial_next_stage() -> void:
+	var stage := SaveService.tutorial_stage()
+	if not _tutorial_stage_has_next(stage):
+		return
+	if stage == 0:
+		call_deferred("_tutorial_begin")
+		return
+	SaveService.set_tutorial_stage(stage + 1)
+	call_deferred("_tutorial_refresh")
+
+func _tutorial_begin() -> void:
+	SaveService.set_tutorial_stage(1)
+	_show_main()
+
+func _restart_tutorial_from_menu() -> void:
+	SaveService.restart_tutorial()
+	selected_shop_hero_id = "guan_yu"
+	selected_story_chapter_id = "story_01"
+	_show_main()
+
+func _skip_tutorial() -> void:
+	if SaveService.tutorial_completed():
+		return
+	SaveService.complete_tutorial()
+	# Let the pressed signal finish before rebuilding the page and queuing the
+	# overlay controls for deletion. This avoids mutating the signal source.
+	call_deferred("_show_main")
+
+func _is_desktop_build() -> bool:
+	return OS.has_feature("pc")
+
+func _resume_tutorial_talent(hero_id: String, talent_id: String) -> void:
+	if page == "shop" and shop_section == "heroes" and SaveService.tutorial_stage() in [4, 5, 8, 9]:
+		_show_talent_detail(hero_id, talent_id, 0, false, false)
+
+func _tutorial_show_for_control(control: Control, message: String) -> void:
+	if not is_instance_valid(control):
+		return
+	_tutorial_show_message(message, control, "", Callable())
+
+func _tutorial_show_message(message: String, target: Control, action_title: String, action: Callable) -> void:
+	_clear_tutorial_overlay()
+	tutorial_overlay = ColorRect.new()
+	# Keep the full-screen container transparent. Dimming is drawn only by the
+	# blocker rectangles, so the highlighted target remains visually clear.
+	tutorial_overlay.color = Color.TRANSPARENT
+	tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# The overlay itself stays transparent to input. Four blocker controls below
+	# it intercept everything except the highlighted target's click-through hole.
+	tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_overlay.z_index = 40
+	add_child(tutorial_overlay)
+	var target_local_rect := Rect2()
+	if target != null:
+		target_local_rect = Rect2(target.get_global_rect().position - tutorial_overlay.global_position, target.get_global_rect().size)
+	var special_hero_select := page == "hero_select" and SaveService.tutorial_stage() in [18, 19]
+	if special_hero_select:
+		# The hero-select tutorial only locks the upper-left Back button.
+		# Hero cards and the information panel remain visible and interactive.
+		var back_button := _find_button_with_title("返回")
+		if back_button != null:
+			var back_rect := back_button.get_global_rect()
+			_add_tutorial_blocker(Rect2(back_rect.position - tutorial_overlay.global_position, back_rect.size))
+	elif target != null:
+		var overlay_rect := Rect2(Vector2.ZERO, size)
+		var target_rect := target.get_global_rect()
+		var hole := Rect2(target_rect.position - tutorial_overlay.global_position, target_rect.size)
+		hole = hole.intersection(overlay_rect)
+		_add_tutorial_blocker(Rect2(0.0, 0.0, size.x, maxf(0.0, hole.position.y)))
+		_add_tutorial_blocker(Rect2(0.0, hole.end.y, size.x, maxf(0.0, size.y - hole.end.y)))
+		_add_tutorial_blocker(Rect2(0.0, hole.position.y, maxf(0.0, hole.position.x), hole.size.y))
+		_add_tutorial_blocker(Rect2(hole.end.x, hole.position.y, maxf(0.0, size.x - hole.end.x), hole.size.y))
+	else:
+		_add_tutorial_blocker(Rect2(0.0, 0.0, size.x, size.y))
+	var has_next := _tutorial_stage_has_next(SaveService.tutorial_stage())
+	var panel_width := minf(700.0, maxf(120.0, size.x - 48.0))
+	if special_hero_select:
+		panel_width = minf(540.0, maxf(120.0, size.x - 48.0))
+	var wrapped_message := _wrap_tutorial_text(message, panel_width - 44.0, 19)
+	var message_line_count := maxi(1, wrapped_message.count("\n") + 1)
+	var base_panel_height := 184.0 if has_next else (126.0 if action_title.is_empty() else 174.0)
+	# Reserve enough vertical space for every wrapped line plus the bottom
+	# controls. The cap keeps the panel inside compact mobile viewports.
+	var panel_height := maxf(base_panel_height, 72.0 + float(message_line_count) * 25.0 + 8.0)
+	panel_height = minf(panel_height, maxf(126.0, size.y - 48.0))
+	var panel_size := Vector2(panel_width, panel_height)
+	tutorial_panel = Panel.new()
+	var panel_position := _tutorial_panel_position(panel_size, target_local_rect)
+	if special_hero_select:
+		# Keep the hero details and roster readable while the player chooses a
+		# hero. The Back button is the only control locked on this page.
+		panel_position = Vector2(
+			maxf(24.0, (size.x - panel_size.x) * 0.5),
+			maxf(24.0, size.y - panel_size.y - 24.0)
+		)
+	tutorial_panel.position = panel_position
+	tutorial_panel.size = panel_size
+	tutorial_panel.z_index = 1
+	tutorial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE if special_hero_select else Control.MOUSE_FILTER_STOP
+	tutorial_panel.add_theme_stylebox_override("panel", _make_box_style(Color("17242a"), GOLD_BRIGHT, 2))
+	tutorial_overlay.add_child(tutorial_panel)
+	var label := Label.new()
+	label.text = wrapped_message
+	label.position = Vector2(22.0, 16.0)
+	# Leave a dedicated bottom row for the navigation controls so wrapped text
+	# cannot collide with “下一步>” or “跳过>>”.
+	label.size = Vector2(panel_size.x - 44.0, maxf(24.0, panel_size.y - 80.0))
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 19)
+	label.add_theme_color_override("font_color", Color("e4eee9"))
+	label.clip_text = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_panel.add_child(label)
+	if not action_title.is_empty():
+		var action_button := _create_button(action_title, "", Vector2((panel_size.x - 220.0) * 0.5, panel_size.y - 58.0), action, Vector2(220.0, 42.0), false, 16, tutorial_panel, false)
+		action_button.z_index = 2
+	if _tutorial_stage_has_next(SaveService.tutorial_stage()):
+		var next_button := _create_button("下一步>", "", Vector2(22.0, panel_size.y - 52.0), _tutorial_next_stage, Vector2(132.0, 40.0), false, 15, tutorial_panel, false)
+		next_button.z_index = 2
+		next_button.add_theme_color_override("font_color", GOLD_BRIGHT)
+		next_button.add_theme_stylebox_override("normal", _make_box_style(Color("1b2a26"), GOLD_BRIGHT, 2))
+		next_button.add_theme_stylebox_override("hover", _make_box_style(Color("25372f"), Color("fff0a8"), 3))
+	if target != null:
+		tutorial_target_original_z_index = target.z_index
+		tutorial_target_original_mouse_filter = target.mouse_filter
+		target.z_index = maxi(target.z_index, 60)
+		target.mouse_filter = Control.MOUSE_FILTER_STOP
+		if target is Button:
+			_set_button_selected_visual(target as Button)
+		_create_tutorial_target_highlight(target)
+	tutorial_target = target
+	tutorial_skip_button = _create_button("跳过>>", "", Vector2(panel_size.x - 154.0, panel_size.y - 52.0), _skip_tutorial, Vector2(132.0, 40.0), false, 15, tutorial_panel, false)
+	tutorial_skip_button.z_index = 2
+	tutorial_skip_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	tutorial_skip_button.add_theme_color_override("font_color", GOLD_BRIGHT)
+	tutorial_skip_button.add_theme_stylebox_override("normal", _make_box_style(Color("2a2115"), GOLD_BRIGHT, 2))
+	tutorial_skip_button.add_theme_stylebox_override("hover", _make_box_style(Color("4b351a"), Color("fff0a8"), 3))
+
+func _add_tutorial_blocker(rect: Rect2) -> void:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var blocker := ColorRect.new()
+	blocker.position = rect.position
+	blocker.size = rect.size
+	blocker.color = Color(0.08, 0.10, 0.11, 0.70)
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	blocker.z_index = 1
+	tutorial_overlay.add_child(blocker)
+
+func _clear_tutorial_overlay() -> void:
+	if is_instance_valid(tutorial_target):
+		tutorial_target.z_index = tutorial_target_original_z_index
+		tutorial_target.mouse_filter = tutorial_target_original_mouse_filter
+	if is_instance_valid(tutorial_overlay):
+		var overlay_parent := tutorial_overlay.get_parent()
+		if overlay_parent != null:
+			overlay_parent.remove_child(tutorial_overlay)
+		if not tutorial_overlay.is_queued_for_deletion():
+			tutorial_overlay.queue_free()
+	if is_instance_valid(tutorial_skip_button) and tutorial_skip_button.get_parent() != tutorial_overlay:
+		var skip_parent := tutorial_skip_button.get_parent()
+		if skip_parent != null:
+			skip_parent.remove_child(tutorial_skip_button)
+		if not tutorial_skip_button.is_queued_for_deletion():
+			tutorial_skip_button.queue_free()
+	if is_instance_valid(tutorial_target_highlight):
+		var highlight_parent := tutorial_target_highlight.get_parent()
+		if highlight_parent != null:
+			highlight_parent.remove_child(tutorial_target_highlight)
+		if not tutorial_target_highlight.is_queued_for_deletion():
+			tutorial_target_highlight.queue_free()
+	tutorial_overlay = null
+	tutorial_panel = null
+	tutorial_target = null
+	tutorial_skip_button = null
+	tutorial_target_highlight = null
+	tutorial_highlight_elapsed = 0.0
+
+func _create_tutorial_target_highlight(target: Control) -> void:
+	if not is_instance_valid(target):
+		return
+	var rect := target.get_global_rect()
+	tutorial_target_highlight = Panel.new()
+	tutorial_target_highlight.position = rect.position - global_position - Vector2(6.0, 6.0)
+	tutorial_target_highlight.size = rect.size + Vector2(12.0, 12.0)
+	tutorial_target_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_target_highlight.z_index = 70
+	tutorial_target_highlight.modulate.a = 0.9
+	tutorial_target_highlight.add_theme_stylebox_override("panel", UITheme.flat_box_style(Color.TRANSPARENT, GOLD_BRIGHT, 3))
+	add_child(tutorial_target_highlight)
+	tutorial_highlight_elapsed = 0.0
+
+func _tutorial_panel_position(panel_size: Vector2, target_rect: Rect2, skip_rect: Rect2 = Rect2()) -> Vector2:
+	var margin := 24.0
+	var centered_x := (size.x - panel_size.x) * 0.5
+	# Keep the panel clear of the target while fitting every viewport.
+	var top_y := 76.0
+	var bottom_y := size.y - panel_size.y - margin
+	var target_center_y := target_rect.get_center().y if target_rect.has_area() else size.y * 0.5
+	var side_y := clampf(target_center_y - panel_size.y * 0.5, margin, size.y - panel_size.y - margin)
+	var candidates: Array[Vector2] = [
+		Vector2(centered_x, top_y),
+		Vector2(centered_x, bottom_y),
+		Vector2(margin, side_y),
+		Vector2(size.x - panel_size.x - margin, side_y),
+	]
+	for candidate in candidates:
+		var panel_rect := Rect2(candidate, panel_size)
+		if panel_rect.position.x < margin or panel_rect.end.x > size.x - margin:
+			continue
+		if panel_rect.position.y < margin or panel_rect.end.y > size.y - margin:
+			continue
+		if target_rect.has_area() and panel_rect.grow(8.0).intersects(target_rect):
+			continue
+		if skip_rect.has_area() and panel_rect.grow(4.0).intersects(skip_rect):
+			continue
+		return candidate
+	return Vector2(centered_x, clampf(top_y, margin, size.y - panel_size.y - margin))
+
+func _find_button_with_title(title: String) -> Button:
+	return _find_button_in(self, title)
+
+func _find_button_with_prefix(prefix: String) -> Button:
+	return _find_button_prefix_in(self, prefix)
+
+func _find_button_in(node: Node, title: String) -> Button:
+	for child in node.get_children():
+		if child is Button:
+			var button := child as Button
+			if button.text.split("\n")[0] == title:
+				return button
+		var nested := _find_button_in(child, title)
+		if nested != null:
+			return nested
+	return null
+
+func _find_button_prefix_in(node: Node, prefix: String) -> Button:
+	for child in node.get_children():
+		if child is Button:
+			var button := child as Button
+			if button.text.begins_with(prefix):
+				return button
+		var nested := _find_button_prefix_in(child, prefix)
+		if nested != null:
+			return nested
+	return null
+
 func _clear_buttons() -> void:
+	_clear_tutorial_overlay()
 	talent_detail_dialog = null
 	strategy_detail_dialog = null
 	tianji_detail_dialog = null
@@ -2590,8 +3139,8 @@ func _draw_expedition(font: Font) -> void:
 
 func _expedition_subtitle() -> String:
 	match expedition_tab:
-		"endless": return "20分钟兵海生存。"
-		"boss_trial": return "连续斗将，挑战名将。"
+		"endless": return "20分钟兵海生存。" if SaveService.is_battlefield_unlocked("changban") else "通关剧情第三关后解锁。"
+		"boss_trial": return "连续斗将，挑战名将。" if SaveService.is_battlefield_unlocked("hulao") else "通关剧情第三关后解锁。"
 		_: return "新野至当阳，逐章推进。"
 
 func _draw_story_expedition(font: Font) -> void:
@@ -2637,7 +3186,13 @@ func _draw_story_chapter_preview(rect: Rect2, definition: Dictionary, unlocked: 
 	draw_texture_rect(preview_texture, inner, true, Color(0.54, 0.62, 0.66, 0.78) if unlocked else Color(0.34, 0.39, 0.40, 0.52))
 	draw_rect(inner, Color(0.02, 0.04, 0.05, 0.38))
 	draw_rect(Rect2(inner.position, Vector2(inner.size.x, 40.0)), Color(0.03, 0.06, 0.07, 0.60))
-	draw_string(font, inner.position + Vector2(18.0, 27.0), str(definition.get("title", "剧情关卡")), HORIZONTAL_ALIGNMENT_LEFT, inner.size.x - 36.0, 15, Color("d8e4df") if unlocked else MUTED)
+	var difficulty := str(STORY_CHAPTER_DIFFICULTIES.get(str(definition.get("id", "")), ""))
+	var badge_rect := Rect2(inner.end.x - 112.0, inner.position.y + 8.0, 94.0, 24.0)
+	if not difficulty.is_empty():
+		draw_rect(badge_rect, Color(0.08, 0.10, 0.10, 0.86))
+		draw_rect(badge_rect, GOLD_BRIGHT if unlocked else Color("8a7652"), false, 2.0)
+		draw_string(font, badge_rect.position + Vector2(0.0, 17.0), difficulty, HORIZONTAL_ALIGNMENT_CENTER, badge_rect.size.x, 13, GOLD_BRIGHT if unlocked else MUTED)
+	draw_string(font, inner.position + Vector2(18.0, 27.0), str(definition.get("title", "剧情关卡")), HORIZONTAL_ALIGNMENT_LEFT, inner.size.x - 150.0, 15, Color("d8e4df") if unlocked else MUTED)
 
 func _draw_story_chapter_details(rect: Rect2, definition: Dictionary, unlocked: bool, font: Font) -> void:
 	_draw_panel(rect, GOLD if unlocked else Color("4c5960"), true)
@@ -2654,15 +3209,16 @@ func _draw_story_chapter_details(rect: Rect2, definition: Dictionary, unlocked: 
 func _draw_endless_expedition(font: Font) -> void:
 	var preview := _expedition_preview_rect()
 	var definition := _battlefield_definition("changban")
-	_draw_battlefield_preview(preview, definition, true, font)
+	_draw_battlefield_preview(preview, definition, SaveService.is_battlefield_unlocked("changban"), font)
 	_draw_expedition_route(font, "战场", ["changban"], "changban")
 
 func _draw_boss_trial_expedition(font: Font) -> void:
 	var preview := _expedition_preview_rect()
-	_draw_battlefield_preview(preview, _battlefield_definition("hulao"), true, font)
+	var unlocked := SaveService.is_battlefield_unlocked("hulao")
+	_draw_battlefield_preview(preview, _battlefield_definition("hulao"), unlocked, font)
 	draw_string(font, Vector2(68.0, 230.0), "规则", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, GOLD_BRIGHT)
-	draw_string(font, Vector2(68.0, 268.0), "5级开局", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d5e1de"))
-	draw_string(font, Vector2(68.0, 300.0), "三次整备", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d5e1de"))
+	draw_string(font, Vector2(68.0, 268.0), "20级开局", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d5e1de") if unlocked else MUTED)
+	draw_string(font, Vector2(68.0, 300.0), "三轮斗将", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d5e1de") if unlocked else MUTED)
 
 func _draw_expedition_route(font: Font, title: String, battlefield_ids: Array[String], selected_id: String) -> void:
 	var title_position := Vector2(70.0, 204.0)
@@ -2730,7 +3286,7 @@ func _draw_shop(font: Font) -> void:
 	if shop_section == "strategies":
 		subtitle = "军略分支 · 全英雄永久生效 · 不占用战斗抉择机会。"
 	elif shop_section == "tianji":
-		subtitle = "诸葛天机 · 军功研习 · 战斗中通过随机抉择启阵。"
+		subtitle = "诸葛天机 · 军功研习 · 战斗中通过升级选择技能启阵。"
 	draw_string(font, Vector2(size.x * 0.5 - 230.0, 178.0), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 460.0, 16, Color("a9c2c7"))
 
 func _draw_settings(_font: Font) -> void:

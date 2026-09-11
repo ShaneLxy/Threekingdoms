@@ -3,7 +3,7 @@ extends HeroActor
 
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 
-const ULTIMATE_COST := 60.0
+const ULTIMATE_COST := 70.0
 const BASE_BASIC_COMBO_STAGES := 3
 const WEAPON_CLASH_ACTIVE_DURATION := 0.30
 const WEAPON_CLASH_REACH := 214.0
@@ -64,6 +64,7 @@ var active_direction := Vector2.RIGHT
 var basic_attack_direction := Vector2.RIGHT
 var active_cooldown_duration := 7.5
 var active_slide_remaining := 0.0
+var active_invulnerability_remaining := 0.0
 var active_slide_direction := Vector2.RIGHT
 var active_slide_attack: AttackRequest
 var fourth_dash_remaining := 0.0
@@ -169,6 +170,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	ultimate_cast_animation_remaining = 0.0
 	ultimate_segment_index = 0
 	ultimate_dash_direction = Vector2.RIGHT
+	reset_guard_state()
 	last_attack_direction = Vector2.RIGHT
 	current_action = ""
 	clear_basic_attack_movement()
@@ -183,6 +185,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	active_direction = Vector2.RIGHT
 	basic_attack_direction = Vector2.RIGHT
 	active_slide_remaining = 0.0
+	active_invulnerability_remaining = 0.0
 	active_slide_direction = Vector2.RIGHT
 	active_slide_attack = null
 	fourth_dash_remaining = 0.0
@@ -247,6 +250,8 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	health_component.reset(float(base_stats.get("health", 145.0)))
 
 func tick(delta: float, move_direction: Vector2) -> void:
+	if is_defeated():
+		return
 	tick_movement_slow(delta)
 	current_move_direction = move_direction
 	_update_buffered_basic_direction()
@@ -271,6 +276,7 @@ func tick(delta: float, move_direction: Vector2) -> void:
 	var was_waiting_for_hit := hit_delay_remaining > 0.0
 	hit_delay_remaining = maxf(0.0, hit_delay_remaining - delta)
 	_tick_active_slide(delta)
+	active_invulnerability_remaining = maxf(0.0, active_invulnerability_remaining - delta)
 	_tick_fourth_dash(delta)
 	# Keep the active strike's stage through its final frame so a buffered press
 	# advances from that stage. An unbuffered strike is reset in _finish_action.
@@ -282,10 +288,10 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		pass
 	elif current_action in ["basic", "drag_release"] and hit_delay_remaining <= 0.0 and is_action_locked():
 		tick_basic_attack_movement(delta, move_direction)
-	elif ultimate_state == UltimateState.INACTIVE and not is_action_locked():
+	elif not is_guard_active() and ultimate_state == UltimateState.INACTIVE and not is_action_locked():
 		_update_facing_from_movement(move_direction)
 		_move(move_direction, speed * movement_speed_multiplier() * delta)
-	elif ultimate_state == UltimateState.EMPOWERED and not is_action_locked():
+	elif not is_guard_active() and ultimate_state == UltimateState.EMPOWERED and not is_action_locked():
 		_update_facing_from_movement(move_direction)
 		_move(move_direction, speed * 1.72 * movement_speed_multiplier() * delta)
 	if was_locked and attack_lock_remaining <= 0.0:
@@ -331,7 +337,7 @@ func release_basic_hold(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
-	if drag_charging or is_guard_active():
+	if is_defeated() or drag_charging or is_guard_active():
 		return false
 	if is_action_locked():
 		if current_action == "basic" and combo_stage < _basic_combo_stage_count() and not has_buffered_basic:
@@ -349,7 +355,7 @@ func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	return true
 
 func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
-	if active_charge_count <= 0 or is_guard_active():
+	if is_defeated() or active_charge_count <= 0 or is_guard_active():
 		return false
 	if is_action_locked() and current_action not in ["basic", "drag_charge"]:
 		return false
@@ -362,6 +368,7 @@ func request_active(direction: Vector2 = Vector2.ZERO) -> bool:
 	consume_active_charge(_active_cooldown_for_current_state())
 	active_slide_direction = active_direction
 	active_slide_remaining = ACTIVE_SLIDE_DISTANCE + active_slide_distance_bonus
+	active_invulnerability_remaining = 0.92
 	active_slide_attack = AttackRequest.line(position, active_direction, ACTIVE_SLIDE_FRONT_REACH + active_slide_front_reach_bonus, 70.0, 0.62 + active_damage_bonus * 0.35, 80, "青龙破阵")
 	active_slide_attack.action_kind = AttackRequest.ActionKind.ACTIVE
 	active_slide_attack.clash_kind = Telegraph.ClashKind.ACTIVE
@@ -390,7 +397,7 @@ func can_use_active() -> bool:
 	return active_charge_count > 0 and (not is_action_locked() or current_action in ["basic", "drag_charge"])
 
 func request_ultimate(direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE or is_guard_active():
+	if is_defeated() or ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE or is_guard_active():
 		return false
 	if is_action_locked() and current_action not in ["basic", "drag_charge"]:
 		return false
@@ -524,8 +531,10 @@ func apply_account_progress(profile: Dictionary) -> void:
 func _basic_pierce_bonus_from_military() -> void:
 	basic_pierce_bonus += military_pierce_bonus
 
-func on_enemy_defeated(enemy_type: int) -> void:
-	apply_military_enemy_defeat_reward(enemy_type)
+func on_enemy_defeated(enemy_type: int, allow_recovery: bool = true, _action_kind: int = AttackRequest.ActionKind.NONE) -> void:
+	apply_military_enemy_defeat_reward(enemy_type, allow_recovery)
+	if not allow_recovery:
+		return
 	if nearby_enemy_count <= 0 or battlefield_recovery_per_defeat <= 0.0:
 		return
 	var recovered_health := minf(health_component.maximum, health_component.current + battlefield_recovery_per_defeat)
@@ -533,6 +542,22 @@ func on_enemy_defeated(enemy_type: int) -> void:
 		return
 	health_component.current = recovered_health
 	health_component.health_changed.emit(health_component.current, health_component.maximum)
+
+func force_idle_state() -> void:
+	super.force_idle_state()
+	combo_window = 0.0
+	combo_stage = 0
+	pending_attack = null
+	has_buffered_basic = false
+	drag_charging = false
+	active_slide_remaining = 0.0
+	active_invulnerability_remaining = 0.0
+	active_slide_attack = null
+	fourth_dash_remaining = 0.0
+	fourth_dash_attack = null
+	ultimate_state = UltimateState.INACTIVE
+	ultimate_time = 0.0
+	blade_waves.clear()
 
 func current_stats() -> Dictionary:
 	return {
@@ -542,13 +567,50 @@ func current_stats() -> Dictionary:
 		"max_health": health_component.maximum,
 		"move_speed": speed,
 		"basic_range": 164.0 + basic_range_bonus,
-		"basic_pierce": 12 + basic_pierce_bonus,
+		"basic_pierce": _current_pierce(),
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
 
+func _current_pierce() -> int:
+	return 3 + basic_pierce_bonus + (5 if is_wusheng_active() else 0)
+
+func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
+	super.revive_from_rewarded_ad(health_ratio)
+	# A rewarded revive resumes the current run without carrying an interrupted
+	# action, clash window, or drag charge into the next input frame.
+	combo_window = 0.0
+	attack_lock_remaining = 0.0
+	hit_delay_remaining = 0.0
+	action_elapsed = 0.0
+	action_duration = 0.0
+	pending_attack = null
+	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
+	current_action = ""
+	clear_basic_attack_movement()
+	active_slide_remaining = 0.0
+	active_invulnerability_remaining = 0.0
+	active_slide_direction = Vector2.RIGHT
+	active_slide_attack = null
+	fourth_dash_remaining = 0.0
+	fourth_dash_direction = Vector2.RIGHT
+	fourth_dash_attack = null
+	weapon_clash_remaining = 0.0
+	weapon_clash_direction = Vector2.RIGHT
+	weapon_clash_type = Telegraph.ClashKind.NONE
+	drag_charging = false
+	drag_charge_elapsed = 0.0
+	blade_waves.clear()
+	ultimate_state = UltimateState.INACTIVE
+	ultimate_pulse_remaining = 0.0
+	ultimate_cast_animation_remaining = 0.0
+
 func ultimate_cost() -> float:
 	return ULTIMATE_COST
+
+func allows_guard_during_ultimate() -> bool:
+	return ultimate_state == UltimateState.EMPOWERED and ultimate_time > 0.0
 
 func is_ultimate_ready() -> bool:
 	return ultimate_energy >= ULTIMATE_COST
@@ -630,7 +692,9 @@ func consume_weapon_clash_window() -> void:
 	weapon_clash_type = Telegraph.ClashKind.NONE
 
 func receive_damage(amount: float, _source: String, _attack_origin: Vector2 = Vector2.ZERO) -> float:
-	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense())
+	if is_defeated() or active_invulnerability_remaining > 0.0:
+		return 0.0
+	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense()) * incoming_damage_multiplier(_attack_origin)
 	reduced_amount *= 1.0 - battlefield_damage_reduction
 	var applied_damage := health_component.take_damage(reduced_amount)
 	if applied_damage > 0.0:
@@ -669,6 +733,9 @@ func hud_status_effects() -> Array[Dictionary]:
 	var slow_effect := movement_slow_hud_effect()
 	if not slow_effect.is_empty():
 		effects.append(slow_effect)
+	var shield_effect := common_shield_hud_effect()
+	if not shield_effect.is_empty():
+		effects.append(shield_effect)
 	if projectile_guard_level > 0:
 		var guard_blocks := projectile_guard_blocks_remaining if is_attacking() else _projectile_guard_block_limit()
 		effects.append({"label": "偃月拦矢", "icon": "御", "stacks": guard_blocks, "remaining": 1.0, "duration": 1.0, "timed": false, "color": Color("78cbe0")})
@@ -732,19 +799,19 @@ func _begin_basic(stage: int) -> void:
 	var range_bonus := basic_range_bonus + (42.0 if is_wusheng_active() else 0.0)
 	match stage:
 		1:
-			request = AttackRequest.fan(position, basic_attack_direction, 148.0 + range_bonus, deg_to_rad(190.0), 1.38 + basic_damage_bonus + _wusheng_damage_bonus(), 14 + basic_pierce_bonus, "青龙横江")
+			request = AttackRequest.fan(position, basic_attack_direction, 148.0 + range_bonus, deg_to_rad(190.0), 1.38 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce(), "青龙横江")
 			request.stance_damage = _stance_damage(16.0)
 			request.knockback = 250.0 + basic_knockback_bonus * 0.45 + _wusheng_knockback_bonus()
 			request.forced_displacement = 28.0 + basic_displacement_bonus * 0.35
 			request.forced_displacement_duration = 0.08
 		2:
-			request = AttackRequest.fan(position, basic_attack_direction, 166.0 + range_bonus, deg_to_rad(205.0), 1.72 + basic_damage_bonus + _wusheng_damage_bonus(), 16 + basic_pierce_bonus, "压阵斩")
+			request = AttackRequest.fan(position, basic_attack_direction, 166.0 + range_bonus, deg_to_rad(205.0), 1.72 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce(), "压阵斩")
 			request.stance_damage = _stance_damage(26.0)
 			request.knockback = 390.0 + basic_knockback_bonus * 0.72 + _wusheng_knockback_bonus()
 			request.forced_displacement = 52.0 + basic_displacement_bonus * 0.65
 			request.forced_displacement_duration = 0.11
 		_:
-			request = AttackRequest.fan(position, basic_attack_direction, 196.0 + range_bonus, deg_to_rad(220.0), 2.32 + basic_damage_bonus + _wusheng_damage_bonus(), 20 + basic_pierce_bonus, "拖刀断阵")
+			request = AttackRequest.fan(position, basic_attack_direction, 196.0 + range_bonus, deg_to_rad(220.0), 2.32 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce(), "拖刀断阵")
 			request.stance_damage = _stance_damage(50.0)
 			request.knockback = 610.0 + basic_knockback_bonus + _wusheng_knockback_bonus()
 			request.forced_displacement = 90.0 + basic_displacement_bonus
@@ -763,7 +830,7 @@ func _begin_fourth_strike() -> void:
 	if not fourth_collision_unlocked:
 		fourth_dash_attack = null
 		return
-	fourth_dash_attack = AttackRequest.line(position, fourth_dash_direction, FOURTH_STRIKE_DASH_FRONT_REACH, 68.0, 0.84 + basic_damage_bonus * 0.25, 32 + basic_pierce_bonus, "追锋断浪·冲阵")
+	fourth_dash_attack = AttackRequest.line(position, fourth_dash_direction, FOURTH_STRIKE_DASH_FRONT_REACH, 68.0, 0.84 + basic_damage_bonus * 0.25, _current_pierce(), "追锋断浪·冲阵")
 	fourth_dash_attack.action_kind = AttackRequest.ActionKind.BASIC
 	fourth_dash_attack.clash_kind = Telegraph.ClashKind.BASIC
 	fourth_dash_attack.dash_kind = HeroActor.DashKind.BASIC
@@ -781,7 +848,7 @@ func _begin_drag_release() -> void:
 	projectile_guard_blocks_remaining = _projectile_guard_block_limit()
 	_start_action("drag_release", 0.64)
 	combat_action_started.emit("drag")
-	var swing := AttackRequest.fan(position, basic_attack_direction, 214.0 + basic_range_bonus, deg_to_rad(188.0), 2.95 + basic_damage_bonus + _wusheng_damage_bonus(), 28 + basic_pierce_bonus, "拖刀斩浪")
+	var swing := AttackRequest.fan(position, basic_attack_direction, 214.0 + basic_range_bonus, deg_to_rad(188.0), 2.95 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce(), "拖刀斩浪")
 	swing.action_kind = AttackRequest.ActionKind.BASIC
 	swing.clash_kind = Telegraph.ClashKind.BASIC
 	swing.stance_damage = _stance_damage(62.0)
@@ -836,7 +903,7 @@ func _back_guard_distance_for_label(label: String) -> float:
 
 func _emit_drag_waves() -> void:
 	var direction := basic_attack_direction
-	var wave := AttackRequest.line(_knife_wave_origin(), direction, 300.0 + drag_wave_range_bonus, BLADE_WAVE_HIT_WIDTH, 2.16 + basic_damage_bonus + _wusheng_damage_bonus(), 400, "拖刀刀浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), direction, 300.0 + drag_wave_range_bonus, BLADE_WAVE_HIT_WIDTH, 2.16 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce() + 5, "拖刀刀浪")
 	wave.action_kind = AttackRequest.ActionKind.BASIC
 	wave.clash_kind = Telegraph.ClashKind.BASIC
 	wave.stance_damage = _stance_damage(38.0)
@@ -847,7 +914,7 @@ func _emit_drag_waves() -> void:
 
 func _emit_active_waves() -> void:
 	var direction := active_direction.normalized()
-	var wave := AttackRequest.line(_knife_wave_origin(), direction, 340.0 + active_range_bonus, BLADE_WAVE_HIT_WIDTH + active_wave_width_bonus, 3.20 + active_damage_bonus + _wusheng_damage_bonus(), 400, "青龙断浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), direction, 340.0 + active_range_bonus, BLADE_WAVE_HIT_WIDTH + active_wave_width_bonus, 3.20 + active_damage_bonus + _wusheng_damage_bonus(), _current_pierce() + 5, "青龙断浪")
 	wave.action_kind = AttackRequest.ActionKind.ACTIVE
 	wave.clash_kind = Telegraph.ClashKind.ACTIVE
 	wave.stance_damage = _stance_damage(62.0)
@@ -864,7 +931,7 @@ func _emit_wusheng_waves(infinite_range: bool = false) -> void:
 func _emit_wusheng_waves_with_mode(infinite_range: bool, empowered_drag: bool) -> void:
 	var direction := basic_attack_direction
 	var travel_distance := 388.0 + active_range_bonus * 0.55
-	var wave := AttackRequest.line(_knife_wave_origin(), direction, travel_distance, BLADE_WAVE_HIT_WIDTH, 1.18 + basic_damage_bonus * 0.45 + ultimate_damage_bonus, 400, "武圣刀浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), direction, travel_distance, BLADE_WAVE_HIT_WIDTH, 1.18 + basic_damage_bonus * 0.45 + ultimate_damage_bonus, _current_pierce() + 5, "武圣刀浪")
 	wave.action_kind = AttackRequest.ActionKind.ULTIMATE
 	wave.stance_damage = _stance_damage(34.0, true)
 	wave.knockback = 610.0 + basic_knockback_bonus
@@ -882,7 +949,7 @@ func _emit_fourth_strike_wave() -> void:
 		_emit_wusheng_waves()
 		return
 	var wave_range := FOURTH_STRIKE_WAVE_RANGE + basic_range_bonus * 0.35 + fourth_wave_range_bonus
-	var wave := AttackRequest.line(_knife_wave_origin(), fourth_dash_direction, wave_range, 88.0 + fourth_wave_range_bonus * 0.22, 1.48 + basic_damage_bonus * 0.55 + fourth_wave_damage_bonus + _wusheng_damage_bonus() * 0.45, 240, "追锋断浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), fourth_dash_direction, wave_range, 88.0 + fourth_wave_range_bonus * 0.22, 1.48 + basic_damage_bonus * 0.55 + fourth_wave_damage_bonus + _wusheng_damage_bonus() * 0.45, _current_pierce() + 5, "追锋断浪")
 	wave.action_kind = AttackRequest.ActionKind.BASIC
 	wave.clash_kind = Telegraph.ClashKind.BASIC
 	wave.stance_damage = _stance_damage(30.0)
@@ -908,8 +975,6 @@ func _launch_blade_wave(wave: AttackRequest, effect_id: String, travel_distance:
 	wave.range = hit_reach
 	wave.width = hit_width
 	wave.one_hit_per_target = true
-	if infinite_range:
-		wave.pierce = 9999
 	wave.visual_emitted = true
 	wave.suppress_impact_feedback = false
 	var visual_scale := 0.60
@@ -1202,7 +1267,7 @@ func _stance_damage(base_value: float, ultimate: bool = false) -> float:
 	return base_value * multiplier
 
 func _move(direction: Vector2, distance: float) -> void:
-	if is_guard_active():
+	if is_defeated() or is_guard_active():
 		return
 	var normalized := direction.normalized() if direction.length_squared() > 0.01 else Vector2.ZERO
 	position += normalized * distance

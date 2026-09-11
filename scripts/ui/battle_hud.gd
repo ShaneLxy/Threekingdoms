@@ -12,6 +12,8 @@ const DISABLED := Color("566069")
 const COMBO_TIMEOUT := 5.0
 const COMBO_POP_DURATION := 0.18
 const COMBO_FADE_DURATION := 0.28
+const DAMAGE_EDGE_FLASH_DURATION := 0.48
+const DAMAGE_EDGE_FLASH_CYCLE_DURATION := DAMAGE_EDGE_FLASH_DURATION * 0.5
 const NAMED_ELITE_ROW_HEIGHT := 76.0
 const NAMED_BOSS_ROW_HEIGHT := 86.0
 const NAMED_ROW_GAP := 5.0
@@ -24,9 +26,11 @@ const ATTACK_BUTTON_SOURCE_RECT := Rect2(181.0, 178.0, 690.0, 667.0)
 # The named dual-bar source contains baked-in fills. Reuse the clean single-bar
 # frame twice so health and stance remain entirely runtime-driven.
 const ENEMY_BAR_FRAME_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/hud_bar_frame_2x.png")
+const UPGRADE_FREE_REFRESH_LIMIT := 5
 
 signal upgrade_selected(upgrade_id: String)
 signal upgrade_refresh_requested()
+signal run_strategy_selected(strategy_id: String)
 signal revive_requested()
 signal revive_declined()
 signal result_reward_requested()
@@ -45,13 +49,19 @@ var elite_order_refresh_remaining := 0.0
 var tianji: TianjiSystem
 var message := ""
 var message_time := 0.0
+var duel_hint_active := false
+var duel_hint_index := 0
+var duel_hint_remaining := 0.0
+const DUEL_HINTS := ["格挡领主普攻破除架势", "破势状态的领主受到伤害更大"]
+const DUEL_HINT_DURATION := 2.8
 var upgrade_buttons: Array[Button] = []
 var upgrade_refresh_button: Button
-var upgrade_refreshes_remaining := 2
-var upgrade_ad_refreshes_remaining := 3
+var upgrade_refreshes_remaining := UPGRADE_FREE_REFRESH_LIMIT
+var upgrade_ad_refreshes_remaining := 0
 var upgrade_option_count := 0
 var upgrade_selection_limit := 1
 var upgrade_selection_count := 0
+var strategy_choice_active := false
 var modal_active := false
 var ui_time := 0.0
 var ultimate_denied_time := 0.0
@@ -65,6 +75,7 @@ var result_reward_button: Button
 var revive_watch_button: Button
 var revive_skip_button: Button
 var revive_prompt_active := false
+var revive_remaining_count := 1
 var pause_active := false
 var pause_buttons: Array[Button] = []
 var retreat_confirm_active := false
@@ -75,6 +86,9 @@ var offscreen_named_targets: Array[Dictionary] = []
 var combo_count := 0
 var combo_remaining := 0.0
 var combo_pop_remaining := 0.0
+var pressed_controls: Dictionary = {}
+var damage_edge_flash_remaining := 0.0
+var damage_edge_flash_severity := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -83,6 +97,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_sync_viewport_layout)
 
 func configure(player_actor: HeroActor, boss_actor: BossActor, run_director: RunDirector, elite_actors: Array[EliteActor] = [], tianji_system: TianjiSystem = null) -> void:
+	if player != null and is_instance_valid(player) and player.damaged.is_connected(_on_player_damaged):
+		player.damaged.disconnect(_on_player_damaged)
 	player = player_actor
 	boss = boss_actor
 	director = run_director
@@ -93,6 +109,11 @@ func configure(player_actor: HeroActor, boss_actor: BossActor, run_director: Run
 	combo_count = 0
 	combo_remaining = 0.0
 	combo_pop_remaining = 0.0
+	pressed_controls.clear()
+	damage_edge_flash_remaining = 0.0
+	damage_edge_flash_severity = 0.0
+	if player != null and not player.damaged.is_connected(_on_player_damaged):
+		player.damaged.connect(_on_player_damaged)
 	hero_portrait = null
 	if player != null:
 		var portrait_path := str(HERO_CATALOG.definition_for(player.hero_id).get("portrait", ""))
@@ -116,11 +137,35 @@ func _process(delta: float) -> void:
 	ui_time += delta
 	elite_order_refresh_remaining = maxf(0.0, elite_order_refresh_remaining - delta)
 	message_time = maxf(0.0, message_time - delta)
+	if duel_hint_active:
+		duel_hint_remaining -= delta
+		if duel_hint_remaining <= 0.0:
+			duel_hint_index = (duel_hint_index + 1) % DUEL_HINTS.size()
+			duel_hint_remaining = DUEL_HINT_DURATION
 	ultimate_denied_time = maxf(0.0, ultimate_denied_time - delta)
 	combo_remaining = maxf(0.0, combo_remaining - delta)
 	combo_pop_remaining = maxf(0.0, combo_pop_remaining - delta)
+	damage_edge_flash_remaining = maxf(0.0, damage_edge_flash_remaining - delta)
+	if damage_edge_flash_remaining <= 0.0:
+		damage_edge_flash_severity = 0.0
+	var expired_controls: Array[String] = []
+	for control_id in pressed_controls.keys():
+		var remaining := float(pressed_controls[control_id])
+		if remaining > 0.0:
+			pressed_controls[control_id] = remaining - delta
+			if pressed_controls[control_id] <= 0.0:
+				expired_controls.append(str(control_id))
+	for control_id in expired_controls:
+		pressed_controls.erase(control_id)
 	if combo_remaining <= 0.0:
 		combo_count = 0
+	queue_redraw()
+
+func set_control_pressed(control_id: String, pressed: bool) -> void:
+	if pressed:
+		pressed_controls[control_id] = 0.18
+	else:
+		pressed_controls.erase(control_id)
 	queue_redraw()
 
 func record_combo_hits(hit_count: int) -> void:
@@ -134,6 +179,17 @@ func record_combo_hits(hit_count: int) -> void:
 func set_message(value: String) -> void:
 	message = value
 	message_time = 2.2
+
+func begin_duel_hints() -> void:
+	duel_hint_active = true
+	duel_hint_index = 0
+	duel_hint_remaining = DUEL_HINT_DURATION
+	queue_redraw()
+
+func end_duel_hints() -> void:
+	duel_hint_active = false
+	duel_hint_remaining = 0.0
+	queue_redraw()
 
 func announce_ultimate_ready() -> void:
 	message = "无双已就绪！消耗 %d 能量" % _ultimate_cost()
@@ -223,6 +279,7 @@ func hide_pause() -> void:
 
 func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, selection_limit: int = 1) -> void:
 	modal_active = true
+	strategy_choice_active = false
 	upgrade_option_count = options.size()
 	upgrade_selection_limit = clampi(selection_limit, 1, maxi(1, options.size()))
 	upgrade_selection_count = 0
@@ -243,9 +300,37 @@ func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, select
 	_layout_upgrade_buttons()
 	queue_redraw()
 
-func show_revive_prompt() -> void:
+func show_run_strategy_choice() -> void:
+	modal_active = true
+	strategy_choice_active = true
+	upgrade_option_count = 3
+	upgrade_selection_limit = 1
+	upgrade_selection_count = 0
+	_clear_upgrade_controls()
+	var strategies := [
+		{"id": "talent", "category": "英雄战法", "title": "战法", "description": "本局更容易遇见英雄战法；天机启阵与强化出现略少。"},
+		{"id": "tianji", "category": "天机阵法", "title": "天机", "description": "本局更容易遇见天机启阵与强化；英雄战法出现略少。"},
+		{"id": "balanced", "category": "均衡筹谋", "title": "均衡", "description": "英雄战法与天机阵法按原有机会出现；通用强化不受影响。"},
+	]
+	for strategy in strategies:
+		var button := Button.new()
+		button.text = ""
+		button.size = Vector2(_upgrade_card_width(strategies.size()), 300.0)
+		button.set_meta("strategy_id", str(strategy.get("id", "balanced")))
+		button.add_theme_stylebox_override("normal", _make_upgrade_card_style(PANEL_FILL, PANEL_EDGE, 2))
+		button.add_theme_stylebox_override("hover", _make_upgrade_card_style(Color("1a2b33"), DRAGON_BLUE, 3))
+		button.add_theme_stylebox_override("pressed", _make_upgrade_card_style(Color("2e291d"), GOLD_BRIGHT, 3))
+		_add_upgrade_card_text(button, str(strategy.get("category", "筹谋")), str(strategy.get("title", "均衡")), str(strategy.get("description", "")))
+		button.pressed.connect(_on_run_strategy_button_pressed.bind(str(strategy.get("id", "balanced"))))
+		add_child(button)
+		upgrade_buttons.append(button)
+	_layout_upgrade_buttons()
+	queue_redraw()
+
+func show_revive_prompt(remaining_revives: int = 1) -> void:
 	if result_active or revive_prompt_active:
 		return
+	revive_remaining_count = maxi(0, remaining_revives)
 	revive_prompt_active = true
 	modal_active = true
 	revive_watch_button = _create_modal_action_button("观看广告复活", _on_revive_watch_button_pressed, Vector2(240.0, 52.0), GOLD)
@@ -338,8 +423,6 @@ func show_result(victory: bool, value: String, stats: Dictionary = {}) -> void:
 	result_home_button.add_theme_stylebox_override("pressed", _make_box_style(Color("4a3b24"), GOLD_BRIGHT, 3))
 	result_home_button.pressed.connect(_on_home_button_pressed)
 	add_child(result_home_button)
-	if int(result_stats.get("military_merit", 0)) > 0:
-		result_reward_button = _create_modal_action_button("观看广告 · 军功翻倍", _on_result_reward_button_pressed, Vector2(230.0, 46.0), GOLD)
 	_layout_restart_button()
 	queue_redraw()
 
@@ -358,6 +441,15 @@ func _on_upgrade_button_pressed(upgrade_id: String) -> void:
 		_upgrade_refresh_button_sync()
 		_layout_upgrade_buttons()
 	upgrade_selected.emit(upgrade_id)
+	queue_redraw()
+
+func _on_run_strategy_button_pressed(strategy_id: String) -> void:
+	if not strategy_choice_active:
+		return
+	strategy_choice_active = false
+	_clear_upgrade_controls()
+	modal_active = false
+	run_strategy_selected.emit(strategy_id)
 	queue_redraw()
 
 func _on_upgrade_refresh_button_pressed() -> void:
@@ -383,8 +475,8 @@ func _create_upgrade_refresh_button() -> void:
 func _upgrade_refresh_button_sync() -> void:
 	if upgrade_refresh_button == null:
 		return
-	upgrade_refresh_button.text = "刷新  %d / 2" % upgrade_refreshes_remaining if upgrade_refreshes_remaining > 0 else "看广告刷新  %d / 3" % upgrade_ad_refreshes_remaining
-	upgrade_refresh_button.disabled = (upgrade_refreshes_remaining <= 0 and upgrade_ad_refreshes_remaining <= 0) or upgrade_selection_count > 0 or AdService.is_showing_rewarded_video()
+	upgrade_refresh_button.text = "刷新  %d / %d" % [upgrade_refreshes_remaining, UPGRADE_FREE_REFRESH_LIMIT] if upgrade_refreshes_remaining > 0 else "刷新次数已用尽"
+	upgrade_refresh_button.disabled = upgrade_refreshes_remaining <= 0 or upgrade_selection_count > 0
 
 func _clear_upgrade_controls() -> void:
 	for button in upgrade_buttons:
@@ -571,14 +663,26 @@ func _draw_low_health_warning() -> void:
 	if modal_active or result_active:
 		return
 	var current_health := player.health_component.current
-	if current_health <= 0.0 or current_health >= 40.0:
+	var low_health_strength := 0.0
+	var low_health_color := Color("83131d")
+	if current_health > 0.0 and current_health < 40.0:
+		var pulse := 0.5 + 0.5 * sin(ui_time * TAU * 1.7)
+		var health_factor := clampf((40.0 - current_health) / 20.0, 0.0, 1.0)
+		low_health_strength = lerpf(0.24, 0.44, health_factor) * lerpf(0.82, 1.0, pulse)
+		low_health_color = Color("83131d").lerp(Color("ff858a"), pulse)
+	var damage_strength := _damage_edge_flash_strength()
+	if damage_strength <= 0.0 and low_health_strength <= 0.0:
 		return
-	var pulse := 0.5 + 0.5 * sin(ui_time * TAU * 1.7)
-	var health_factor := clampf((40.0 - current_health) / 20.0, 0.0, 1.0)
-	var strength := lerpf(0.24, 0.44, health_factor) * lerpf(0.82, 1.0, pulse)
+	var strength := low_health_strength
+	var edge_color := low_health_color
+	if damage_strength > low_health_strength:
+		strength = damage_strength
+		edge_color = _damage_edge_flash_color()
+	_draw_red_edge_bands(strength, edge_color)
+
+func _draw_red_edge_bands(strength: float, edge_color: Color) -> void:
 	var band_count := 16
 	var band_size := 11.0
-	var edge_color := Color("83131d").lerp(Color("ff858a"), pulse)
 	for index in range(band_count):
 		var falloff := 1.0 - float(index) / float(band_count)
 		var gradient := float(index) / float(maxi(1, band_count - 1))
@@ -593,6 +697,28 @@ func _draw_low_health_warning() -> void:
 		if vertical_height > 0.0:
 			draw_rect(Rect2(inset, inset + band_size, band_size, vertical_height), color)
 			draw_rect(Rect2(size.x - inset - band_size, inset + band_size, band_size, vertical_height), color)
+
+func _on_player_damaged(amount: float) -> void:
+	if amount <= 0.0 or player == null or player.health_component == null:
+		return
+	var maximum_health := maxf(1.0, player.health_component.maximum)
+	var damage_ratio := clampf(amount / maximum_health, 0.0, 1.0)
+	# Keep light hits visible while reserving the darkest red for substantial hits.
+	var severity := clampf(0.22 + damage_ratio * 3.2, 0.22, 1.0)
+	damage_edge_flash_severity = maxf(damage_edge_flash_severity, severity)
+	damage_edge_flash_remaining = maxf(damage_edge_flash_remaining, DAMAGE_EDGE_FLASH_DURATION)
+	queue_redraw()
+
+func _damage_edge_flash_strength() -> float:
+	if damage_edge_flash_remaining <= 0.0:
+		return 0.0
+	var elapsed := DAMAGE_EDGE_FLASH_DURATION - damage_edge_flash_remaining
+	var phase := fposmod(elapsed, DAMAGE_EDGE_FLASH_CYCLE_DURATION) / DAMAGE_EDGE_FLASH_CYCLE_DURATION
+	var pulse := 1.0 - absf(phase * 2.0 - 1.0)
+	return lerpf(0.30, 0.82, damage_edge_flash_severity) * maxf(0.08, pulse)
+
+func _damage_edge_flash_color() -> Color:
+	return Color("ff7772").lerp(Color("861019"), damage_edge_flash_severity)
 
 func _draw_combo_counter(font: Font) -> void:
 	if combo_count <= 0 or modal_active or result_active:
@@ -663,7 +789,7 @@ func _draw_top_hud(font: Font) -> void:
 		var stage_rect := Rect2(size.x * 0.5 - 184.0, 14, 368, 40)
 		_draw_panel(stage_rect, GOLD)
 		var stage_content := _panel_content_rect(stage_rect, Vector2(14.0, 7.0))
-		var stage_text := message if message_time > 0.0 else _idle_stage_label()
+		var stage_text: String = str(DUEL_HINTS[duel_hint_index]) if duel_hint_active else (message if message_time > 0.0 else _idle_stage_label())
 		draw_string(font, stage_content.position + Vector2(0.0, 19.0), stage_text, HORIZONTAL_ALIGNMENT_LEFT, stage_content.size.x, 18, Color("f3e3bd"))
 		var time_rect := Rect2(size.x - 170.0, 14, 154, 48)
 		_draw_panel(time_rect, GOLD)
@@ -845,7 +971,7 @@ func _draw_enemy_status_rack(font: Font) -> void:
 	if has_boss:
 		var boss_rect := Rect2(rack_x, row_y, rack_width, NAMED_BOSS_ROW_HEIGHT)
 		var boss_state := "破势" if boss.is_stance_broken() else ("虚弱" if boss.is_vulnerable() else ("天魔降世" if boss.is_ultimate_airborne() or boss.is_ultimate_landing() else ("反击" if boss.has_counterattack() else "第 %d 阶段" % boss.phase)))
-		_draw_enemy_status_bar(boss_rect, "领主", boss.display_name(), boss.health_component.current, boss.health_component.maximum, boss.health_layer_capacity(), boss.stance, BossActor.STANCE_MAX, boss_state, boss.is_stance_broken(), font)
+		_draw_enemy_status_bar(boss_rect, "领主", boss.display_name(), boss.health_component.current, boss.health_component.maximum, boss.health_layer_capacity(), boss.stance, boss.stance_max(), boss_state, boss.is_stance_broken(), font)
 
 func _sort_elites_by_player_distance(left: EliteActor, right: EliteActor) -> bool:
 	return left.position.distance_squared_to(player.position) < right.position.distance_squared_to(player.position)
@@ -1165,7 +1291,7 @@ func _draw_modal_backdrop(font: Font) -> void:
 		draw_string(font, Vector2(revive_rect.get_center().x - 104.0, revive_rect.position.y + 74.0), "力竭待援", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, Color("ffaaa0"))
 		UITheme.draw_title_divider(self, Rect2(revive_rect.get_center().x - 118.0, revive_rect.position.y + 82.0, 236.0, 18.0))
 		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 116.0), "观看激励视频可复活并继续战斗", HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 16, Color("e3d0a4"))
-		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 144.0), "每局仅可复活一次", HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 14, Color("b9c5c5"))
+		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 144.0), "本局还可复活 %d 次" % revive_remaining_count, HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 14, Color("b9c5c5"))
 	elif result_active:
 		var result_rect := _result_panel_rect()
 		_draw_panel(result_rect, GOLD if result_victory else HEALTH_RED, true)
@@ -1190,12 +1316,16 @@ func _draw_modal_backdrop(font: Font) -> void:
 		var panel_width := minf(maxf(320.0, size.x - 24.0), maxf(780.0, total_cards_width + 48.0))
 		var upgrade_rect := Rect2(size.x * 0.5 - panel_width * 0.5, 112.0, panel_width, 472.0)
 		_draw_panel(upgrade_rect, GOLD, true)
-		draw_string(font, Vector2(upgrade_rect.position.x, 162), "临阵抉择", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 27, GOLD_BRIGHT)
+		var modal_title := "本局策略" if strategy_choice_active else "临阵抉择"
+		draw_string(font, Vector2(upgrade_rect.position.x, 162), modal_title, HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 27, GOLD_BRIGHT)
 		UITheme.draw_title_divider(self, Rect2(upgrade_rect.get_center().x - 126.0, 169.0, 252.0, 18.0))
-		var choice_label := "%d选%d" % [choice_count, upgrade_selection_limit]
-		if upgrade_selection_limit > 1:
-			choice_label += "（已选 %d / %d）" % [upgrade_selection_count, upgrade_selection_limit]
-		draw_string(font, Vector2(upgrade_rect.position.x, 188), choice_label + " · 选择强化，重整枪势", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 15, Color("b9c5c5"))
+		if strategy_choice_active:
+			draw_string(font, Vector2(upgrade_rect.position.x, 188), "选择本局倾向，不影响通用强化", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 15, Color("b9c5c5"))
+		else:
+			var choice_label := "%d选%d" % [choice_count, upgrade_selection_limit]
+			if upgrade_selection_limit > 1:
+				choice_label += "（已选 %d / %d）" % [upgrade_selection_count, upgrade_selection_limit]
+			draw_string(font, Vector2(upgrade_rect.position.x, 188), choice_label + " · 选择强化，重整枪势", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 15, Color("b9c5c5"))
 
 func _pause_panel_rect() -> Rect2:
 	return Rect2(size.x * 0.5 - 236.0, size.y * 0.5 - 176.0, 472.0, 324.0)
@@ -1291,6 +1421,9 @@ func _draw_hero_q_badge(hero_id: String, rect: Rect2) -> bool:
 	return true
 
 func _draw_skill_button(center: Vector2, radius: float, title: String, subtitle: String, accent: Color, enabled: bool, font: Font, icon_kind: String = "") -> void:
+	var pressed := pressed_controls.has(icon_kind)
+	if pressed:
+		radius *= 0.90
 	var pulse := 0.72 + 0.28 * (sin(ui_time * 5.0) + 1.0) * 0.5 if enabled else 0.48
 	var ring_color := accent if enabled else Color("4b555b")
 	var plate_color := Color("17262b") if enabled else Color("141b1f")

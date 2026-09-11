@@ -2,13 +2,23 @@ class_name UpgradeSystem
 extends Node
 
 const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
+
+const DRAFT_TENDENCY_BALANCED := "balanced"
+const DRAFT_TENDENCY_TALENT := "talent"
+const DRAFT_TENDENCY_TIANJI := "tianji"
+const DRAFT_TENDENCIES := [DRAFT_TENDENCY_BALANCED, DRAFT_TENDENCY_TALENT, DRAFT_TENDENCY_TIANJI]
+const EARLY_DRAFT_LIMIT := 3
+const EARLY_TALENT_APPEAR_CHANCE := 0.70
+# Strategy shifts weight only between hero talents and Tianji choices. This
+# keeps the common-upgrade draw chance identical for every opening strategy.
+const DRAFT_TENDENCY_GROUP_SHIFT := 0.35
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 const COMMON_UPGRADE_IDS := ["common_attack", "common_defense", "common_speed", "common_heal"]
 const TIANJI_ACTIVATION_IDS := ["tianji_lightning_activate", "tianji_wind_activate", "tianji_water_activate", "tianji_fire_activate", "tianji_arrow_activate"]
 const TIANJI_UPGRADE_IDS := [
 	"tianji_lightning_cooldown", "tianji_lightning_damage", "tianji_lightning_targets",
-	"tianji_wind_cooldown", "tianji_wind_slow", "tianji_wind_knockback",
-	"tianji_water_duration", "tianji_water_radius", "tianji_water_slow",
+	"tianji_wind_cooldown", "tianji_wind_damage", "tianji_wind_slow", "tianji_wind_knockback",
+	"tianji_water_cooldown", "tianji_water_damage", "tianji_water_duration", "tianji_water_radius", "tianji_water_slow",
 	"tianji_fire_cooldown", "tianji_fire_damage", "tianji_fire_spread",
 	"tianji_arrow_cooldown", "tianji_arrow_damage", "tianji_arrow_volley",
 ]
@@ -19,18 +29,18 @@ const HERO_POOLS := {
 			"zhang_heavy_roar", "zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
-			"zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_war_stomp",
+			"zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
 		],
 		"weapon_ids": ["zhang_heavy_roar", "zhang_slam_leap", "zhang_slam_mastery"],
 		"passive_ids": ["zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm"],
 		"active_ids": ["zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave"],
 		"rare_ids": ["zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_war_stomp"],
-		"core_talent_ids": ["zhang_heavy_roar", "zhang_iron_hide", "zhang_rage", "zhang_earthshaker"],
+		"core_talent_ids": ["zhang_heavy_roar", "zhang_iron_hide", "zhang_rage", "zhang_earthshaker", "zhang_ultimate_bloodlust"],
 		"talent_blueprint_ids": [
 			"zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
-			"zhang_immovable", "zhang_battle_cry", "zhang_war_stomp",
+			"zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
 		],
 		"progression_chains": [],
 	},
@@ -64,7 +74,7 @@ const HERO_POOLS := {
 			"spear_reach", "sweeping_wind", "dash_echo", "firewheel", "dragon_armor",
 			"dragon_stride", "dragon_scale", "seven_edge", "snake_spin",
 			"spear_shadow", "white_dragon", "returning_spear", "triumph", "dragon_focus",
-			"firewheel_duration", "firewheel_volley", "firewheel_capstone",
+			"firewheel_duration", "firewheel_capstone",
 			"sweeping_guard", "sweeping_guard_large", "dragon_scale_regen",
 			"dragon_stride_double", "dragon_stride_threefold", "dragon_focus_guard", "dragon_focus_invulnerable",
 		],
@@ -78,12 +88,12 @@ const HERO_POOLS := {
 			"seven_edge", "snake_spin",
 		],
 		"talent_blueprint_ids": [
-			"firewheel", "firewheel_duration", "firewheel_volley", "firewheel_capstone",
+			"firewheel", "firewheel_duration", "firewheel_capstone",
 			"dragon_focus", "spear_shadow", "white_dragon", "returning_spear", "triumph",
 			"sweeping_guard", "sweeping_guard_large", "dragon_scale_regen",
 			"dragon_stride_double", "dragon_stride_threefold", "dragon_focus_guard", "dragon_focus_invulnerable",
 		],
-		"progression_chains": [["firewheel", "firewheel_duration", "firewheel_volley", "firewheel_capstone"]],
+		"progression_chains": [["firewheel", "firewheel_duration", "firewheel_capstone"]],
 	},
 	"ma_chao": {
 		"upgrade_ids": ["ma_long_stride", "ma_iron_hoof", "ma_storm_charge", "ma_silver_afterimage"],
@@ -121,9 +131,12 @@ const DEFINITIONS := {
 	"tianji_lightning_damage": {"title": "雷阵·增幅", "category": "七星引雷", "description": "七星引雷伤害 +20%。", "max_stacks": 3, "requires": "tianji_lightning_activate"},
 	"tianji_lightning_targets": {"title": "雷引·连锁", "category": "七星引雷", "description": "主雷后向范围外的目标追加 1 道延时副雷；副雷随机采用较低阶雷阵效果。", "max_stacks": 2, "requires": "tianji_lightning_activate", "min_skill_rank": 2},
 	"tianji_wind_cooldown": {"title": "巽风·疾行", "category": "巽风破阵", "description": "巽风破阵冷却时间 -6%。", "max_stacks": 3, "requires": "tianji_wind_activate"},
+	"tianji_wind_damage": {"title": "巽风·增幅", "category": "巽风破阵", "description": "巽风破阵伤害 +20%。", "max_stacks": 3, "requires": "tianji_wind_activate"},
 	"tianji_wind_slow": {"title": "巽风·缚敌", "category": "巽风破阵", "description": "巽风破阵的迟滞效果提高。", "max_stacks": 3, "requires": "tianji_wind_activate"},
 	"tianji_wind_knockback": {"title": "巽风·推山", "category": "巽风破阵", "description": "巽风破阵击退距离提高。", "max_stacks": 3, "requires": "tianji_wind_activate"},
 	"tianji_water_duration": {"title": "水阵·久驻", "category": "八阵水势", "description": "八阵水势持续时间 +0.6 秒。", "max_stacks": 3, "requires": "tianji_water_activate"},
+	"tianji_water_cooldown": {"title": "水阵·疾潮", "category": "八阵水势", "description": "八阵水势冷却时间 -6%。", "max_stacks": 3, "requires": "tianji_water_activate"},
+	"tianji_water_damage": {"title": "水阵·增幅", "category": "八阵水势", "description": "八阵水势伤害 +20%。", "max_stacks": 3, "requires": "tianji_water_activate"},
 	"tianji_water_radius": {"title": "水阵·扩域", "category": "八阵水势", "description": "八阵水势作用范围 +12%。", "max_stacks": 3, "requires": "tianji_water_activate"},
 	"tianji_water_slow": {"title": "水阵·沉流", "category": "八阵水势", "description": "八阵水势减速效果提高。", "max_stacks": 3, "requires": "tianji_water_activate"},
 	"tianji_fire_cooldown": {"title": "火雨·疾落", "category": "火雨焚营", "description": "火雨焚营冷却时间 -6%。", "max_stacks": 3, "requires": "tianji_fire_activate"},
@@ -149,7 +162,8 @@ const DEFINITIONS := {
 	"zhang_bridge_shockwave": {"title": "桥断余震", "category": "断桥", "description": "据水断桥中心命中伤害提高。", "max_stacks": 1, "requires": "zhang_bridge_repel", "shop_max_rank": 1, "shop_costs": [1800], "shop_rank_limited": true},
 	"zhang_earthshaker": {"title": "万夫莫开", "category": "无双", "description": "万夫莫开的飞兵伤害与架势伤害提高。", "max_stacks": 3},
 	"zhang_immovable": {"title": "万夫壁垒", "category": "无双", "description": "万夫状态减伤提高。", "max_stacks": 2, "requires": "zhang_earthshaker", "shop_max_rank": 2, "shop_costs": [600, 1100], "shop_rank_limited": true},
-	"zhang_battle_cry": {"title": "当阳怒喝", "category": "无双", "description": "万夫状态持续时间与移速提高。", "max_stacks": 2, "requires": "zhang_immovable", "shop_max_rank": 2, "shop_costs": [750, 1300], "shop_rank_limited": true},
+	"zhang_battle_cry": {"title": "当阳怒喝", "category": "无双", "description": "万夫状态每级持续时间 +5 秒。", "max_stacks": 2, "requires": "zhang_immovable", "shop_max_rank": 2, "shop_costs": [750, 1300], "shop_rank_limited": true},
+	"zhang_ultimate_bloodlust": {"title": "万夫回生", "category": "无双", "description": "万夫期间普攻击杀：1级 8% 回复1点，2级 10% 回复2点，3级 15% 回复3点生命。", "max_stacks": 3},
 	"zhang_war_stomp": {"title": "裂地余威", "category": "无双", "description": "万夫初始震阵范围、伤害与击退提高。", "max_stacks": 1, "requires": "zhang_battle_cry", "shop_max_rank": 1, "shop_costs": [2200], "shop_rank_limited": true},
 	"guan_broad_edge": {"title": "偃月展锋", "category": "偃月", "description": "三段横扫范围扩大，穿透 +2。", "max_stacks": 3},
 	"guan_heavy_blade": {"title": "沉锋断阵", "category": "偃月", "description": "普攻伤害与击退提高。", "max_stacks": 3},
@@ -180,14 +194,13 @@ const DEFINITIONS := {
 	"guan_sweeping_guard": {"title": "偃月拦矢", "category": "偃月", "description": "普攻、拖刀斩浪与青龙断浪期间，可拦下正前方约 110° 内最多 3 枚弓箭或弩箭。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [450], "shop_rank_limited": true},
 	"guan_sweeping_guard_large": {"title": "青龙御矢", "category": "偃月", "description": "正前方拦截范围扩大至约 160°，每个动作最多可拦截 5 枚弹道。", "max_stacks": 1, "requires": "guan_sweeping_guard", "shop_max_rank": 1, "shop_costs": [700], "shop_rank_limited": true},
 	"spear_reach": {"title": "枪势延展", "category": "枪法", "description": "三段普攻距离 +28，穿透 +2。", "max_stacks": 3},
-	"sweeping_wind": {"title": "横扫余威", "category": "枪法", "description": "第二段横扫范围 +32、角度 +30°，击退更强。", "max_stacks": 3},
+	"sweeping_wind": {"title": "横扫余威", "category": "枪法", "description": "第二段横扫范围 +10、角度 +15°，击退更强。", "max_stacks": 3},
 	"sweeping_guard": {"title": "枪幕拦矢", "category": "枪法", "description": "普攻动作中可拦下正前方小扇区内最多 3 枚弓箭或弩箭。", "max_stacks": 1, "requires": "sweeping_wind", "shop_max_rank": 1, "shop_costs": [450], "shop_rank_limited": true},
 	"sweeping_guard_large": {"title": "龙枪御矢", "category": "枪法", "description": "枪幕拦矢的正前方防御扇区扩大。", "max_stacks": 1, "requires": "sweeping_guard", "shop_max_rank": 1, "shop_costs": [700], "shop_rank_limited": true},
-	"dash_echo": {"title": "追云突刺", "category": "枪法", "description": "第三段突进 +46，命中后可移动恢复更长。", "max_stacks": 3},
+	"dash_echo": {"title": "追云突刺", "category": "枪法", "description": "第三段突进 +25，命中后可移动恢复更长。", "max_stacks": 3},
 	"firewheel": {"title": "哪吒火轮", "category": "枪法", "description": "龙胆激活时，第三段结束自动接火轮；完整释放后冷却 5 秒。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [750], "shop_rank_limited": true},
-	"firewheel_duration": {"title": "焰轮延烧", "category": "哪吒火轮", "description": "哪吒火轮完整旋转与免疫时间 +0.24 秒，并追加一次火轮震荡。", "max_stacks": 1, "requires": "firewheel", "shop_max_rank": 1, "shop_costs": [1100], "shop_rank_limited": true},
-	"firewheel_volley": {"title": "乾坤掷轮", "category": "哪吒火轮", "description": "火轮期间随机掷出 12 枚远程火轮；无双每段追加 3 枚。", "max_stacks": 1, "requires": "firewheel_duration", "shop_max_rank": 1, "shop_costs": [1700], "shop_rank_limited": true},
-	"firewheel_capstone": {"title": "风火贯阵", "category": "哪吒火轮", "description": "火轮持续至 3 秒，升级为巨型火轮并自动接第五段贯阵；无双每段追加 6 枚。", "max_stacks": 1, "requires": "firewheel_volley", "shop_max_rank": 1, "shop_costs": [2800], "shop_rank_limited": true},
+	"firewheel_duration": {"title": "焰轮延烧", "category": "哪吒火轮", "description": "哪吒火轮完整旋转与免疫时间 +0.5 秒，并追加一次火轮震荡。", "max_stacks": 1, "requires": "firewheel", "shop_max_rank": 1, "shop_costs": [1100], "shop_rank_limited": true},
+	"firewheel_capstone": {"title": "风火贯阵", "category": "哪吒火轮", "description": "火轮持续至 3 秒，升级为巨型火轮并自动接第五段贯阵；无双每段追加火轮震荡。", "max_stacks": 1, "requires": "firewheel_duration", "shop_max_rank": 1, "shop_costs": [2800], "shop_rank_limited": true},
 	"dragon_armor": {"title": "胆魄凝甲", "category": "龙胆", "description": "防御 +8；龙胆状态下受到的伤害 -25%。", "max_stacks": 2},
 	"dragon_stride": {"title": "破阵疾行", "category": "龙胆", "description": "龙胆持续 +1 秒，期间移速额外提高。", "max_stacks": 3},
 	"dragon_stride_double": {"title": "龙行疾影", "category": "龙胆", "description": "破阵疾行满阶后，龙胆持续时间与移速加成翻倍。", "max_stacks": 1, "requires": "dragon_stride", "requires_stacks": 3, "shop_max_rank": 1, "shop_costs": [750], "shop_rank_limited": true},
@@ -225,6 +238,9 @@ var active_tianji_ids: Array[String] = []
 var tianji_slot_limit := TIANJI_CATALOG.MAX_ACTIVE_PER_RUN
 var draft_option_count := 3
 var draft_selection_limit := 1
+var draft_tendency := DRAFT_TENDENCY_BALANCED
+var early_draft_active := false
+var early_draft_index := 0
 
 func configure_talent_pool(profile: Dictionary, hero_id: String) -> void:
 	active_hero_id = hero_id
@@ -292,39 +308,109 @@ func upgrade_option_count() -> int:
 func upgrade_selection_limit() -> int:
 	return draft_selection_limit
 
+func set_draft_tendency(value: String) -> void:
+	draft_tendency = value if DRAFT_TENDENCIES.has(value) else DRAFT_TENDENCY_BALANCED
+
+func draft_tendency_id() -> String:
+	return draft_tendency
+
+func reset_draft_progress() -> void:
+	early_draft_active = false
+	early_draft_index = 0
+
+func begin_draft() -> void:
+	early_draft_active = early_draft_index < EARLY_DRAFT_LIMIT
+	early_draft_index += 1
+
 func seed_with(value: int) -> void:
 	rng.seed = value
 	owned_counts.clear()
+	reset_draft_progress()
 
 func randomize_seed() -> void:
 	rng.randomize()
 	owned_counts.clear()
+	reset_draft_progress()
 
 func draft(_level: int, option_count: int = -1) -> Array[String]:
 	var requested_count := draft_option_count if option_count <= 0 else clampi(option_count, 1, 5)
 	var result: Array[String] = []
 	var available: Array[String] = []
-	for candidate_pool in [
-		_available_from(COMMON_UPGRADE_IDS),
-		_available_from(_pool_ids("upgrade_ids")),
-		_available_tianji_activation_ids(),
-		_available_tianji_upgrade_ids(),
+	var candidate_weights: Dictionary = {}
+	var common_candidates := _available_from(COMMON_UPGRADE_IDS)
+	var talent_candidates := _available_from(_pool_ids("upgrade_ids"))
+	var tianji_candidates: Array[String] = []
+	for candidate_variant in _available_tianji_activation_ids() + _available_tianji_upgrade_ids():
+		var candidate_id := str(candidate_variant)
+		if not tianji_candidates.has(candidate_id):
+			tianji_candidates.append(candidate_id)
+	for candidate_group in [
+		{"ids": common_candidates, "weight": 1.0},
+		{"ids": talent_candidates, "weight": _strategy_category_weight(DRAFT_TENDENCY_TALENT, talent_candidates.size(), tianji_candidates.size())},
+		{"ids": tianji_candidates, "weight": _strategy_category_weight(DRAFT_TENDENCY_TIANJI, tianji_candidates.size(), talent_candidates.size())},
 	]:
+		var candidate_pool: Array = candidate_group.get("ids", []) as Array
+		var candidate_weight := float(candidate_group.get("weight", 1.0))
 		for candidate_variant in candidate_pool:
 			var candidate_id := str(candidate_variant)
 			if not available.has(candidate_id):
 				available.append(candidate_id)
+				candidate_weights[candidate_id] = candidate_weight
+	var early_talent_id := _early_talent_id()
+	var early_talent_available := early_draft_active and not early_talent_id.is_empty() and available.has(early_talent_id)
+	if early_talent_available:
+		# Remove the featured talent before the normal weighted draw so the
+		# configured 70% remains an actual appearance chance, not an extra weight
+		# layered on top of the ordinary pool.
+		available.erase(early_talent_id)
+		candidate_weights.erase(early_talent_id)
+		if rng.randf() < EARLY_TALENT_APPEAR_CHANCE:
+			result.append(early_talent_id)
+		else:
+			available.append(early_talent_id)
+			candidate_weights[early_talent_id] = 1.0
 	var activation_slots_remaining := maxi(0, tianji_slot_limit - active_tianji_ids.size())
 	var activation_picks := 0
 	while result.size() < requested_count and not available.is_empty():
-		var index := rng.randi_range(0, available.size() - 1)
-		var upgrade_id: String = available.pop_at(index)
+		if activation_picks >= activation_slots_remaining:
+			for candidate_variant in available.duplicate():
+				if TIANJI_ACTIVATION_IDS.has(str(candidate_variant)):
+					available.erase(candidate_variant)
+			if available.is_empty():
+				break
+		var upgrade_id := _take_weighted_candidate(available, candidate_weights)
 		if TIANJI_ACTIVATION_IDS.has(upgrade_id):
-			if activation_picks >= activation_slots_remaining:
-				continue
 			activation_picks += 1
 		result.append(upgrade_id)
 	return result
+
+func _early_talent_id() -> String:
+	match active_hero_id:
+		"guan_yu": return "guan_drag_blade"
+		"zhang_fei": return "zhang_slam_leap"
+	return ""
+
+func _strategy_category_weight(category_id: String, category_count: int, opposite_count: int) -> float:
+	if draft_tendency == DRAFT_TENDENCY_BALANCED or category_count <= 0 or opposite_count <= 0:
+		return 1.0
+	var favored_category := DRAFT_TENDENCY_TALENT if draft_tendency == DRAFT_TENDENCY_TALENT else DRAFT_TENDENCY_TIANJI
+	var shift := minf(float(category_count), float(opposite_count)) * DRAFT_TENDENCY_GROUP_SHIFT
+	var adjusted_total := float(category_count) + (shift if category_id == favored_category else -shift)
+	return maxf(0.0, adjusted_total / float(category_count))
+
+func _take_weighted_candidate(candidates: Array[String], candidate_weights: Dictionary) -> String:
+	var total_weight := 0.0
+	for candidate_id in candidates:
+		total_weight += maxf(0.0, float(candidate_weights.get(candidate_id, 1.0)))
+	if total_weight <= 0.0:
+		return candidates.pop_back()
+	var roll := rng.randf() * total_weight
+	for index in range(candidates.size()):
+		var candidate_id := candidates[index]
+		roll -= maxf(0.0, float(candidate_weights.get(candidate_id, 1.0)))
+		if roll <= 0.0:
+			return candidates.pop_at(index)
+	return candidates.pop_back()
 
 func record_selection(upgrade_id: String) -> void:
 	owned_counts[upgrade_id] = int(owned_counts.get(upgrade_id, 0)) + 1

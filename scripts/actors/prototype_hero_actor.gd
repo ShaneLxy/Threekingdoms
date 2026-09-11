@@ -3,7 +3,7 @@ extends HeroActor
 
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 
-const ULTIMATE_COST := 50.0
+const ULTIMATE_COST := 60.0
 const ZHANG_FEI_ULTIMATE_DURATION := 10.0
 const WEAPON_CLASH_DURATION := 0.22
 const WEAPON_CLASH_REACH := 220.0
@@ -83,6 +83,7 @@ var zhang_active_displacement_bonus := 0.0
 var zhang_active_displacement_duration_bonus := 0.0
 var zhang_active_center_damage_bonus := 0.0
 var zhang_ultimate_duration_bonus := 0.0
+var zhang_ultimate_heal_level := 0
 var zhang_ultimate_damage_reduction := 0.0
 var zhang_ultimate_move_speed_bonus := 0.0
 var zhang_ultimate_shockwave_range_bonus := 0.0
@@ -143,6 +144,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	ultimate_time = 0.0
 	ultimate_segment_index = 0
 	ultimate_dash_direction = Vector2.RIGHT
+	reset_guard_state()
 	last_attack_direction = Vector2.RIGHT
 	current_action = ""
 	clear_basic_attack_movement()
@@ -184,6 +186,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	zhang_active_displacement_duration_bonus = 0.0
 	zhang_active_center_damage_bonus = 0.0
 	zhang_ultimate_duration_bonus = 0.0
+	zhang_ultimate_heal_level = 0
 	zhang_ultimate_damage_reduction = 0.0
 	zhang_ultimate_move_speed_bonus = 0.0
 	zhang_ultimate_shockwave_range_bonus = 0.0
@@ -205,10 +208,14 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	health_component.reset(float(base_stats.get("health", 140.0)))
 
 func tick(delta: float, move_direction: Vector2) -> void:
+	if is_defeated():
+		return
 	tick_movement_slow(delta)
 	current_move_direction = move_direction
 	if zhang_active_hold_pending:
 		zhang_active_hold_elapsed = minf(_zhang_active_hold_max_duration(), zhang_active_hold_elapsed + delta)
+		if zhang_active_hold_elapsed >= _zhang_active_hold_max_duration():
+			release_active_hold(current_move_direction)
 	_update_buffered_basic_direction()
 	tick_active_charge_recovery(delta, active_cooldown_duration)
 	combo_window = maxf(0.0, combo_window - delta)
@@ -246,12 +253,12 @@ func tick(delta: float, move_direction: Vector2) -> void:
 			_finish_action()
 	if current_action == "basic" and hit_delay_remaining <= 0.0 and not is_path_dashing() and not is_zhang_fei_jumping() and not _is_zhang_fei_slam_action() and is_action_locked():
 		tick_basic_attack_movement(delta, move_direction)
-	elif not is_action_locked():
+	elif not is_guard_active() and not is_action_locked():
 		_update_facing(move_direction)
 		_move(move_direction, effective_move_speed() * delta)
 
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
-	if zhang_active_hold_pending or is_guard_active():
+	if is_defeated() or zhang_active_hold_pending or is_guard_active():
 		return false
 	if ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active():
 		return false
@@ -307,7 +314,7 @@ func active_hold_ratio() -> float:
 	return clampf(zhang_active_hold_elapsed / _zhang_active_hold_max_duration(), 0.0, 1.0) if zhang_active_hold_pending else 0.0
 
 func _request_active(direction: Vector2, charge_ratio: float) -> bool:
-	if active_charge_count <= 0 or is_guard_active() or (ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active()):
+	if is_defeated() or active_charge_count <= 0 or is_guard_active() or (ultimate_state != UltimateState.INACTIVE and not is_zhang_fei_ultimate_active()):
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -369,7 +376,7 @@ func can_use_active() -> bool:
 	return active_charge_count > 0 and (ultimate_state == UltimateState.INACTIVE or is_zhang_fei_ultimate_active()) and (not is_action_locked() or current_action == "basic")
 
 func request_ultimate(direction: Vector2 = Vector2.ZERO) -> bool:
-	if ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE or is_guard_active():
+	if is_defeated() or ultimate_energy < ULTIMATE_COST or ultimate_state != UltimateState.INACTIVE or is_guard_active():
 		return false
 	if is_action_locked() and current_action != "basic":
 		return false
@@ -430,6 +437,7 @@ func apply_upgrade(upgrade_id: String) -> void:
 			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 1)
 		"zhang_slam_leap":
 			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 2)
+			projectile_pierce_bonus += 2  # 丈八跃砸·跃步：穿透+2
 		"zhang_slam_mastery":
 			zhang_leaping_slam_level = maxi(zhang_leaping_slam_level, 3)
 		"zhang_leaping_slam":
@@ -468,8 +476,9 @@ func apply_upgrade(upgrade_id: String) -> void:
 		"zhang_immovable":
 			zhang_ultimate_damage_reduction = minf(0.18, zhang_ultimate_damage_reduction + 0.07)
 		"zhang_battle_cry":
-			zhang_ultimate_duration_bonus += 1.5
-			zhang_ultimate_move_speed_bonus += 0.08
+			zhang_ultimate_duration_bonus += 5.0
+		"zhang_ultimate_bloodlust":
+			zhang_ultimate_heal_level = mini(3, zhang_ultimate_heal_level + 1)
 		"zhang_war_stomp":
 			zhang_ultimate_shockwave_range_bonus += 34.0
 			zhang_ultimate_shockwave_knockback_bonus += 160.0
@@ -508,13 +517,61 @@ func current_stats() -> Dictionary:
 		"health": health_component.current,
 		"max_health": health_component.maximum,
 		"move_speed": effective_move_speed(),
-		"basic_pierce": 12 + projectile_pierce_bonus,
+		"basic_pierce": _basic_pierce(),
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
 
+func _basic_pierce() -> int:
+	var pierce := 3 + projectile_pierce_bonus if hero_id == "zhang_fei" else 12 + projectile_pierce_bonus
+	# 张飞无双期间穿透+7
+	if hero_id == "zhang_fei" and is_zhang_fei_ultimate_active():
+		pierce += 7
+	return pierce
+
+func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
+	super.revive_from_rewarded_ad(health_ratio)
+	# Clear all subclass-owned action state so the revive cannot resume a stale
+	# combo, jump, dash, or weapon-clash window.
+	combo_window = 0.0
+	attack_lock_remaining = 0.0
+	hit_delay_remaining = 0.0
+	action_elapsed = 0.0
+	action_duration = 0.0
+	pending_attack = null
+	has_buffered_basic = false
+	buffered_basic_direction = Vector2.ZERO
+	buffered_basic_has_direction = false
+	zhang_basic_jump_has_direction = false
+	current_action = ""
+	clear_basic_attack_movement()
+	weapon_clash_remaining = 0.0
+	weapon_clash_direction = Vector2.RIGHT
+	weapon_clash_type = Telegraph.ClashKind.NONE
+	zhang_active_hold_pending = false
+	zhang_active_hold_elapsed = 0.0
+	path_dash_remaining = 0.0
+	path_dash_speed = 0.0
+	path_dash_distance_remaining = 0.0
+	path_dash_request = null
+	zhang_jump_remaining = 0.0
+	zhang_jump_duration = 0.0
+	zhang_jump_speed = 0.0
+	zhang_jump_distance_remaining = 0.0
+	zhang_jump_request = null
+	ultimate_state = UltimateState.INACTIVE
+	ultimate_time = 0.0
+	ultimate_phase_remaining = 0.0
+	ultimate_phase = 0
+	ultimate_dash_remaining = 0.0
+	ultimate_dash_speed = 0.0
+	ultimate_path_attack = null
+
 func ultimate_cost() -> float:
 	return ULTIMATE_COST
+
+func allows_guard_during_ultimate() -> bool:
+	return hero_id == "zhang_fei" and is_zhang_fei_ultimate_active()
 
 func is_ultimate_ready() -> bool:
 	return ultimate_energy >= ULTIMATE_COST
@@ -550,9 +607,9 @@ func consume_weapon_clash_window() -> void:
 	weapon_clash_type = Telegraph.ClashKind.NONE
 
 func receive_damage(amount: float, _source: String, attack_origin: Vector2 = Vector2.ZERO) -> float:
-	if is_zhang_fei_jumping():
+	if is_defeated() or is_zhang_fei_jumping():
 		return 0.0
-	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense())
+	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense()) * incoming_damage_multiplier(attack_origin)
 	if hero_id == "zhang_fei" and is_zhang_fei_ultimate_active():
 		reduced_amount *= maxf(0.60, 0.82 - zhang_ultimate_damage_reduction)
 	if hero_id == "zhang_fei":
@@ -575,11 +632,34 @@ func on_light_weapon_clash_success() -> void:
 	if hero_id == "zhang_fei":
 		_add_zhang_rage_progress(3)
 
-func on_enemy_defeated(_enemy_type: int) -> void:
-	apply_military_enemy_defeat_reward(_enemy_type)
+func on_enemy_defeated(_enemy_type: int, allow_recovery: bool = true, action_kind: int = AttackRequest.ActionKind.NONE) -> void:
+	apply_military_enemy_defeat_reward(_enemy_type, allow_recovery)
 	if hero_id != "zhang_fei":
 		return
 	_add_zhang_rage_progress(1)
+	if allow_recovery and is_zhang_fei_ultimate_active() and action_kind == AttackRequest.ActionKind.BASIC and zhang_ultimate_heal_level > 0:
+		var chance: float = float([0.0, 0.08, 0.10, 0.15][zhang_ultimate_heal_level])
+		if randf() < chance:
+			var recovered := minf(health_component.maximum, health_component.current + float(zhang_ultimate_heal_level))
+			if recovered > health_component.current:
+				health_component.current = recovered
+				health_component.health_changed.emit(health_component.current, health_component.maximum)
+
+func force_idle_state() -> void:
+	super.force_idle_state()
+	combo_window = 0.0
+	combo_stage = 0
+	pending_attack = null
+	has_buffered_basic = false
+	zhang_active_hold_pending = false
+	path_dash_remaining = 0.0
+	path_dash_request = null
+	zhang_jump_remaining = 0.0
+	zhang_jump_request = null
+	ultimate_state = UltimateState.INACTIVE
+	ultimate_phase_remaining = 0.0
+	ultimate_dash_remaining = 0.0
+	ultimate_path_attack = null
 
 func on_named_target_hit(_target_kind: int, _request: AttackRequest, _damage: float) -> void:
 	pass
@@ -638,6 +718,9 @@ func hud_status_effects() -> Array[Dictionary]:
 	var slow_effect := movement_slow_hud_effect()
 	if not slow_effect.is_empty():
 		effects.append(slow_effect)
+	var shield_effect := common_shield_hud_effect()
+	if not shield_effect.is_empty():
+		effects.append(shield_effect)
 	if hero_id == "zhang_fei":
 		if is_zhang_fei_ultimate_active():
 			effects.append({"label": "万夫", "icon": "震", "stacks": 1, "remaining": ultimate_time, "duration": _zhang_ultimate_duration(), "color": Color("e0673e")})
@@ -688,7 +771,7 @@ func _begin_basic(stage: int) -> void:
 			if stage == 1:
 				lock = 0.50
 				hit_delay = 0.18
-				request = AttackRequest.fan(position, last_attack_direction, 142.0 + basic_range_bonus, deg_to_rad(118.0), 1.25 + damage_bonus, 12, "扫阵横击")
+				request = AttackRequest.fan(position, last_attack_direction, 142.0 + basic_range_bonus, deg_to_rad(118.0), 1.25 + damage_bonus, _basic_pierce(), "扫阵横击")
 				request.knockback = 250.0 + knockback_bonus
 				request.forced_displacement = 32.0
 				request.stance_damage = 16.0 + stance_bonus
@@ -696,7 +779,7 @@ func _begin_basic(stage: int) -> void:
 			elif stage == 2:
 				lock = 0.58
 				hit_delay = 0.22
-				request = AttackRequest.fan(position, last_attack_direction, 164.0 + basic_range_bonus, deg_to_rad(138.0), 1.58 + damage_bonus, 16, "蛇矛挑阵")
+				request = AttackRequest.fan(position, last_attack_direction, 164.0 + basic_range_bonus, deg_to_rad(138.0), 1.58 + damage_bonus, _basic_pierce(), "蛇矛挑阵")
 				request.knockback = 480.0 + knockback_bonus
 				request.forced_displacement = 52.0
 				request.fan_knockback = true
@@ -708,7 +791,7 @@ func _begin_basic(stage: int) -> void:
 				var slam_level := _effective_zhang_leaping_slam_level()
 				var slam_range := 94.0
 				var slam_multiplier := 1.62
-				request = AttackRequest.circle(position, slam_range + basic_range_bonus * 0.40, slam_multiplier + damage_bonus, 18, "丈八跃砸")
+				request = AttackRequest.circle(position, slam_range + basic_range_bonus * 0.40, slam_multiplier + damage_bonus, _basic_pierce(), "丈八跃砸")
 				request.dash_kind = HeroActor.DashKind.BASIC
 				match slam_level:
 					1:
@@ -1122,7 +1205,7 @@ func _tick_momentum(delta: float, move_direction: Vector2) -> void:
 	previous_move_direction = direction
 
 func _move(direction: Vector2, distance: float) -> void:
-	if is_guard_active():
+	if is_defeated() or is_guard_active():
 		return
 	var normalized := direction.normalized() if direction.length_squared() > 0.01 else Vector2.ZERO
 	position += normalized * distance

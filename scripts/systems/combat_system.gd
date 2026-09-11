@@ -16,6 +16,11 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 			if request.one_hit_per_target:
 				request.hit_targets[id] = true
 			continue
+		if enemies.is_iron_bucket_shield(id):
+			enemies.block_iron_bucket_shield_hit(id)
+			if request.one_hit_per_target:
+				request.hit_targets[id] = true
+			continue
 		var damage := CombatMath.final_damage(hero_attack, request.damage_multiplier_at(enemies.positions[id]), hero_bonus, enemies.get_armor(id))
 		if enemies.get_type(id) == EnemySimulation.EnemyType.SHIELD:
 			var attacker_direction := (request.origin - enemies.positions[id]).normalized()
@@ -31,7 +36,11 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 			knockback = 0.0
 		if empowered_targets.has(id):
 			knockback *= request.empowered_knockback_multiplier
-		enemies.apply_hit(id, damage, knockback_direction, knockback, request.ignore_knockback_resistance, request.forced_displacement, request.forced_displacement_duration)
+		# Death signals are emitted synchronously by apply_hit(), so stage the
+		# action kind first and clear it again for survivors.
+		enemies.set_death_action_kind(id, request.action_kind)
+		if not enemies.apply_hit(id, damage, knockback_direction, knockback, request.ignore_knockback_resistance, request.forced_displacement, request.forced_displacement_duration):
+			enemies.set_death_action_kind(id, AttackRequest.ActionKind.NONE)
 		if request.launches_enemies and (request.launch_target_limit <= 0 or launched_targets < request.launch_target_limit):
 			if enemies.launch_enemy(
 				id,
@@ -59,6 +68,11 @@ func _resolve_displacement_only(request: AttackRequest, hits: Array[int], enemie
 			continue
 		if enemies.is_duel_formation_sealed() and enemies.is_duel_shield(id):
 			enemies.block_duel_shield_hit(id)
+			if request.one_hit_per_target:
+				request.hit_targets[id] = true
+			continue
+		if enemies.is_iron_bucket_shield(id):
+			enemies.block_iron_bucket_shield_hit(id)
 			if request.one_hit_per_target:
 				request.hit_targets[id] = true
 			continue
@@ -96,14 +110,19 @@ func _select_empowered_knockback_targets(request: AttackRequest, hits: Array[int
 	return selected
 
 func request_hits_point(request: AttackRequest, point: Vector2) -> bool:
+	const SELF_OVERLAP_ATTACK_RADIUS := 28.0
 	var offset := point - request.origin
 	match request.shape:
 		AttackRequest.Shape.CIRCLE:
 			return offset.length_squared() <= request.range * request.range
 		AttackRequest.Shape.FAN:
 			var distance_squared := offset.length_squared()
-			return distance_squared >= request.inner_radius * request.inner_radius and distance_squared <= request.range * request.range and absf(request.direction.angle_to(offset.normalized())) <= request.half_angle
+			if distance_squared > request.range * request.range:
+				return false
+			if distance_squared <= SELF_OVERLAP_ATTACK_RADIUS * SELF_OVERLAP_ATTACK_RADIUS:
+				return true
+			return distance_squared >= request.inner_radius * request.inner_radius and absf(request.direction.angle_to(offset.normalized())) <= request.half_angle
 		AttackRequest.Shape.LINE:
 			var projected := offset.dot(request.direction)
-			return projected >= 0.0 and projected <= request.range and absf(offset.cross(request.direction)) <= request.width * 0.5
+			return projected >= -SELF_OVERLAP_ATTACK_RADIUS and projected <= request.range and absf(offset.cross(request.direction)) <= request.width * 0.5
 	return false

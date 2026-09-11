@@ -8,21 +8,28 @@ const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
 const PROFILE_PATH := "user://profile.json"
 const PROFILE_BACKUP_PATH := "user://profile.json.bak"
 const PROFILE_TEMP_PATH := "user://profile.json.tmp"
-const CURRENT_SAVE_VERSION := 6
-const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu"]
-const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := true
+const CURRENT_SAVE_VERSION := 9
+const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu", "zhang_fei", "zhao_yun"]
+const DEFAULT_NEW_PROFILE_TIANJI_SKILLS := {
+	"fire_rain_burning": 1,
+	"xun_wind_break": 1,
+	"arrow_support_volley": 1,
+}
+const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := false
 
 var profile: Dictionary = {
 	"save_version": CURRENT_SAVE_VERSION,
-	"military_merit": 0,
-	"unlocked_heroes": ["guan_yu"],
+	"military_merit": 2000,
+	"unlocked_heroes": DEFAULT_NEW_PROFILE_HEROES.duplicate(),
 	"completed_chapters": [],
 	"completed_boss_trials": [],
 	"purchased_upgrades": [],
 	"military_strategies": {},
-	"tianji_skills": {"seven_star_lightning": 1},
+	"tianji_skills": DEFAULT_NEW_PROFILE_TIANJI_SKILLS.duplicate(),
 	"hero_talents": {"guan_yu": [], "zhang_fei": [], "zhao_yun": [], "ma_chao": [], "huang_zhong": []},
 	"hero_talent_ranks": {"guan_yu": {}, "zhang_fei": {}, "zhao_yun": {}, "ma_chao": {}, "huang_zhong": {}},
+	"tutorial_stage": 0,
+	"tutorial_completed": false,
 	"equipped_hero_id": "guan_yu",
 	"settings": {"sound_enabled": true, "vibration_enabled": true, "music_volume": 1.0, "sfx_volume": 1.0, "weather_mode": "auto"},
 }
@@ -77,17 +84,20 @@ func is_story_chapter_unlocked(chapter: int) -> bool:
 		return true
 	if chapter <= 1:
 		return true
-	# Preserve the retired Changban story clear for existing saves, while new
-	# progression unlocks chapter two from the actual first chapter.
-	if chapter == 2 and (has_completed_chapter("story_01") or has_completed_chapter("changban")):
-		return true
-	return has_completed_chapter("story_%02d" % (chapter - 1))
+	# The visible route uses internal IDs 1, 3, and 5, but unlocks strictly by
+	# the preceding visible chapter.
+	var visible_to_internal := [1, 3, 5]
+	var visible_index := chapter - 1
+	if visible_index >= visible_to_internal.size():
+		return false
+	var previous_internal_chapter := int(visible_to_internal[visible_index - 1])
+	return has_completed_chapter("story_%02d" % previous_internal_chapter)
 
 func is_battlefield_unlocked(battlefield_id: String) -> bool:
 	if LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS:
 		return true
 	match battlefield_id:
-		"changban", "hulao": return true
+		"changban", "hulao": return has_completed_chapter("story_05")
 		"bowangpo": return has_completed_chapter("changban") or has_completed_chapter("story_01")
 		_: return false
 
@@ -308,6 +318,31 @@ func equip_hero(hero_id: String) -> bool:
 	save_profile()
 	return true
 
+func tutorial_stage() -> int:
+	_ensure_profile_shape()
+	return maxi(0, int(profile.get("tutorial_stage", 0)))
+
+func tutorial_completed() -> bool:
+	_ensure_profile_shape()
+	return bool(profile.get("tutorial_completed", false))
+
+func set_tutorial_stage(stage: int) -> void:
+	_ensure_profile_shape()
+	profile["tutorial_stage"] = maxi(0, stage)
+	save_profile()
+
+func complete_tutorial() -> void:
+	_ensure_profile_shape()
+	profile["tutorial_completed"] = true
+	profile["tutorial_stage"] = 20
+	save_profile()
+
+func restart_tutorial() -> void:
+	_ensure_profile_shape()
+	profile["tutorial_completed"] = false
+	profile["tutorial_stage"] = 0
+	save_profile()
+
 func _migrate_profile() -> bool:
 	var changed := false
 	var stored_version := int(profile.get("save_version", 0))
@@ -330,10 +365,27 @@ func _migrate_profile() -> bool:
 	if save_version < 6:
 		changed = _migrate_to_version_6() or changed
 		save_version = 6
+	if save_version < 7:
+		changed = _migrate_to_version_7() or changed
+		save_version = 7
+	if save_version < 8:
+		changed = _migrate_to_version_8() or changed
+		save_version = 8
+	if save_version < 9:
+		changed = _migrate_to_version_9() or changed
+		save_version = 9
 	if save_version != stored_version:
 		profile["save_version"] = save_version
 		changed = true
 	var shape_changed := _ensure_profile_shape()
+	# Builds before the tutorial completion fix could leave a profile at the
+	# Five Tiger selection stages after the player had already entered battle.
+	# The selection page is now the completion point, so repair those saves on
+	# the next load.
+	if not bool(profile.get("tutorial_completed", false)) and int(profile.get("tutorial_stage", 0)) >= 18:
+		profile["tutorial_completed"] = true
+		profile["tutorial_stage"] = 20
+		changed = true
 	return changed or shape_changed
 
 func _migrate_to_version_1() -> bool:
@@ -447,10 +499,69 @@ func _migrate_to_version_6() -> bool:
 	profile["completed_boss_trials"] = []
 	return true
 
+func _migrate_to_version_7() -> bool:
+	var changed := false
+	var heroes: Array = profile.get("unlocked_heroes", []) as Array
+	for hero_id in ["zhang_fei", "zhao_yun"]:
+		if not heroes.has(hero_id):
+			heroes.append(hero_id)
+			changed = true
+	profile["unlocked_heroes"] = heroes
+	if int(profile.get("military_merit", 0)) < 2000:
+		profile["military_merit"] = 2000
+		changed = true
+	return changed
+
+func _migrate_to_version_8() -> bool:
+	if profile.has("tutorial_stage") and profile.has("tutorial_completed"):
+		return false
+	# Existing profiles with meaningful progress should not be interrupted by a
+	# first-install tutorial added in a later build.
+	var completed := not (profile.get("completed_chapters", []) as Array).is_empty()
+	completed = completed or not (profile.get("purchased_upgrades", []) as Array).is_empty()
+	completed = completed or not (profile.get("hero_talents", {}) as Dictionary).is_empty() and _has_any_talent_rank()
+	profile["tutorial_completed"] = completed
+	profile["tutorial_stage"] = 13 if completed else 0
+	return true
+
+func _migrate_to_version_9() -> bool:
+	# Expand the first-install tutorial with explicit page-introduction steps.
+	# Existing in-progress tutorials are moved to their corresponding new step.
+	var old_stage := int(profile.get("tutorial_stage", 0))
+	var stage_map := {
+		2: 3,
+		3: 5,
+		4: 6,
+		5: 7,
+		6: 9,
+		7: 10,
+		8: 12,
+		9: 14,
+		10: 15,
+		11: 16,
+		12: 19,
+		13: 20,
+	}
+	if stage_map.has(old_stage):
+		profile["tutorial_stage"] = int(stage_map[old_stage])
+		if old_stage >= 13:
+			profile["tutorial_completed"] = true
+	return true
+
+func _has_any_talent_rank() -> bool:
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	for ranks_variant in all_ranks.values():
+		if not (ranks_variant is Dictionary):
+			continue
+		for rank_variant in (ranks_variant as Dictionary).values():
+			if int(rank_variant) > 0:
+				return true
+	return false
+
 func _ensure_profile_shape() -> bool:
 	var changed := false
 	if not profile.has("military_merit"):
-		profile["military_merit"] = 0
+		profile["military_merit"] = 2000
 		changed = true
 	if not profile.has("unlocked_heroes"):
 		profile["unlocked_heroes"] = DEFAULT_NEW_PROFILE_HEROES.duplicate()
@@ -463,6 +574,12 @@ func _ensure_profile_shape() -> bool:
 		changed = true
 	if not profile.has("purchased_upgrades"):
 		profile["purchased_upgrades"] = []
+		changed = true
+	if not profile.has("tutorial_stage"):
+		profile["tutorial_stage"] = 0
+		changed = true
+	if not profile.has("tutorial_completed"):
+		profile["tutorial_completed"] = false
 		changed = true
 	if not profile.has("military_strategies"):
 		profile["military_strategies"] = {}

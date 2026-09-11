@@ -27,6 +27,10 @@ var active_hold_tracking := false
 var basic_hold_pending := false
 var basic_hold_active := false
 var basic_hold_elapsed := 0.0
+var suspended_basic_hold := false
+var suspended_basic_mouse := false
+var suspended_basic_touch := false
+var suspended_basic_release_pending := false
 
 const MOVE_MAX_DISTANCE := 110.0
 const MOVE_DEAD_ZONE := 10.0
@@ -39,9 +43,19 @@ func configure(player_actor: HeroActor, battle_hud: BattleHud) -> void:
 func set_input_enabled(value: bool) -> void:
 	if enabled == value:
 		return
+	if not value:
+		# Upgrade and pause overlays stop the battle input loop. Preserve the
+		# physical attack source so a drag-charge release is not lost while the
+		# overlay is open.
+		suspended_basic_hold = basic_hold_active or _player_is_drag_charging()
+		suspended_basic_mouse = mouse_attack_held
+		suspended_basic_touch = touch_attack_index >= 0
+		suspended_basic_release_pending = false
 	enabled = value
 	if not enabled:
 		reset_touch_state()
+	else:
+		_flush_suspended_basic_hold()
 
 func reset_touch_state() -> void:
 	touch_move_index = -1
@@ -57,6 +71,35 @@ func reset_touch_state() -> void:
 	if hud != null:
 		hud.clear_move_stick_offset()
 
+func _flush_suspended_basic_hold() -> void:
+	if not suspended_basic_hold:
+		suspended_basic_mouse = false
+		suspended_basic_touch = false
+		suspended_basic_release_pending = false
+		return
+	var should_release := suspended_basic_release_pending
+	if suspended_basic_mouse:
+		should_release = should_release or not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if suspended_basic_touch:
+		# Touch identifiers cannot be queried reliably after a modal overlay. A
+		# missing release is safer to resolve here than to leave drag charging
+		# permanently latched.
+		should_release = true
+	if should_release and _player_is_drag_charging():
+		player.release_basic_hold(movement_direction())
+	elif suspended_basic_mouse and _player_is_drag_charging():
+		# The mouse is still held: restore the router-side ownership so the next
+		# real mouse-up can close the drag normally.
+		mouse_attack_held = true
+		basic_hold_active = true
+	suspended_basic_hold = false
+	suspended_basic_mouse = false
+	suspended_basic_touch = false
+	suspended_basic_release_pending = false
+
+func _player_is_drag_charging() -> bool:
+	return player != null and player.has_method("is_drag_charging") and player.is_drag_charging()
+
 func _process(delta: float) -> void:
 	if not enabled or not basic_hold_pending or player == null or not player.supports_basic_hold():
 		return
@@ -68,6 +111,8 @@ func _process(delta: float) -> void:
 	basic_hold_started.emit(movement_direction())
 
 func _begin_basic_press(direction: Vector2 = Vector2.ZERO) -> void:
+	if hud != null:
+		hud.set_control_pressed("attack", true)
 	if not player.supports_basic_hold() or player.is_action_locked():
 		basic_requested.emit(direction)
 		return
@@ -76,6 +121,8 @@ func _begin_basic_press(direction: Vector2 = Vector2.ZERO) -> void:
 	basic_hold_elapsed = 0.0
 
 func _end_basic_press(direction: Vector2 = Vector2.ZERO) -> void:
+	if hud != null:
+		hud.set_control_pressed("attack", false)
 	if basic_hold_pending:
 		basic_requested.emit(direction)
 	elif basic_hold_active:
@@ -89,15 +136,21 @@ func _reset_basic_hold_state() -> void:
 
 func _begin_active_press(direction: Vector2 = Vector2.ZERO) -> bool:
 	if player == null or not player.supports_active_hold():
+		if hud != null:
+			hud.set_control_pressed("active", true)
 		active_requested.emit(direction)
 		return false
 	if not player.can_use_active():
 		return false
+	if hud != null:
+		hud.set_control_pressed("active", true)
 	active_hold_tracking = true
 	active_hold_started.emit(direction)
 	return true
 
 func _end_active_press(direction: Vector2 = Vector2.ZERO) -> void:
+	if hud != null:
+		hud.set_control_pressed("active", false)
 	if active_hold_tracking:
 		active_hold_released.emit(direction)
 	active_hold_tracking = false
@@ -108,6 +161,8 @@ func _reset_active_hold_state() -> void:
 	active_hold_tracking = false
 
 func _emit_guard_request(direction: Vector2) -> void:
+	if hud != null:
+		hud.set_control_pressed("guard", true)
 	# A guard can cancel a basic attack, so discard any pending mouse/touch
 	# release that would otherwise re-fire the cancelled attack.
 	mouse_attack_held = false
@@ -131,8 +186,23 @@ func movement_direction() -> Vector2:
 			direction += move_offset / MOVE_MAX_DISTANCE
 	return direction.normalized() if direction.length() > 1.0 else direction
 
+func _input(event: InputEvent) -> void:
+	# Capture release events before modal upgrade controls consume them. This is
+	# deliberately limited to an already-held attack, so menu clicks do not
+	# affect normal input.
+	if enabled or not suspended_basic_hold:
+		return
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT and suspended_basic_mouse:
+		suspended_basic_release_pending = true
+	elif event is InputEventScreenTouch and not event.pressed and suspended_basic_touch:
+		suspended_basic_release_pending = true
+
 func _unhandled_input(event: InputEvent) -> void:
-	if not enabled or player == null or hud == null or hud.modal_active:
+	if player == null or hud == null:
+		return
+	if not enabled:
+		return
+	if hud.modal_active:
 		return
 	if event is InputEventKey:
 		if event.keycode == KEY_Q:
@@ -148,6 +218,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.keycode == KEY_R:
 				weapon_stance_requested.emit()
 			elif event.keycode == KEY_E or event.keycode == KEY_SPACE:
+				hud.set_control_pressed("ultimate", true)
 				ultimate_requested.emit(Vector2.ZERO)
 	elif event is InputEventMouseButton:
 		if not event.pressed:
@@ -166,6 +237,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			mouse_active_held = _begin_active_press(movement_direction())
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
+			hud.set_control_pressed("ultimate", true)
 			ultimate_requested.emit(Vector2.ZERO)
 		elif hud.is_weapon_stance_hit(event.position):
 			weapon_stance_requested.emit()
@@ -177,6 +249,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.position.distance_to(hud.active_center()) < 65.0:
 				mouse_active_held = _begin_active_press(movement_direction())
 			elif event.position.distance_to(hud.ultimate_center()) < 65.0:
+				hud.set_control_pressed("ultimate", true)
 				ultimate_requested.emit(Vector2.ZERO)
 			else:
 				mouse_attack_held = true
@@ -202,6 +275,7 @@ func _handle_touch(event: InputEventScreenTouch) -> void:
 			if _begin_active_press(movement_direction()):
 				touch_active_index = event.index
 		elif event.position.distance_to(hud.ultimate_center()) < 70.0:
+			hud.set_control_pressed("ultimate", true)
 			ultimate_requested.emit(Vector2.ZERO)
 		elif hud.is_weapon_stance_hit(event.position):
 			weapon_stance_requested.emit()

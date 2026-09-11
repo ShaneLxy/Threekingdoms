@@ -4,6 +4,8 @@ extends Node2D
 signal telegraph_requested(telegraph: Telegraph)
 signal skill_impact_requested(strength: float)
 signal defeated(elite: EliteActor)
+signal attack_effect_requested(effect_type: String, at: Vector2, scale_multiplier: float)
+signal attack_sound_requested(sound_type: String)
 
 enum Archetype { XIAHOU_EN, CHUNYU_DAO, XIAHOU_LAN, HAN_HAO }
 enum State { INACTIVE, APPROACH, WINDUP, DASH, RECOVER, REPOSITION }
@@ -14,8 +16,8 @@ const CHUNYU_DAO_DEATH_ANIMATION_DURATION := 0.62
 const XIAHOU_LAN_DEATH_ANIMATION_DURATION := 0.58
 const HAN_HAO_DEATH_ANIMATION_DURATION := 0.68
 const ENGAGE_DELAY := 0.24
-const XIAHOU_EN_BASE_HEALTH := 960.0
-const CHUNYU_DAO_BASE_HEALTH := 920.0
+const XIAHOU_EN_BASE_HEALTH := 2880.0
+const CHUNYU_DAO_BASE_HEALTH := 2760.0
 const XIAHOU_LAN_BASE_HEALTH := 1020.0
 const HAN_HAO_BASE_HEALTH := 1100.0
 const XIAHOU_EN_BASE_ARMOR := 25.0
@@ -41,7 +43,7 @@ const RUPTURE_COOLDOWN := 5.2
 const SCOUT_LUNGE_COOLDOWN := 5.8
 const SHIELD_PUSH_COOLDOWN := 6.6
 const EARTH_BLADE_COOLDOWN := 9.2
-const OIL_FIRE_COOLDOWN := 10.5
+const CHUNYU_DAO_SKYFALL_COOLDOWN := 6.8
 const COUNTERATTACK_DURATION := 4.0
 const COUNTERATTACK_DAMAGE_MULTIPLIER := 1.30
 const REPOSITION_COOLDOWN := 2.15
@@ -573,15 +575,17 @@ func _issue_next_action(player_position: Vector2) -> void:
 			queued_followup = "dash"
 			pending_shake_strength = 8.0
 		"crush":
-			_emit_attack_telegraph(Telegraph.line(position, current_direction, 232.0, 42.0, 0.90, _threat_damage(24.0), telegraph_source), Telegraph.ClashKind.BASIC)
-			state_timer = 0.90
-			queued_followup = "recover:0.82"
-			pending_shake_strength = 6.5
+			_emit_attack_telegraph(Telegraph.fan(position + current_direction * 8.0, current_direction, 178.0, deg_to_rad(148.0), 0.82, _threat_damage(24.0), telegraph_source), Telegraph.ClashKind.BASIC)
+			state_timer = 0.82
+			queued_followup = "recover:0.78"
+			pending_shake_strength = 7.0
 		"execute":
-			_emit_attack_telegraph(Telegraph.fan(position, current_direction, 122.0, deg_to_rad(82.0), 0.52, _threat_damage(15.0), telegraph_source), Telegraph.ClashKind.BASIC)
-			state_timer = 0.52
-			queued_followup = "execute_followup"
-			pending_shake_strength = 5.2
+			_emit_attack_telegraph(Telegraph.line(position + current_direction * 8.0, current_direction, 238.0, 52.0, 0.68, _threat_damage(28.0), telegraph_source), Telegraph.ClashKind.BASIC)
+			state_timer = 0.68
+			queued_followup = "recover:0.72"
+			pending_shake_strength = 20.0  # 增强震动
+			# 请求播放重击音效
+			attack_sound_requested.emit("heavy_slash")
 		"rupture":
 			current_direction = _direction_to(_predicted_player_position(0.20))
 			var rupture_distance := clampf(position.distance_to(_predicted_player_position(0.20)) - 48.0, 74.0, 168.0)
@@ -631,7 +635,9 @@ func _issue_next_action(player_position: Vector2) -> void:
 			_emit_attack_telegraph(Telegraph.line(position, current_direction, push_distance + 78.0, 78.0, 0.76, _threat_damage(32.0), telegraph_source), Telegraph.ClashKind.ACTIVE)
 			state_timer = 0.76
 			queued_followup = "dash"
-			pending_shake_strength = 8.4
+			pending_shake_strength = 25.0  # 增强震动
+			# 请求播放冲击音效
+			attack_sound_requested.emit("shield_bash")
 		"earth_blade":
 			cast_invulnerable = true
 			var blade_target := _predicted_player_position(0.34)
@@ -643,20 +649,25 @@ func _issue_next_action(player_position: Vector2) -> void:
 				_emit_unblockable_telegraph(blade_telegraph)
 			state_timer = 0.98
 			queued_followup = "recover:0.78"
-			pending_shake_strength = 9.0
-		"oil_fire":
+			pending_shake_strength = 30.0  # 增强震动
+			# 请求播放重击音效
+			attack_sound_requested.emit("heavy_slash")
+			# 地面裂纹特效
+			attack_effect_requested.emit("ground_impact", position + blade_direction * 159.0, 1.2)
+		"skyfall":
 			cast_invulnerable = true
-			var oil_target := _predicted_player_position(0.32)
-			var oil_direction := _direction_to(oil_target)
-			var oil_perpendicular := Vector2(-oil_direction.y, oil_direction.x)
-			for index in range(3):
-				var oil_center := oil_target + oil_perpendicular * (float(index) - 1.0) * 62.0
-				var oil_telegraph := Telegraph.circle(oil_center, 46.0, 1.04 + float(index) * 0.10, _threat_damage(25.0), telegraph_source)
-				oil_telegraph.visual_kind = "oil_fire"
-				_emit_unblockable_telegraph(oil_telegraph)
-			state_timer = 1.24
-			queued_followup = "recover:0.86"
-			pending_shake_strength = 8.8
+			var skyfall_target := _predicted_player_position(0.30)
+			var skyfall_direction := _direction_to(skyfall_target)
+			var skyfall_telegraph := Telegraph.line(position + skyfall_direction * 12.0, skyfall_direction, 292.0, 68.0, 0.94, _threat_damage(36.0), telegraph_source)
+			skyfall_telegraph.visual_kind = "chunyu_skyfall"
+			_emit_unblockable_telegraph(skyfall_telegraph)
+			state_timer = 0.94
+			queued_followup = "recover:0.92"
+			pending_shake_strength = 35.0  # 增强震动强度
+			# 请求播放重击音效
+			attack_sound_requested.emit("heavy_impact")
+			# 请求地面冲击波特效（落地位置，缩放1.5倍）
+			attack_effect_requested.emit("ground_impact", position + skyfall_direction * 146.0, 1.5)
 
 func _queue_next_combo() -> void:
 	var options: Array[String] = []
@@ -675,18 +686,14 @@ func _queue_next_combo() -> void:
 					options.append("lunge_chain")
 		Archetype.CHUNYU_DAO:
 			options.append("cleave_chain")
-			if _is_action_ready("oil_fire") and high_risk_skill_allowed:
-				options.append("oil_fire_chain")
-				if _player_is_stationary() or player_is_attacking:
-					options.append("oil_fire_chain")
 			if _is_action_ready("execute") and high_risk_skill_allowed:
 				options.append("execute_chain")
 				if player_is_attacking:
 					options.append("execute_chain")
-			if _is_action_ready("rupture") and high_risk_skill_allowed:
-				options.append("rupture_chain")
+			if _is_action_ready("skyfall") and high_risk_skill_allowed:
+				options.append("skyfall_chain")
 				if _player_is_stationary() or player_is_attacking:
-					options.append("rupture_chain")
+					options.append("skyfall_chain")
 		Archetype.XIAHOU_LAN:
 			options.append("lan_patrol_chain")
 			if _is_action_ready("scout_lunge") and high_risk_skill_allowed:
@@ -710,8 +717,8 @@ func _queue_next_combo() -> void:
 			combo_steps = ["sweep", "lunge"]
 		"execute_chain":
 			combo_steps = ["crush", "execute"]
-		"rupture_chain":
-			combo_steps = ["crush", "rupture"]
+		"skyfall_chain":
+			combo_steps = ["crush", "skyfall"]
 		"moon_sweep":
 			combo_steps = ["sweep", "sweep"]
 		"lan_patrol_chain":
@@ -724,10 +731,8 @@ func _queue_next_combo() -> void:
 			combo_steps = ["shield_bash", "shield_push"]
 		"earth_blade_chain":
 			combo_steps = ["earth_blade"]
-		"oil_fire_chain":
-			combo_steps = ["oil_fire"]
 		_:
-			combo_steps = ["crush", "crush"]
+			combo_steps = ["crush"]
 
 func _prepare_counterattack_for(action: String) -> void:
 	counterattack_action_multiplier = 1.0
@@ -737,13 +742,13 @@ func _prepare_counterattack_for(action: String) -> void:
 	counterattack_remaining = 0.0
 
 func _is_counterattack_eligible(action: String) -> bool:
-	return action in ["sweep", "drag", "lunge", "crush", "execute", "rupture", "probe", "lan_sweep", "shield_bash", "shield_slash"]
+	return action in ["sweep", "drag", "lunge", "crush", "execute", "skyfall", "probe", "lan_sweep", "shield_bash", "shield_slash"]
 
 func _is_special_action(action: String) -> bool:
-	return action in ["drag", "lunge", "execute", "rupture", "scout_lunge", "shield_push", "earth_blade", "oil_fire"]
+	return action in ["drag", "lunge", "execute", "skyfall", "scout_lunge", "shield_push", "earth_blade"]
 
 func _is_high_risk_action(action: String) -> bool:
-	return action in ["lunge", "execute", "rupture", "scout_lunge", "shield_push", "earth_blade", "oil_fire"]
+	return action in ["lunge", "execute", "skyfall", "scout_lunge", "shield_push", "earth_blade"]
 
 func _is_action_ready(action: String) -> bool:
 	return float(action_cooldowns.get(action, 0.0)) <= 0.0
@@ -758,11 +763,10 @@ func _action_cooldown_duration(action: String) -> float:
 		"drag": return DRAG_COOLDOWN
 		"lunge": return LUNGE_COOLDOWN
 		"execute": return EXECUTE_COOLDOWN
-		"rupture": return RUPTURE_COOLDOWN
+		"skyfall": return CHUNYU_DAO_SKYFALL_COOLDOWN
 		"scout_lunge": return SCOUT_LUNGE_COOLDOWN
 		"shield_push": return SHIELD_PUSH_COOLDOWN
 		"earth_blade": return EARTH_BLADE_COOLDOWN
-		"oil_fire": return OIL_FIRE_COOLDOWN
 		_: return 0.0
 
 func _tick_action_cooldowns(delta: float) -> void:

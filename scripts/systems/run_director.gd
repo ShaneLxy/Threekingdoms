@@ -6,33 +6,37 @@ const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 signal spawn_requested(enemy_type: int, at: Vector2)
 signal elite_requested(elite_id: String, at: Vector2)
 signal boss_requested(at: Vector2)
+signal formation_requested(formation_id: String, at: Vector2)
 signal level_up(level: int)
 signal stage_changed(label: String)
 signal threat_tier_changed(tier: int)
+signal weather_changed(weather: String)
 
 const STORY_DURATION := 600.0
 const ENDLESS_DURATION := 1200.0
 const BOSS_TRIAL_MODE := "boss_trial"
-const BOSS_TRIAL_START_LEVEL := 5
+const BOSS_TRIAL_START_LEVEL := 20
+const BOSS_TRIAL_FINAL_STAGE := 3
 const EXPERIENCE_BASE_REQUIREMENT := 8.0
 const EXPERIENCE_GROWTH_RATE := 1.14
-const MAX_EXPERIENCE_REQUIREMENT := 120
+const MAX_EXPERIENCE_REQUIREMENT := 200
 const STORY_CHAPTERS := {
 	1: {
 		"id": "story_01",
 		"title": "新野练兵",
 		"intro": "第一章：新野练兵，先稳住刘备军的前线",
 		"completion": "第一章完成，新野军阵已经整备完毕。",
-		"duration": 300.0,
+		"duration": 180.0,
 		"phases": [
-			{"until": 100.0, "threat": 0, "profile": {"interval": 0.72, "soft_capacity": 18, "hard_capacity": 26, "burst": 2}, "enemies": [{"id": "sword", "weight": 76}, {"id": "shield", "weight": 24}]},
-			{"until": 200.0, "threat": 0, "profile": {"interval": 0.62, "soft_capacity": 24, "hard_capacity": 34, "burst": 2}, "enemies": [{"id": "sword", "weight": 52}, {"id": "shield", "weight": 48}]},
-			{"until": 300.0, "threat": 1, "profile": {"interval": 0.54, "soft_capacity": 30, "hard_capacity": 40, "burst": 2}, "enemies": [{"id": "sword", "weight": 38}, {"id": "shield", "weight": 42}, {"id": "spear", "weight": 20}]},
+			{"until": 30.0, "threat": 0, "profile": {"interval": 0.58, "soft_capacity": 18, "hard_capacity": 28, "burst": 3}, "enemies": [{"id": "sword", "weight": 70}, {"id": "shield", "weight": 30}]},
+			{"until": 90.0, "threat": 0, "profile": {"interval": 0.48, "soft_capacity": 24, "hard_capacity": 36, "burst": 3}, "enemies": [{"id": "sword", "weight": 52}, {"id": "shield", "weight": 38}, {"id": "spear", "weight": 10}]},
+			{"until": 150.0, "threat": 1, "profile": {"interval": 0.40, "soft_capacity": 32, "hard_capacity": 48, "burst": 3}, "enemies": [{"id": "sword", "weight": 38}, {"id": "shield", "weight": 42}, {"id": "spear", "weight": 20}]},
+			{"until": 180.0, "threat": 1, "profile": {"interval": 0.42, "soft_capacity": 28, "hard_capacity": 44, "burst": 3}, "enemies": [{"id": "sword", "weight": 34}, {"id": "shield", "weight": 40}, {"id": "spear", "weight": 26}]},
 		],
 		"events": [
-			{"time": 100.0, "message": "拒阵推进：盾兵开始护住前排", "formation": "shield_line"},
-			{"time": 108.0, "message": "夏侯恩率亲卫截击", "elite": "xiahou_en"},
-			{"time": 200.0, "message": "长枪压阵：横移避开长刺", "formation": "spear_wall"},
+			{"time": 60.0, "message": "拒阵推进：盾兵开始护住前排", "formation": "shield_line"},
+			{"time": 120.0, "message": "长枪压阵：横移避开长刺", "formation": "spear_wall"},
+			{"time": 150.0, "message": "夏侯恩率亲卫截击", "elite": "xiahou_en"},
 		],
 	},
 	2: {
@@ -57,8 +61,8 @@ const STORY_CHAPTERS := {
 	3: {
 		"id": "story_03",
 		"title": "火烧新野",
-		"intro": "第三章：火烧新野，组织撤离并击退追兵",
-		"completion": "第三章完成，新野百姓已经脱离曹军追击。",
+		"intro": "第二章：火烧新野，组织撤离并击退追兵",
+		"completion": "第二章完成，新野百姓已经脱离曹军追击。",
 		"duration": 390.0,
 		"phases": [
 			{"until": 130.0, "threat": 1, "profile": {"interval": 0.62, "soft_capacity": 26, "hard_capacity": 36, "burst": 2}, "enemies": [{"id": "sword", "weight": 34}, {"id": "shield", "weight": 36}, {"id": "spear", "weight": 30}]},
@@ -73,8 +77,8 @@ const STORY_CHAPTERS := {
 	4: {
 		"id": "story_04",
 		"title": "襄阳撤退",
-		"intro": "第四章：襄阳撤退，护住百姓并突破北线合围",
-		"completion": "第四章完成，撤退队伍已经穿过襄阳北线。",
+		"intro": "第三章：襄阳撤退，护住百姓并突破北线合围",
+		"completion": "第三章完成，撤退队伍已经穿过襄阳北线。",
 		"duration": 480.0,
 		"phases": [
 			{"until": 150.0, "threat": 1, "profile": {"interval": 0.56, "soft_capacity": 30, "hard_capacity": 42, "burst": 2}, "enemies": [{"id": "shield", "weight": 34}, {"id": "spear", "weight": 34}, {"id": "halberd", "weight": 18}, {"id": "sword", "weight": 14}]},
@@ -91,8 +95,8 @@ const STORY_CHAPTERS := {
 	5: {
 		"id": "story_05",
 		"title": "当阳断后",
-		"intro": "第五章：当阳断后，掩护队伍穿过狭路",
-		"completion": "第五章完成，主力已经脱离当阳追兵。",
+		"intro": "第三章：当阳断后，掩护队伍穿过狭路",
+		"completion": "第三章完成，主力已经脱离当阳追兵。",
 		"duration": 540.0,
 		"phases": [
 			{"until": 180.0, "threat": 2, "profile": {"interval": 0.52, "soft_capacity": 34, "hard_capacity": 46, "burst": 2}, "enemies": [{"id": "shield", "weight": 28}, {"id": "spear", "weight": 30}, {"id": "halberd", "weight": 22}, {"id": "archer", "weight": 20}]},
@@ -117,12 +121,50 @@ const SPEAR_WALL_TIME := 148.0
 const XIAHOU_EN_TIME := 180.0
 const CHUNYU_DAO_TIME := 360.0
 const BOSS_TIME := 510.0
-const ENDLESS_FIRST_BOSS_TIME := 420.0
 const BOWANG_XIAHOU_LAN_TIME := 180.0
 const BOWANG_HAN_HAO_TIME := 360.0
 const BOWANG_BOSS_TIME := 510.0
+const ENDLESS_BOSS_TIMES := [690.0, 1080.0]
+# Kept as a compatibility alias for older smoke tests and tooling. The
+# authoritative endless lord schedule is ENDLESS_BOSS_TIMES above.
+const ENDLESS_FIRST_BOSS_TIME := ENDLESS_BOSS_TIMES[0]
+const ENDLESS_PHASES := [
+	{
+		"until": 180.0,
+		"threat": 0,
+		"weather": "sunny",
+		"profile": {"interval": 0.34, "soft_capacity": 38, "hard_capacity": 54, "burst": 3},
+		"enemies": [{"id": "sword", "weight": 42}, {"id": "shield", "weight": 32}, {"id": "spear", "weight": 18}, {"id": "halberd", "weight": 8}],
+	},
+	{
+		"until": 420.0,
+		"threat": 2,
+		"weather": "rain",
+		"profile": {"interval": 0.30, "soft_capacity": 50, "hard_capacity": 68, "burst": 3},
+		"enemies": [{"id": "sword", "weight": 18}, {"id": "shield", "weight": 25}, {"id": "spear", "weight": 20}, {"id": "archer", "weight": 18}, {"id": "crossbow", "weight": 11}, {"id": "halberd", "weight": 8}],
+	},
+	{
+		"until": 780.0,
+		"threat": 4,
+		"weather": "snow",
+		"profile": {"interval": 0.27, "soft_capacity": 60, "hard_capacity": 82, "burst": 4},
+		"enemies": [{"id": "shield", "weight": 16}, {"id": "spear", "weight": 18}, {"id": "halberd", "weight": 20}, {"id": "archer", "weight": 19}, {"id": "crossbow", "weight": 15}, {"id": "cavalry", "weight": 9}],
+	},
+	{
+		"until": ENDLESS_DURATION,
+		"threat": 7,
+		"weather": "storm",
+		"profile": {"interval": 0.24, "soft_capacity": 68, "hard_capacity": 94, "burst": 4},
+		"enemies": [{"id": "shield", "weight": 16}, {"id": "spear", "weight": 18}, {"id": "halberd", "weight": 20}, {"id": "archer", "weight": 16}, {"id": "crossbow", "weight": 16}, {"id": "cavalry", "weight": 14}],
+	},
+]
+const ENDLESS_EVENTS := [
+	{"time": 300.0, "message": "精锐先登：夏侯恩率亲卫压阵", "elite": "xiahou_en"},
+]
 const OFFSCREEN_SPAWN_MIN_DISTANCE := 350.0
 const OFFSCREEN_SPAWN_MAX_DISTANCE := 500.0
+const SPAWN_VIEW_MARGIN := 84.0
+const BACKGROUND_SPAWN_RATE := 0.42
 const MOBILE_DENSITY_SCALE := 1.15
 const DESKTOP_DENSITY_SCALE := 1.28
 const MAX_SPAWN_HARD_CAP := 116
@@ -137,6 +179,7 @@ var spawn_accumulator := 0.0
 var boss_spawned := false
 var endless_boss_sequence: Array[String] = []
 var endless_boss_index := -1
+var endless_boss_pending_index := -1
 var xiahou_en_spawned := false
 var chunyu_dao_spawned := false
 var shield_bow_deployed := false
@@ -145,6 +188,9 @@ var pincer_deployed := false
 var cavalry_scouts_deployed := false
 var spear_wall_deployed := false
 var stage_index := 0
+var endless_event_index := 0
+var endless_phase_index := -1
+var enemies: EnemySimulation = null  # 用于检测决斗阵型状态
 var rng := RandomNumberGenerator.new()
 var spawn_focus := Vector2.ZERO
 var mode := "story"
@@ -152,11 +198,16 @@ var duration := STORY_DURATION
 var story_chapter := 1
 var active_threat_tier := 0
 var boss_trial_stage := 0
+var boss_trial_round_enemy_ids: Array[String] = []
 var battlefield_id := "changban"
 var xiahou_lan_spawned := false
 var han_hao_spawned := false
 var density_scale := 1.0
 var spawn_suppressed := false
+var spawn_background_mode := false
+var spawn_rate_multiplier := 1.0
+var spawn_view_rect := Rect2()
+var has_spawn_view_rect := false
 
 func configure_performance_profile(is_mobile_device: bool) -> void:
 	# Keep editor/tests at the original density until the runtime profile is selected.
@@ -168,6 +219,26 @@ func configure_account_progress(profile: Dictionary) -> void:
 
 func set_spawn_suppressed(value: bool) -> void:
 	spawn_suppressed = value
+	if value:
+		spawn_background_mode = false
+		spawn_rate_multiplier = 0.0
+	else:
+		spawn_rate_multiplier = BACKGROUND_SPAWN_RATE if spawn_background_mode else 1.0
+
+func set_spawn_background_mode(value: bool) -> void:
+	spawn_background_mode = value
+	if not spawn_suppressed:
+		spawn_rate_multiplier = BACKGROUND_SPAWN_RATE if value else 1.0
+
+func set_spawn_view_rect(value: Rect2) -> void:
+	spawn_view_rect = value
+	has_spawn_view_rect = value.size.x > 0.0 and value.size.y > 0.0
+
+func set_enemy_simulation(value: EnemySimulation) -> void:
+	# The director owns the encounter clock, but the formation state lives in the
+	# simulation. Keep the dependency explicit so duel pauses work in every scene
+	# launch path, including direct scene and restart flows.
+	enemies = value
 
 func reset(world_bounds: Rect2, selected_mode: String = "story", selected_battlefield_id: String = "changban", selected_story_chapter: int = 1) -> void:
 	bounds = world_bounds
@@ -184,13 +255,22 @@ func reset(world_bounds: Rect2, selected_mode: String = "story", selected_battle
 		next_level_experience = _experience_requirement(EXPERIENCE_BASE_REQUIREMENT, level)
 	spawn_accumulator = 0.0
 	spawn_suppressed = false
+	spawn_background_mode = false
+	spawn_rate_multiplier = 1.0
+	spawn_view_rect = Rect2()
+	has_spawn_view_rect = false
 	boss_spawned = false
 	rng.randomize()
+	boss_trial_round_enemy_ids.clear()
+	if is_boss_trial():
+		boss_trial_round_enemy_ids.append("xiahou_en" if rng.randi_range(0, 1) == 0 else "xiahou_dun")
+		boss_trial_round_enemy_ids.append("chunyu_dao" if rng.randi_range(0, 1) == 0 else "zhang_he")
 	endless_boss_sequence.clear()
 	if mode == "endless":
 		endless_boss_sequence.append("xiahou_dun")
-		endless_boss_sequence.append("lvbu" if rng.randf() < 0.5 else "zhang_he")
-	endless_boss_index = 0 if mode == "endless" else -1
+		endless_boss_sequence.append("lvbu")
+	endless_boss_index = -1
+	endless_boss_pending_index = -1
 	xiahou_en_spawned = false
 	chunyu_dao_spawned = false
 	xiahou_lan_spawned = false
@@ -201,6 +281,8 @@ func reset(world_bounds: Rect2, selected_mode: String = "story", selected_battle
 	cavalry_scouts_deployed = false
 	spear_wall_deployed = false
 	stage_index = 0
+	endless_event_index = 0
+	endless_phase_index = -1
 	spawn_focus = bounds.get_center()
 	active_threat_tier = threat_tier()
 	boss_trial_stage = 0
@@ -210,18 +292,30 @@ func reset(world_bounds: Rect2, selected_mode: String = "story", selected_battle
 		stage_changed.emit(str(_story_chapter_definition().get("intro", "乱军初起：击破刀兵")))
 	else:
 		stage_changed.emit("无尽兵海：守住阵线" if mode == "endless" else ("火谷前哨：曹军列阵而来" if is_bowangpo() else "乱军初起：击破刀兵"))
+	if mode == "endless":
+		endless_phase_index = _endless_phase_index()
+		weather_changed.emit(str(_endless_phase().get("weather", "sunny")))
 
 func tick(delta: float, active_enemy_count: int, player_position: Vector2 = Vector2.INF) -> void:
 	if player_position.is_finite():
 		spawn_focus = player_position
-	elapsed += delta
+	# 围阵斗将期间计时暂停
+	var is_duel_paused := false
+	if enemies != null and enemies.is_duel_formation_active():
+		is_duel_paused = true
+	if not is_duel_paused:
+		elapsed += delta
 	_update_threat_tier()
 	if is_boss_trial():
+		return
+	if is_duel_paused:
+		# Keep combat and enemy AI alive, but freeze the encounter timeline and
+		# spawn budget until the duel formation is cleared.
 		return
 	_advance_encounter_events()
 	if spawn_suppressed:
 		return
-	spawn_accumulator += delta
+	spawn_accumulator += delta * spawn_rate_multiplier
 	var profile := _spawn_profile()
 	var soft_capacity := int(profile.soft_capacity)
 	var hard_capacity := int(profile.hard_capacity)
@@ -230,8 +324,10 @@ func tick(delta: float, active_enemy_count: int, player_position: Vector2 = Vect
 	var spawn_interval := float(profile.interval)
 	var burst := int(profile.burst)
 	if active_enemy_count >= soft_capacity:
-		spawn_interval *= 2.4
-		burst = 1
+		# Keep a steady replacement flow once the readable frontline is full;
+		# throttle only slightly until the hard cap is reached.
+		spawn_interval *= 1.12
+		burst = maxi(1, burst - 1)
 	if spawn_accumulator < spawn_interval:
 		return
 	spawn_accumulator = fmod(spawn_accumulator, spawn_interval)
@@ -272,7 +368,7 @@ func threat_tier() -> int:
 	if is_boss_trial():
 		return 3
 	if mode == "endless":
-		return mini(7, int(elapsed / 120.0))
+		return int(_endless_phase().get("threat", 0))
 	if _uses_story_chapter_schedule():
 		return int(_story_phase().get("threat", 0))
 	return mini(4, int(elapsed / 120.0))
@@ -320,10 +416,7 @@ func story_requires_boss_defeat() -> bool:
 
 func boss_archetype_id() -> String:
 	if is_boss_trial():
-		match boss_trial_stage:
-			3: return "xiahou_dun"
-			5: return "lvbu"
-			_: return "zhang_he"
+		return _boss_trial_enemy_id()
 	if mode == "endless" and endless_boss_index >= 0 and endless_boss_index < endless_boss_sequence.size():
 		return endless_boss_sequence[endless_boss_index]
 	if is_bowangpo() or (mode == "story" and story_chapter == 2):
@@ -334,49 +427,59 @@ func advance_boss_after_defeat() -> bool:
 	# Bosses are swapped only after the previous death animation has completed.
 	# The caller can then use the regular boss_requested path to activate the next
 	# archetype without creating a second BossActor.
-	if is_boss_trial() and boss_trial_stage == 3:
-		boss_trial_stage = 4
-		boss_spawned = true
-		boss_requested.emit(bounds.get_center())
-		stage_changed.emit("夏侯惇败退：第四试炼，张郃现身")
-		return true
-	if is_boss_trial() and boss_trial_stage == 4:
-		boss_trial_stage = 5
-		boss_spawned = true
-		boss_requested.emit(bounds.get_center())
-		stage_changed.emit("张郃败退：最终试炼，吕布现身")
-		return true
-	if mode == "endless" and endless_boss_index + 1 < endless_boss_sequence.size():
-		endless_boss_index += 1
-		boss_spawned = true
-		boss_requested.emit(bounds.get_center())
-		stage_changed.emit("前任领主败退：领主%s加入战场" % ("吕布" if boss_archetype_id() == "lvbu" else "张郃"))
+	if mode == "endless":
+		boss_spawned = false
+		if endless_boss_index + 1 < endless_boss_sequence.size():
+			stage_changed.emit("领主败退：敌军正在重整下一轮攻势")
+		else:
+			stage_changed.emit("最终领主败退：守住最后的战线")
+		# Endless runs continue until their timer expires. The next scheduled
+		# lord is spawned by _advance_endless_encounter_events() once its time
+		# node has been reached.
 		return true
 	return false
 
 func begin_boss_trial() -> void:
 	if not is_boss_trial() or boss_trial_stage != 0:
 		return
-	# The trial is currently a focused Lv Bu combat sandbox. Other named enemies
-	# remain available in story and endless modes while this encounter is tuned.
-	boss_trial_stage = 5
-	boss_spawned = true
-	boss_requested.emit(bounds.get_center())
-	stage_changed.emit("名将斗阵：吕布现身")
+	boss_trial_stage = 1
+	_request_boss_trial_stage()
 
-func advance_boss_trial_after_elite() -> void:
-	if not is_boss_trial():
+func advance_boss_trial_after_named_defeat() -> void:
+	if not is_boss_trial() or boss_trial_stage <= 0 or boss_trial_stage >= BOSS_TRIAL_FINAL_STAGE:
 		return
-	if boss_trial_stage == 1:
-		boss_trial_stage = 2
-		elite_requested.emit("chunyu_dao", bounds.get_center())
-		stage_changed.emit("第二试炼：淳于导")
+	boss_trial_stage += 1
+	_request_boss_trial_stage()
+
+func _boss_trial_enemy_id() -> String:
+	if boss_trial_stage == BOSS_TRIAL_FINAL_STAGE:
+		return "lvbu"
+	var candidate_index := boss_trial_stage - 1
+	if candidate_index >= 0 and candidate_index < boss_trial_round_enemy_ids.size():
+		return boss_trial_round_enemy_ids[candidate_index]
+	return ""
+
+func _request_boss_trial_stage() -> void:
+	var enemy_id := _boss_trial_enemy_id()
+	if enemy_id.is_empty():
 		return
-	if boss_trial_stage == 2:
-		boss_trial_stage = 3
-		boss_spawned = true
+	var is_elite := enemy_id in ["xiahou_en", "chunyu_dao"]
+	boss_spawned = not is_elite
+	if is_elite:
+		elite_requested.emit(enemy_id, bounds.get_center())
+	else:
 		boss_requested.emit(bounds.get_center())
-		stage_changed.emit("第三试炼：夏侯惇")
+	var stage_title := "最终试炼" if boss_trial_stage == BOSS_TRIAL_FINAL_STAGE else "第%d试炼" % boss_trial_stage
+	stage_changed.emit("%s：%s" % [stage_title, _boss_trial_enemy_name(enemy_id)])
+
+func _boss_trial_enemy_name(enemy_id: String) -> String:
+	match enemy_id:
+		"xiahou_en": return "夏侯恩"
+		"xiahou_dun": return "夏侯惇"
+		"chunyu_dao": return "淳于导"
+		"zhang_he": return "张郃"
+		"lvbu": return "吕布"
+	return "敌将"
 
 func _update_threat_tier() -> void:
 	var next_tier := threat_tier()
@@ -398,6 +501,17 @@ func _story_phase() -> Dictionary:
 		if elapsed < float(phase.get("until", duration)):
 			return phase
 	return phases.back() as Dictionary if not phases.is_empty() else {}
+
+func _endless_phase_index() -> int:
+	for index in range(ENDLESS_PHASES.size()):
+		var phase := ENDLESS_PHASES[index] as Dictionary
+		if elapsed < float(phase.get("until", ENDLESS_DURATION)):
+			return index
+	return maxi(0, ENDLESS_PHASES.size() - 1)
+
+func _endless_phase() -> Dictionary:
+	var index := _endless_phase_index()
+	return ENDLESS_PHASES[index] as Dictionary if index >= 0 and index < ENDLESS_PHASES.size() else {}
 
 func _choose_story_enemy() -> int:
 	var entries: Array = _story_phase().get("enemies", []) as Array
@@ -422,12 +536,20 @@ func _story_spawn_profile() -> Dictionary:
 		"hard_capacity": int(profile.get("hard_capacity", 34)),
 		"burst": int(profile.get("burst", 2)),
 	}
-	# Bring the pressure curve forward so the first half of a story battle is
-	# populated, while the later phases retain their authored progression.
-	if elapsed < duration * 0.62:
-		adjusted_profile["interval"] = maxf(0.28, float(adjusted_profile["interval"]) * 0.88)
-		adjusted_profile["soft_capacity"] = ceili(float(adjusted_profile["soft_capacity"]) * 1.16)
-		adjusted_profile["hard_capacity"] = ceili(float(adjusted_profile["hard_capacity"]) * 1.16)
+	# Chapter one authors its own four-step pressure curve. Other chapters keep
+	# the earlier forward-loaded pacing until their encounter schedules are
+	# retuned independently.
+	if story_chapter == 1:
+		adjusted_profile["interval"] = maxf(0.26, float(adjusted_profile["interval"]) * 0.88)
+		adjusted_profile["soft_capacity"] = ceili(float(adjusted_profile["soft_capacity"]) * 1.08)
+		adjusted_profile["hard_capacity"] = ceili(float(adjusted_profile["hard_capacity"]) * 1.10)
+	elif elapsed < duration * 0.62:
+		adjusted_profile["interval"] = maxf(0.24, float(adjusted_profile["interval"]) * 0.76)
+		adjusted_profile["soft_capacity"] = ceili(float(adjusted_profile["soft_capacity"]) * 1.45)
+		adjusted_profile["hard_capacity"] = ceili(float(adjusted_profile["hard_capacity"]) * 1.55)
+	else:
+		adjusted_profile["soft_capacity"] = ceili(float(adjusted_profile["soft_capacity"]) * 1.18)
+		adjusted_profile["hard_capacity"] = ceili(float(adjusted_profile["hard_capacity"]) * 1.22)
 	return _scale_spawn_profile(adjusted_profile)
 
 func _enemy_type_from_story_id(enemy_id: String) -> int:
@@ -440,7 +562,8 @@ func _enemy_type_from_story_id(enemy_id: String) -> int:
 		# 军旗兵暂未开放；旧关卡配置中的 banner 条目改由剑兵替代。
 		"banner": return EnemySimulation.EnemyType.SWORD
 		"cavalry": return EnemySimulation.EnemyType.CAVALRY
-		"guard": return EnemySimulation.EnemyType.GUARD
+		# 护卫兵暂时停用；旧配置中的 guard 请求按剑兵处理，避免占位模型再次出现。
+		"guard": return EnemySimulation.EnemyType.SWORD
 		_: return EnemySimulation.EnemyType.SWORD
 
 func _advance_story_encounter_events() -> void:
@@ -492,29 +615,7 @@ func _deploy_story_archer_screen() -> void:
 
 func _choose_enemy() -> int:
 	if mode == "endless":
-		var tier := int(elapsed / 120.0)
-		var roll := rng.randf()
-		var cavalry_chance := 0.0
-		if tier >= 4:
-			cavalry_chance = 0.24 if tier >= 6 else 0.20
-		if roll < cavalry_chance:
-			return EnemySimulation.EnemyType.CAVALRY
-		# Reallocate only the weak sword share as cavalry becomes common, leaving
-		# the rest of the endless roster's combat roles intact.
-		var cavalry_shift := maxf(0.0, cavalry_chance - 0.15)
-		if tier >= 3 and roll < 0.30 + cavalry_shift:
-			return EnemySimulation.EnemyType.CROSSBOW
-		if tier >= 5 and roll < 0.38 + cavalry_shift:
-			return EnemySimulation.EnemyType.GUARD
-		if tier >= 3 and roll < 0.54 + cavalry_shift:
-			return EnemySimulation.EnemyType.HALBERD
-		if tier >= 2 and roll < 0.68 + cavalry_shift:
-			return EnemySimulation.EnemyType.SHIELD
-		if tier >= 2 and roll < 0.80 + cavalry_shift:
-			return EnemySimulation.EnemyType.SPEAR
-		if tier >= 1 and roll < minf(1.0, 0.91 + cavalry_shift):
-			return EnemySimulation.EnemyType.ARCHER
-		return EnemySimulation.EnemyType.SWORD
+		return _choose_endless_enemy()
 	if _uses_story_chapter_schedule():
 		return _choose_story_enemy()
 	if is_bowangpo():
@@ -585,10 +686,24 @@ func _choose_bowang_enemy() -> int:
 		return EnemySimulation.EnemyType.SPEAR
 	return EnemySimulation.EnemyType.SHIELD if roll < 0.88 else EnemySimulation.EnemyType.SWORD
 
+func _choose_endless_enemy() -> int:
+	var entries: Array = _endless_phase().get("enemies", []) as Array
+	var total_weight := 0.0
+	for entry_variant in entries:
+		total_weight += float((entry_variant as Dictionary).get("weight", 0.0))
+	if total_weight <= 0.0:
+		return EnemySimulation.EnemyType.SWORD
+	var roll := rng.randf_range(0.0, total_weight)
+	for entry_variant in entries:
+		var entry := entry_variant as Dictionary
+		roll -= float(entry.get("weight", 0.0))
+		if roll <= 0.0:
+			return _enemy_type_from_story_id(str(entry.get("id", "sword")))
+	return _enemy_type_from_story_id(str((entries.back() as Dictionary).get("id", "sword")))
+
 func _spawn_profile() -> Dictionary:
 	if mode == "endless":
-		var tier := int(elapsed / 120.0)
-		return _scale_spawn_profile({"interval": maxf(0.22, 0.58 - 0.05 * tier), "soft_capacity": mini(70, 32 + tier * 8), "hard_capacity": mini(88, 48 + tier * 10), "burst": mini(4, 2 + tier / 3)})
+		return _endless_spawn_profile()
 	if _uses_story_chapter_schedule():
 		return _story_spawn_profile()
 	if boss_spawned:
@@ -607,13 +722,22 @@ func _spawn_profile() -> Dictionary:
 		return _scale_spawn_profile({"interval": 0.38, "soft_capacity": 46, "hard_capacity": 60, "burst": 2})
 	return _scale_spawn_profile({"interval": 0.30, "soft_capacity": 60, "hard_capacity": 78, "burst": 3})
 
+func _endless_spawn_profile() -> Dictionary:
+	var profile: Dictionary = _endless_phase().get("profile", {}) as Dictionary
+	return _scale_spawn_profile({
+		"interval": float(profile.get("interval", 0.34)),
+		"soft_capacity": int(profile.get("soft_capacity", 38)),
+		"hard_capacity": int(profile.get("hard_capacity", 54)),
+		"burst": int(profile.get("burst", 3)),
+	})
+
 func _scale_spawn_profile(profile: Dictionary) -> Dictionary:
 	var base_soft := maxi(1, int(profile.get("soft_capacity", 24)))
 	var base_hard := maxi(base_soft + 1, int(profile.get("hard_capacity", 34)))
 	var pressure := difficulty_multiplier()
 	var level_density := _level_density_multiplier()
-	var scaled_soft := maxi(6, ceili(float(base_soft) * pressure * density_scale * level_density))
-	var scaled_hard := maxi(scaled_soft + 1, ceili(float(base_hard) * pressure * density_scale * level_density))
+	var scaled_soft := mini(MAX_SPAWN_HARD_CAP - 1, maxi(6, ceili(float(base_soft) * pressure * density_scale * level_density)))
+	var scaled_hard := mini(MAX_SPAWN_HARD_CAP, maxi(scaled_soft + 1, ceili(float(base_hard) * pressure * density_scale * level_density)))
 	var base_interval := float(profile.get("interval", 0.60))
 	var scaled_burst := maxi(1, int(floor(float(profile.get("burst", 2)) * pressure)))
 	return {
@@ -640,6 +764,7 @@ func _advance_encounter_events() -> void:
 		return
 	if mode == "endless":
 		_advance_endless_encounter_events()
+		return
 	if _uses_story_chapter_schedule():
 		_advance_story_encounter_events()
 		return
@@ -691,12 +816,65 @@ func _advance_encounter_events() -> void:
 		stage_changed.emit("敌将现身：张郃")
 
 func _advance_endless_encounter_events() -> void:
-	if boss_spawned or elapsed < ENDLESS_FIRST_BOSS_TIME or endless_boss_sequence.is_empty():
-		return
-	boss_spawned = true
-	endless_boss_index = 0
-	boss_requested.emit(Vector2(bounds.get_center().x, bounds.position.y + 90.0))
-	stage_changed.emit("无尽领主现身：夏侯惇")
+	var current_phase := _endless_phase_index()
+	if current_phase != endless_phase_index:
+		endless_phase_index = current_phase
+		weather_changed.emit(str(_endless_phase().get("weather", "sunny")))
+		stage_changed.emit("无尽战段 %d：敌军构成发生变化" % (current_phase + 1))
+	while endless_event_index < ENDLESS_EVENTS.size():
+		var event := ENDLESS_EVENTS[endless_event_index] as Dictionary
+		if elapsed < float(event.get("time", ENDLESS_DURATION)):
+			break
+		endless_event_index += 1
+		var formation := str(event.get("formation", ""))
+		if not formation.is_empty():
+			_deploy_endless_formation(formation)
+		var elite_id := str(event.get("elite", ""))
+		if not elite_id.is_empty():
+			elite_requested.emit(elite_id, _north_spawn())
+		var message := str(event.get("message", ""))
+		if not message.is_empty():
+			stage_changed.emit(message)
+	if not endless_boss_sequence.is_empty():
+		var next_boss_index := endless_boss_index + 1
+		if next_boss_index < endless_boss_sequence.size() and next_boss_index < ENDLESS_BOSS_TIMES.size() and elapsed >= float(ENDLESS_BOSS_TIMES[next_boss_index]):
+			endless_boss_pending_index = next_boss_index
+		if not boss_spawned and endless_boss_pending_index >= 0:
+			endless_boss_index = endless_boss_pending_index
+			endless_boss_pending_index = -1
+			boss_spawned = true
+			boss_requested.emit(Vector2(bounds.get_center().x, bounds.position.y + 90.0))
+			stage_changed.emit("无尽领主现身：%s" % _endless_boss_name(endless_boss_index))
+
+func _endless_boss_name(index: int) -> String:
+	if index < 0 or index >= endless_boss_sequence.size():
+		return "敌将"
+	match endless_boss_sequence[index]:
+		"xiahou_dun": return "夏侯惇"
+		"zhang_he": return "张郃"
+		"lvbu": return "吕布"
+	return "敌将"
+
+func _deploy_endless_formation(formation: String) -> void:
+	match formation:
+		"iron_bucket": return
+		"shield_line": _deploy_story_shield_line()
+		"spear_wall": _deploy_spear_wall()
+		"archer_screen": _deploy_story_archer_screen()
+		"crossbow_screen": _deploy_crossbow_screen()
+		"halberd_pincer": _deploy_halberd_pincer()
+		"cavalry_pair": _deploy_cavalry_scouts()
+
+func _formation_center() -> Vector2:
+	# Named formations are battlefield set-pieces. Their origin must not chase
+	# the hero, otherwise the outer wall can be pushed beyond the camera/map.
+	return _clamp_point(bounds.get_center())
+
+func _clamp_point(point: Vector2) -> Vector2:
+	return Vector2(
+		clampf(point.x, bounds.position.x + 48.0, bounds.end.x - 48.0),
+		clampf(point.y, bounds.position.y + 48.0, bounds.end.y - 48.0)
+	)
 
 func _advance_bowangpo_encounter_events() -> void:
 	if stage_index == 0 and elapsed >= 34.0:
@@ -762,13 +940,61 @@ func _deploy_spear_wall() -> void:
 
 func _choose_spawn() -> Vector2:
 	var spawn_area := bounds.grow(-24.0)
+	if has_spawn_view_rect:
+		var protected_view := spawn_view_rect.grow(SPAWN_VIEW_MARGIN)
+		for _attempt in range(12):
+			var candidate := _choose_view_edge_spawn(protected_view)
+			if spawn_area.has_point(candidate) and not spawn_view_rect.grow(28.0).has_point(candidate):
+				return candidate
 	for attempt in range(8):
 		var direction := Vector2.from_angle(rng.randf_range(0.0, TAU))
 		var distance := rng.randf_range(OFFSCREEN_SPAWN_MIN_DISTANCE, OFFSCREEN_SPAWN_MAX_DISTANCE)
 		var candidate := spawn_focus + direction * distance
-		if spawn_area.has_point(candidate):
+		if spawn_area.has_point(candidate) and (not has_spawn_view_rect or not spawn_view_rect.grow(28.0).has_point(candidate)):
 			return candidate
+	if has_spawn_view_rect:
+		# A camera near a map edge can make one or more view-edge sides invalid.
+		# Sample the remaining arena before using the generic edge fallback, so a
+		# valid offscreen point is not lost just because the first attempts chose
+		# an unavailable side.
+		var view_exclusion := spawn_view_rect.grow(28.0)
+		var furthest_candidate := spawn_area.get_center()
+		var furthest_distance := -1.0
+		for _attempt in range(24):
+			var candidate := Vector2(
+				rng.randf_range(spawn_area.position.x, spawn_area.end.x),
+				rng.randf_range(spawn_area.position.y, spawn_area.end.y)
+			)
+			var distance := _distance_squared_from_rect(candidate, spawn_view_rect)
+			if distance > furthest_distance:
+				furthest_candidate = candidate
+				furthest_distance = distance
+			if not view_exclusion.has_point(candidate):
+				return candidate
+		# This only occurs when the camera covers the whole usable arena. Keep the
+		# spawn inside bounds and as far from the visible rectangle as possible.
+		return furthest_candidate
 	return _choose_edge_spawn()
+
+func _distance_squared_from_rect(point: Vector2, rect: Rect2) -> float:
+	var closest := Vector2(
+		clampf(point.x, rect.position.x, rect.end.x),
+		clampf(point.y, rect.position.y, rect.end.y)
+	)
+	return point.distance_squared_to(closest)
+
+func _choose_view_edge_spawn(protected_view: Rect2) -> Vector2:
+	var side := rng.randi_range(0, 3)
+	var overshoot := rng.randf_range(18.0, 92.0)
+	match side:
+		0:
+			return Vector2(protected_view.position.x - overshoot, rng.randf_range(protected_view.position.y, protected_view.end.y))
+		1:
+			return Vector2(protected_view.end.x + overshoot, rng.randf_range(protected_view.position.y, protected_view.end.y))
+		2:
+			return Vector2(rng.randf_range(protected_view.position.x, protected_view.end.x), protected_view.position.y - overshoot)
+		_:
+			return Vector2(rng.randf_range(protected_view.position.x, protected_view.end.x), protected_view.end.y + overshoot)
 
 func _choose_edge_spawn() -> Vector2:
 	var edge := rng.randi_range(0, 3)

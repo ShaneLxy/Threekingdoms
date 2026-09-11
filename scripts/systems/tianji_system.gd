@@ -36,6 +36,7 @@ var slot_order: Array[String] = []
 var fire_zones: Array[Dictionary] = []
 var pending_fire_meteors: Array[Dictionary] = []
 var pending_lightning_strikes: Array[Dictionary] = []
+var resolving_damage := false
 var max_active_per_run := TIANJI_CATALOG.MAX_ACTIVE_PER_RUN
 
 func configure(player_actor: HeroActor, enemy_simulation: EnemySimulation, elite_actors: Array[EliteActor], boss_actor: BossActor, camera: Camera2D = null, slot_capacity: int = TIANJI_CATALOG.MAX_ACTIVE_PER_RUN) -> void:
@@ -50,6 +51,7 @@ func configure(player_actor: HeroActor, enemy_simulation: EnemySimulation, elite
 	fire_zones.clear()
 	pending_fire_meteors.clear()
 	pending_lightning_strikes.clear()
+	resolving_damage = false
 
 func active_skill_ids() -> Array[String]:
 	return slot_order.duplicate()
@@ -110,8 +112,8 @@ func apply_run_upgrade(upgrade_id: String) -> bool:
 		return false
 	var state: Dictionary = skill_states[skill_id] as Dictionary
 	match upgrade_id:
-		"tianji_lightning_cooldown", "tianji_wind_cooldown", "tianji_fire_cooldown", "tianji_arrow_cooldown": state["cooldown_bonus"] = minf(0.18, float(state.get("cooldown_bonus", 0.0)) + 0.06)
-		"tianji_lightning_damage", "tianji_fire_damage", "tianji_arrow_damage": state["damage_bonus"] = minf(0.75, float(state.get("damage_bonus", 0.0)) + 0.20)
+		"tianji_lightning_cooldown", "tianji_wind_cooldown", "tianji_water_cooldown", "tianji_fire_cooldown", "tianji_arrow_cooldown": state["cooldown_bonus"] = minf(0.18, float(state.get("cooldown_bonus", 0.0)) + 0.06)
+		"tianji_lightning_damage", "tianji_wind_damage", "tianji_water_damage", "tianji_fire_damage", "tianji_arrow_damage": state["damage_bonus"] = minf(0.75, float(state.get("damage_bonus", 0.0)) + 0.20)
 		"tianji_lightning_targets": state["target_bonus"] = mini(2, int(state.get("target_bonus", 0)) + 1)
 		"tianji_wind_slow", "tianji_water_slow": state["slow_bonus"] = minf(0.30, float(state.get("slow_bonus", 0.0)) + 0.08)
 		"tianji_wind_knockback": state["knockback_bonus"] = minf(0.75, float(state.get("knockback_bonus", 0.0)) + 0.20)
@@ -126,6 +128,7 @@ func apply_run_upgrade(upgrade_id: String) -> bool:
 func tick(delta: float) -> void:
 	if player == null or enemies == null:
 		return
+	resolving_damage = true
 	# Resolve queued impacts and lingering burn zones before advancing state
 	# transitions, so cooldown cannot begin while an effect is still presenting.
 	_tick_fire_zones(delta)
@@ -161,6 +164,10 @@ func tick(delta: float) -> void:
 		if float(state["cooldown_remaining"]) <= 0.0:
 			_begin_skill(skill_id, state)
 		skill_states[skill_id] = state
+	resolving_damage = false
+
+func is_resolving_damage() -> bool:
+	return resolving_damage
 
 func hud_slots() -> Array[Dictionary]:
 	var slots: Array[Dictionary] = []
@@ -392,7 +399,7 @@ func _apply_circle(center: Vector2, radius: float, damage: float, slow_multiplie
 	for id in range(EnemySimulation.CAPACITY):
 		if not enemies.is_active(id) or enemies.is_tianji_lifted(id) or not target_rect.has_point(enemies.positions[id]) or enemies.positions[id].distance_squared_to(center) > radius_squared:
 			continue
-		enemies.apply_damage(id, CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id)))
+		enemies.apply_tianji_damage(id, CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id)))
 		if slow_duration > 0.0:
 			enemies.apply_slow(id, slow_multiplier, slow_duration)
 		hit_count += 1
@@ -922,7 +929,7 @@ func _apply_wind_direct_hit(state: Dictionary, definition: Dictionary, damage: f
 	var slow_multiplier := _slow_multiplier(definition, state)
 	var slow_duration := float(definition.get("slow_duration", 1.65))
 	var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id))
-	enemies.apply_damage(id, final_damage)
+	enemies.apply_tianji_damage(id, final_damage)
 	enemies.apply_slow(id, slow_multiplier, slow_duration)
 	damage_applied.emit(1)
 
@@ -986,7 +993,7 @@ func _release_wind_unit(state: Dictionary, definition: Dictionary, unit: Diction
 		enemies.update_tianji_position(id, unit.get("origin_position", enemies.positions[id]))
 	enemies.set_tianji_lifted(id, false)
 	var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id))
-	var defeated := enemies.apply_damage(id, final_damage)
+	var defeated := enemies.apply_tianji_damage(id, final_damage)
 	if was_active:
 		damage_applied.emit(1)
 	if not defeated and enemies.is_active(id) and not protect_duel_formation:
@@ -1100,6 +1107,10 @@ func _skill_for_upgrade(upgrade_id: String) -> String:
 		return "xun_wind_break"
 	if upgrade_id.begins_with("tianji_water"):
 		return "eight_trigram_tide"
+	if upgrade_id.begins_with("tianji_fire"):
+		return "fire_rain_burning"
+	if upgrade_id.begins_with("tianji_arrow"):
+		return "arrow_support_volley"
 	return ""
 
 func _start_cooldown(state: Dictionary, skill_id: String) -> void:

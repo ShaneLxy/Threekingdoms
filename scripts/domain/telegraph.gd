@@ -17,6 +17,9 @@ var damage := 0.0
 var source := "enemy"
 var source_enemy_id := -1
 var visual_kind := ""
+## Optional hit de-duplication key for several visual lanes that belong to one attack.
+## Empty means every telegraph resolves independently.
+var hit_group := ""
 var movement_slow_multiplier := 1.0
 var movement_slow_duration := 0.0
 var clashable := false
