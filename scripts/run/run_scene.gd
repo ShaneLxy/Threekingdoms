@@ -7,6 +7,10 @@ const BOSS_TRIAL_WORLD_BOUNDS := Rect2(0, 0, 1672, 941)
 const BOSS_TRIAL_ARENA_BOUNDS := BattlefieldLayout.BOSS_TRIAL_ARENA_BOUNDS
 const CAMERA_LOOK_AHEAD := 68.0
 const DEFAULT_BATTLE_CAMERA_ZOOM := Vector2(1.55, 1.55)
+const NORMAL_GUARD_CAMERA_ZOOM_MULTIPLIER := 1.08
+const PERFECT_GUARD_CAMERA_ZOOM_MULTIPLIER := 1.16
+const NORMAL_GUARD_CAMERA_FOCUS_DURATION := 0.35
+const PERFECT_GUARD_CAMERA_FOCUS_DURATION := 0.60
 const NAMED_SPAWN_MARGIN := 72.0
 const ELITE_SPAWN_MIN_DISTANCE := 420.0
 const ELITE_SPAWN_MAX_DISTANCE := 560.0
@@ -37,7 +41,7 @@ const NORMAL_SKILL_CLASH_STANCE_DAMAGE := 27.0
 const PERFECT_SKILL_CLASH_STANCE_DAMAGE := 87.0
 const CLASH_TIME_SCALE := 0.50
 const NORMAL_CLASH_SLOW_DURATION := 0.35
-const EMPHATIC_CLASH_SLOW_DURATION := 0.50
+const EMPHATIC_CLASH_SLOW_DURATION := 0.60
 const VICTORY_CINEMATIC_HOLD_DURATION := 0.22
 const VICTORY_CINEMATIC_SALVO_INTERVAL := 0.42
 const VICTORY_CINEMATIC_FINAL_HOLD_DURATION := 0.34
@@ -87,6 +91,8 @@ var run_defeated_count := 0
 var run_damage_taken := 0.0
 var hitstop_remaining := 0.0
 var clash_slow_remaining := 0.0
+var battle_camera_focus_remaining := 0.0
+var battle_camera_focus_multiplier := 1.0
 const DUEL_HIT_LOG_PATH := "user://duel_hit_debug.log"
 var run_gold := 0
 var run_merit_fraction := 0.0
@@ -238,6 +244,7 @@ func _ready() -> void:
 	hud.result_reward_requested.connect(_on_result_reward_requested)
 	hud.restart_requested.connect(_on_restart_requested)
 	hud.resume_requested.connect(_on_resume_requested)
+	hud.combo_setting_changed.connect(_on_combo_setting_changed)
 	hud.home_requested.connect(_on_home_requested)
 	hud.retreat_requested.connect(_on_retreat_requested)
 	AdService.rewarded_video_completed.connect(_on_rewarded_video_completed)
@@ -609,13 +616,26 @@ func _configure_battle_camera() -> void:
 	battle_camera.limit_bottom = int(camera_bounds.end.y)
 	battle_camera.zoom = DEFAULT_BATTLE_CAMERA_ZOOM
 	battle_camera.position = Vector2(player.last_attack_direction.x * CAMERA_LOOK_AHEAD, 0.0)
+	battle_camera_focus_remaining = 0.0
+	battle_camera_focus_multiplier = 1.0
 	battle_camera.make_current()
 	battle_camera.reset_smoothing()
 	battle_camera.force_update_scroll()
 
 func _update_battle_camera(delta: float) -> void:
-	var target_offset: float = player.last_attack_direction.x * CAMERA_LOOK_AHEAD
+	var focus_active := battle_camera_focus_remaining > 0.0
+	battle_camera_focus_remaining = maxf(0.0, battle_camera_focus_remaining - delta)
+	var target_offset := 0.0 if focus_active else player.last_attack_direction.x * CAMERA_LOOK_AHEAD
+	var target_zoom := DEFAULT_BATTLE_CAMERA_ZOOM * (battle_camera_focus_multiplier if focus_active else 1.0)
 	battle_camera.position.x = move_toward(battle_camera.position.x, target_offset, 300.0 * delta)
+	battle_camera.zoom = battle_camera.zoom.lerp(target_zoom, minf(1.0, delta * (14.0 if focus_active else 8.0)))
+
+func _focus_battle_camera_after_guard(perfect: bool) -> void:
+	var focus_duration := PERFECT_GUARD_CAMERA_FOCUS_DURATION if perfect else NORMAL_GUARD_CAMERA_FOCUS_DURATION
+	var focus_multiplier := PERFECT_GUARD_CAMERA_ZOOM_MULTIPLIER if perfect else NORMAL_GUARD_CAMERA_ZOOM_MULTIPLIER
+	if focus_duration >= battle_camera_focus_remaining:
+		battle_camera_focus_multiplier = focus_multiplier
+	battle_camera_focus_remaining = maxf(battle_camera_focus_remaining, focus_duration)
 
 func _battle_visible_world_rect() -> Rect2:
 	if battle_camera == null:
@@ -765,7 +785,7 @@ func _on_player_camera_shake(strength: float) -> void:
 		renderer.add_named_skill_shake(strength)
 
 func _on_player_attack(request: AttackRequest) -> void:
-	if request.label in ["丈八跃砸", "据水断桥·跃砸"]:
+	if request.label in ["丈八跃砸", "据水断桥·跃砸", "蛇矛掷阵·裂地·首震"]:
 		AudioService.play_zhang_fei_ground_slam()
 	if request.clears_projectiles:
 		_clear_projectiles_in_attack(request)
@@ -774,7 +794,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 	# path uses the dedicated guard button instead.
 	var clashed_elite_ids: Dictionary = {}
 	var clashed_boss := false
-	var hit_count := combat.resolve_hero_attack(request, player.base_attack, player.attack_bonus, enemies)
+	var hit_count := combat.resolve_hero_attack(request, player.total_attack(), 0.0, enemies)
 	var combo_hit_count := hit_count
 	for elite in elites:
 		var elite_id := elite.get_instance_id()
@@ -790,7 +810,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 				request.total_hits += 1
 				hit_count += 1
 				continue
-			var elite_damage := CombatMath.final_damage(player.base_attack, request.damage_multiplier_at(elite.position), player.attack_bonus, elite.armor())
+			var elite_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(elite.position), 0.0, elite.armor())
 			elite_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, elite_damage)
 			var elite_result := elite.receive_player_hit(elite_damage)
 			var elite_actual_damage := float(elite_result.get("damage", 0.0))
@@ -824,7 +844,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 			request.total_hits += 1
 			hit_count += 1
 		else:
-			var boss_damage := CombatMath.final_damage(player.base_attack, request.damage_multiplier_at(boss.position), player.attack_bonus, boss.armor())
+			var boss_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(boss.position), 0.0, boss.armor())
 			boss_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.BOSS, "boss", request, boss_damage)
 			var vulnerable_stance_damage := (request.stance_damage if request.stance_damage > 0.0 else BossActor.VULNERABLE_DEFAULT_STANCE_DAMAGE) if boss.is_vulnerable() else 0.0
 			var boss_result := boss.receive_player_hit(boss_damage, vulnerable_stance_damage)
@@ -950,7 +970,7 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 		if telegraph.source == "boss" and boss.active and _can_clash_named_target(request, boss.position):
 			var perfect := telegraph.remaining <= PERFECT_WEAPON_CLASH_WINDOW
 			telegraphs.remove_at(index)
-			var boss_broken := boss.add_stance_damage(_clash_stance_damage(perfect, clash_kind))
+			var boss_broken := boss.add_stance_damage(_clash_stance_damage(perfect, clash_kind), perfect)
 			result["boss"] = true
 			_finalize_weapon_clash((player.position + boss.position) * 0.5, perfect, clash_kind, boss.display_name(), boss_broken, boss)
 			return result
@@ -961,7 +981,7 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 			continue
 		var perfect := telegraph.remaining <= PERFECT_WEAPON_CLASH_WINDOW
 		telegraphs.remove_at(index)
-		var elite_broken := elite.add_stance_damage(_clash_stance_damage(perfect, clash_kind))
+		var elite_broken := elite.add_stance_damage(_clash_stance_damage(perfect, clash_kind), perfect)
 		var clashed_elite_ids: Dictionary = result.get("elite_ids", {}) as Dictionary
 		clashed_elite_ids[elite.get_instance_id()] = true
 		result["elite_ids"] = clashed_elite_ids
@@ -1151,6 +1171,10 @@ func _on_player_combat_action_finished(action_id: String) -> void:
 	player.consume_weapon_clash_window()
 	if action_id == "firewheel":
 		AudioService.stop_hero_firewheel_loop()
+	if action_id.begins_with("basic_"):
+		input_router.on_basic_action_finished()
+	elif action_id == "firewheel":
+		input_router.call_deferred("on_firewheel_action_finished")
 	var action_hit := bool(action_audio_hits.get(action_id, false))
 	if action_audio_hits.has(action_id) and not action_hit:
 		AudioService.play_hero_miss()
@@ -1192,6 +1216,7 @@ func _audio_action_id_for_request(request: AttackRequest) -> String:
 		"扫阵横击": return "basic_1"
 		"蛇矛挑阵": return "basic_2"
 		"断阵横掷", "丈八跃砸": return "basic_3"
+		"蛇矛掷阵·裂地·首震", "蛇矛掷阵·裂地": return "basic_4"
 		"据水断桥·掀阵", "据水断桥·跃砸": return "active"
 		"万夫莫开·怒喝震阵", "万夫莫开·横扫", "万夫莫开·掀阵", "万夫莫开·断阵": return "ultimate"
 		"银枪点阵": return "basic_1"
@@ -1736,12 +1761,12 @@ func _try_resolve_guard(telegraph: Telegraph) -> bool:
 	if is_named and not guard_named_reward_consumed:
 		guard_named_reward_consumed = true
 		if telegraph.source == "boss" and boss.active:
-			var boss_broken := boss.add_stance_damage(_clash_stance_damage(perfect, Telegraph.ClashKind.BASIC))
+			var boss_broken := boss.add_stance_damage(_clash_stance_damage(perfect, Telegraph.ClashKind.BASIC), perfect)
 			_finalize_guard_named_block((player.position + boss.position) * 0.5, perfect, boss.display_name(), boss_broken, boss)
 		elif telegraph.source.begins_with("elite:"):
 			var elite := _elite_for_telegraph_source(telegraph.source)
 			if elite != null and elite.active:
-				var elite_broken := elite.add_stance_damage(_clash_stance_damage(perfect, Telegraph.ClashKind.BASIC))
+				var elite_broken := elite.add_stance_damage(_clash_stance_damage(perfect, Telegraph.ClashKind.BASIC), perfect)
 				_finalize_guard_named_block((player.position + elite.position) * 0.5, perfect, elite.display_name(), elite_broken, elite)
 			else:
 				_finalize_guard_minor(telegraph)
@@ -1780,7 +1805,28 @@ func _finalize_guard_named_block(at: Vector2, perfect: bool, target_name: String
 		named_target.call("grant_counterattack")
 	renderer.add_weapon_clash(at, perfect, false)
 	var contact_direction: Vector2 = (named_target.position - player.position).normalized() if is_instance_valid(named_target) else player.guard_direction
+	if contact_direction.length_squared() <= 0.01:
+		contact_direction = player.guard_direction
 	renderer.add_guard_feedback(at, contact_direction, perfect)
+	if named_target is BossActor:
+		var boss_reaction_distance := BossActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else BossActor.GUARD_REACTION_DISTANCE
+		var boss_start: Vector2 = named_target.position
+		var boss_destination: Vector2 = _clamp_named_spawn(boss_start + contact_direction * boss_reaction_distance)
+		if enemies.is_duel_formation_active():
+			boss_destination = enemies.constrain_named_to_duel_formation(boss_destination, 40.0)
+		named_target.apply_guard_reaction_knockback(contact_direction, perfect, boss_start.distance_to(boss_destination))
+		named_target.position = boss_destination
+		_interrupt_boss_action_for_knockback()
+	elif named_target is EliteActor:
+		var elite_reaction_distance := EliteActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else EliteActor.GUARD_REACTION_DISTANCE
+		var elite_start: Vector2 = named_target.position
+		var elite_destination: Vector2 = _clamp_named_spawn(elite_start + contact_direction * elite_reaction_distance)
+		if enemies.is_duel_formation_active():
+			elite_destination = enemies.constrain_named_to_duel_formation(elite_destination, 32.0)
+		named_target.apply_guard_reaction_knockback(contact_direction, perfect, elite_start.distance_to(elite_destination))
+		named_target.position = elite_destination
+		_interrupt_elite_action_for_knockback(named_target)
+	_focus_battle_camera_after_guard(perfect)
 	hitstop_remaining = maxf(hitstop_remaining, 0.17 if perfect else 0.12)
 	_start_clash_slowmotion(perfect, false)
 	_record_weapon_clash_audio(perfect, false)
@@ -1966,6 +2012,10 @@ func _on_resume_requested() -> void:
 	AudioService.set_battle_voiceovers_paused(false)
 	hud.hide_pause()
 	input_router.set_input_enabled(true)
+
+func _on_combo_setting_changed(value: bool) -> void:
+	input_router.combo_enabled = value
+	SaveService.set_setting("auto_combo_enabled", value)
 
 func _on_home_requested() -> void:
 	SceneRouter.go_home()

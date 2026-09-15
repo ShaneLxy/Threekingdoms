@@ -28,12 +28,16 @@ const LV_BU_MOVE_SPEED := 150.0
 const LV_BU_PHASE_MOVE_SPEED_BONUS := 15.0
 const THREAT_HEALTH_MULTIPLIERS := [1.0, 1.35, 1.80, 2.35, 3.00]
 const THREAT_DAMAGE_MULTIPLIERS := [1.0, 1.12, 1.28, 1.48, 1.72]
-const STANCE_MAX := 160.0
-const LV_BU_STANCE_MAX := 120.0
+const STANCE_MAX := 120.0
+const LV_BU_STANCE_MAX := 130.0
 const STANCE_BREAK_DURATION := 4.8
-const STANCE_BREAK_DAMAGE_MULTIPLIER := 1.20
+const STANCE_BREAK_DAMAGE_MULTIPLIER := 1.40
 const STANCE_BREAK_MAX_HIT_KNOCKBACK := 32.0
 const STANCE_BREAK_RECOIL_DURATION := 0.20
+const GUARD_REACTION_DISTANCE := 110.0
+const PERFECT_GUARD_REACTION_DISTANCE := 210.0
+const GUARD_REACTION_DURATION := 1.0
+const PERFECT_GUARD_REACTION_DURATION := 2.0
 const DEATH_ANIMATION_DURATION := 0.64
 const PURSUIT_COOLDOWN := 7.5
 const PURSUIT_DASH_DURATION := 0.45
@@ -160,6 +164,8 @@ var moving := false
 var stance := STANCE_MAX
 var stance_break_remaining := 0.0
 var stance_knockback_remaining := 0.0
+var stance_break_damage_multiplier := STANCE_BREAK_DAMAGE_MULTIPLIER
+var guard_reaction_knockback_active := false
 var hurt_remaining := 0.0
 var knockback_visual_remaining := 0.0
 var knockback_visual_duration := 0.0
@@ -263,6 +269,8 @@ func activate(at: Vector2, new_threat_tier: int = 0) -> void:
 	stance = stance_max()
 	stance_break_remaining = 0.0
 	stance_knockback_remaining = 0.0
+	stance_break_damage_multiplier = STANCE_BREAK_DAMAGE_MULTIPLIER
+	guard_reaction_knockback_active = false
 	hurt_remaining = 0.0
 	knockback_visual_remaining = 0.0
 	knockback_visual_duration = 0.0
@@ -335,6 +343,8 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 	var was_stance_broken := stance_break_remaining > 0.0
 	stance_break_remaining = maxf(0.0, stance_break_remaining - delta)
 	knockback_visual_remaining = maxf(0.0, knockback_visual_remaining - delta)
+	if knockback_visual_remaining <= 0.0:
+		guard_reaction_knockback_active = false
 	if was_stance_broken:
 		# Keep the break state active while the stance bar rebuilds from zero.
 		var recovery_ratio := 1.0 - stance_break_remaining / STANCE_BREAK_DURATION
@@ -342,6 +352,9 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 		if stance_break_remaining <= 0.0:
 			stance = stance_max()
 			stance_knockback_remaining = 0.0
+	if is_guard_knockback_active():
+		moving = false
+		return
 	if state in [State.WINDUP, State.ULTIMATE_AIRBORNE, State.ULTIMATE_LANDING] or (state == State.RECOVER and current_action == "flame_slash_combo" and flame_slash_wave_count < FLAME_SLASH_COMBO_WAVE_COUNT):
 		action_animation_elapsed += delta
 	if state == State.VULNERABLE:
@@ -479,7 +492,7 @@ func receive_player_hit(amount: float, vulnerable_stance_damage: float = 0.0) ->
 		return {"damage": 0.0, "stance_broken": false}
 	if cast_invulnerable and not is_vulnerable():
 		return {"damage": 0.0, "stance_broken": false, "invulnerable": true}
-	var actual := amount * (STANCE_BREAK_DAMAGE_MULTIPLIER if is_stance_broken() else 1.0)
+	var actual := amount * (stance_break_damage_multiplier if is_stance_broken() else 1.0)
 	hurt_remaining = 0.14
 	var dealt := health_component.take_damage(actual)
 	var stance_broken_now := false
@@ -522,13 +535,14 @@ func apply_slow(multiplier: float, duration: float) -> void:
 	slow_remaining = maxf(slow_remaining, duration)
 	slow_multiplier = minf(slow_multiplier, clampf(multiplier, 0.45, 1.0))
 
-func add_stance_damage(amount: float) -> bool:
+func add_stance_damage(amount: float, perfect: bool = false) -> bool:
 	if not active or is_stance_broken() or amount <= 0.0:
 		return false
 	stance = maxf(0.0, stance - amount)
 	if stance > 0.0:
 		return false
 	stance_break_remaining = STANCE_BREAK_DURATION
+	stance_break_damage_multiplier = STANCE_BREAK_DAMAGE_MULTIPLIER + (0.10 if perfect else 0.0)
 	# A successful stance break ends the current string and guarantees a
 	# genuine retaliation window instead of allowing queued follow-up hits.
 	combo_steps.clear()
@@ -568,6 +582,26 @@ func apply_guard_knockback(direction: Vector2, force: float, forced_displacement
 	knockback_visual_remaining = knockback_visual_duration
 	knockback_visual_intensity = clampf(displacement / 9.0, 0.20, 0.55)
 	return displacement
+
+func apply_guard_reaction_knockback(direction: Vector2, perfect: bool = false, max_displacement: float = INF) -> float:
+	if not active or direction.length_squared() <= 0.01:
+		return 0.0
+	var normalized_direction := direction.normalized()
+	var requested_displacement := PERFECT_GUARD_REACTION_DISTANCE if perfect else GUARD_REACTION_DISTANCE
+	var displacement := minf(requested_displacement, maxf(0.0, max_displacement))
+	if displacement <= 0.0:
+		return 0.0
+	position = _clamp_to_movement_bounds(position + normalized_direction * displacement)
+	knockback_visual_direction = normalized_direction
+	knockback_visual_displacement = displacement
+	knockback_visual_duration = PERFECT_GUARD_REACTION_DURATION if perfect else GUARD_REACTION_DURATION
+	knockback_visual_remaining = knockback_visual_duration
+	knockback_visual_intensity = 1.0 if perfect else 0.72
+	guard_reaction_knockback_active = true
+	return displacement
+
+func is_guard_knockback_active() -> bool:
+	return active and guard_reaction_knockback_active and knockback_visual_remaining > 0.0
 
 func is_knockback_visual_active() -> bool:
 	return active and knockback_visual_remaining > 0.0

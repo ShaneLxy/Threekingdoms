@@ -1882,7 +1882,7 @@ func _on_attack_sound_requested(sound_type: String) -> void:
 		# 播放火焰音效
 		pass  # TODO: 实际播放音效逻辑
 
-func _spawn_ground_impact_effect(at: Vector2, scale_multiplier: float) -> void:
+func _spawn_ground_impact_effect(at: Vector2, scale_multiplier: Variant) -> void:
 	var effect_scene = preload("res://scenes/effects/ground_impact_wave.tscn")
 	var effect_instance = effect_scene.instantiate()
 	effect_instance.position = at
@@ -1892,6 +1892,17 @@ func _spawn_ground_impact_effect(at: Vector2, scale_multiplier: float) -> void:
 func _on_hero_visual_effect_started(effect_id: String, origin: Vector2, direction: Vector2, travel_distance: float, metadata: Dictionary) -> void:
 	if effect_id == "firewheel_ring":
 		firewheel_rings.append({"position": origin, "direction": direction.normalized(), "remaining": travel_distance})
+	elif effect_id == "zhang_fourth_ground_wave":
+		var effect_scene = preload("res://scenes/effects/ground_impact_wave.tscn")
+		var effect_instance = effect_scene.instantiate()
+		effect_instance.position = origin
+		effect_instance.configure({
+			"flip_h": bool(metadata.get("flip_h", direction.x < 0.0)),
+			"max_frame": int(metadata.get("max_frame", -1)),
+			"scale": float(metadata.get("scale", 0.32)),
+			"speed_scale": float(metadata.get("speed_scale", 1.0)),
+		})
+		add_child(effect_instance)
 	elif effect_id in ["guan_drag_wave", "guan_active_wave", "guan_wusheng_wave", "guan_fourth_wave"]:
 		var frame_max := clampi(int(metadata.get("max_frame", 4)), 0, 13)
 		var expansion_frames := _guan_knife_wave_expansion_frames(frame_max)
@@ -4026,7 +4037,7 @@ func _draw_boss() -> void:
 	var recoil_tilt := (0.08 + recoil_wave * 0.14 * boss.knockback_visual_strength()) * (-1.0 if spear_direction.x < 0.0 else 1.0) if boss.is_knockback_visual_active() else 0.0
 	var recoil_scale_x := 1.0 + recoil_wave * 0.10 * boss.knockback_visual_strength()
 	var recoil_scale_y := 1.0 - recoil_wave * 0.06 * boss.knockback_visual_strength()
-	if boss.is_knockback_visual_active():
+	if boss.is_guard_knockback_active():
 		texture = BOSS_ZHANG_HE_DEATH_TEXTURES[0]
 	else:
 		var idle_frame := int(visual_time / BOSS_ZHANG_HE_IDLE_FRAME_DURATION) % BOSS_ZHANG_HE_IDLE_TEXTURES.size()
@@ -4125,7 +4136,7 @@ func _draw_lv_bu_death_sprite(at: Vector2, direction: Vector2) -> void:
 
 func _lv_bu_frame_data() -> Dictionary:
 	if boss.is_knockback_visual_active():
-		if boss.is_stance_broken():
+		if boss.is_guard_knockback_active() or boss.is_stance_broken():
 			return {"texture": BOSS_LV_BU_DEATH_TEXTURES[0], "anchor": BOSS_LV_BU_DEATH_FOOT_ANCHORS[0], "scale": 1.0, "weapon_tip": BOSS_LV_BU_DEFAULT_WEAPON_TIP}
 		return {"texture": BOSS_LV_BU_ATTACK_1_TEXTURES[0], "anchor": BOSS_LV_BU_ATTACK_1_FOOT_ANCHORS[0], "scale": BOSS_LV_BU_ATTACK_1_FRAME_SCALES[0], "weapon_tip": BOSS_LV_BU_ATTACK_1_WEAPON_TIPS[0]}
 	if boss.state in [BossActor.State.WINDUP, BossActor.State.DASH, BossActor.State.RECOVER]:
@@ -4156,6 +4167,8 @@ func _lv_bu_attack_frame_data(action: String, progress: float) -> Dictionary:
 
 func _xiahou_dun_frame_data() -> Dictionary:
 	if boss.is_knockback_visual_active():
+		if boss.is_guard_knockback_active():
+			return {"texture": BOSS_XIAHOU_DUN_DEATH_TEXTURES[0], "anchor": BOSS_XIAHOU_DUN_DEATH_FOOT_ANCHORS[0]}
 		return {"texture": BOSS_XIAHOU_DUN_ATTACK_1_TEXTURES[0], "anchor": BOSS_XIAHOU_DUN_ATTACK_1_FOOT_ANCHORS[0]}
 	# Keep dash attacks on their attack sequence even while the actor is moving.
 	if boss.state in [BossActor.State.WINDUP, BossActor.State.DASH, BossActor.State.RECOVER]:

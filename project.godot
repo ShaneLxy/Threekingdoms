@@ -23,6 +23,8 @@ AudioService="*res://autoload/audio_service.gd"
 LoadingOverlay="*res://autoload/loading_overlay.gd"
 SceneRouter="*res://autoload/scene_router.gd"
 HapticService="*res://autoload/haptic_service.gd"
+GodotTapTap="*uid://bpp7y32oxqroc"
+TapAuthService="*res://autoload/tap_auth_service.gd"
 
 [display]
 
@@ -31,6 +33,10 @@ window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/GodotTapTapSDK/plugin.cfg")
 
 [rendering]
 

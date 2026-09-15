@@ -21,8 +21,10 @@ var touch_move_current := Vector2.ZERO
 var touch_attack_index := -1
 var touch_attack_start := Vector2.ZERO
 var mouse_attack_held := false
+var mouse_drag_held := false
 var mouse_active_held := false
 var touch_active_index := -1
+var touch_drag_index := -1
 var active_hold_tracking := false
 var basic_hold_pending := false
 var basic_hold_active := false
@@ -31,6 +33,8 @@ var suspended_basic_hold := false
 var suspended_basic_mouse := false
 var suspended_basic_touch := false
 var suspended_basic_release_pending := false
+var combo_enabled := true
+var basic_button_held := false
 
 const MOVE_MAX_DISTANCE := 110.0
 const MOVE_DEAD_ZONE := 10.0
@@ -39,6 +43,28 @@ const BASIC_HOLD_TRIGGER_DURATION := 0.24
 func configure(player_actor: HeroActor, battle_hud: BattleHud) -> void:
 	player = player_actor
 	hud = battle_hud
+	combo_enabled = SaveService.setting_enabled("auto_combo_enabled")
+	basic_button_held = false
+	hud.set_combo_enabled(combo_enabled)
+
+func on_basic_action_finished() -> void:
+	if not combo_enabled or not basic_button_held or player == null or player.is_defeated():
+		return
+	if not player.is_action_locked() and not player.is_guard_active():
+		player.request_basic(movement_direction())
+
+func on_firewheel_action_finished() -> void:
+	# Firewheel is inserted after Zhao Yun's third basic strike and emits its
+	# own completion signal. Resume at stage one only after the actor has left
+	# the firewheel state, and only while the attack button is still held.
+	if not combo_enabled or not basic_button_held or player == null or player.is_defeated():
+		return
+	if player.is_action_locked() or player.is_guard_active():
+		return
+	player.request_basic(movement_direction())
+
+func cancel_basic_auto_intent() -> void:
+	basic_button_held = false
 
 func set_input_enabled(value: bool) -> void:
 	if enabled == value:
@@ -62,11 +88,14 @@ func reset_touch_state() -> void:
 	touch_move_start = Vector2.ZERO
 	touch_move_current = Vector2.ZERO
 	touch_attack_index = -1
+	touch_drag_index = -1
 	touch_attack_start = Vector2.ZERO
 	mouse_attack_held = false
+	mouse_drag_held = false
 	mouse_active_held = false
 	touch_active_index = -1
 	_reset_basic_hold_state()
+	basic_button_held = false
 	_reset_active_hold_state()
 	if hud != null:
 		hud.clear_move_stick_offset()
@@ -113,16 +142,40 @@ func _process(delta: float) -> void:
 func _begin_basic_press(direction: Vector2 = Vector2.ZERO) -> void:
 	if hud != null:
 		hud.set_control_pressed("attack", true)
-	if not player.supports_basic_hold() or player.is_action_locked():
-		basic_requested.emit(direction)
+	# Keep Guan Yu's original single-button drag behavior when combo mode is off.
+	if player.supports_basic_hold() and not combo_enabled:
+		basic_hold_pending = true
+		basic_hold_active = false
+		basic_hold_elapsed = 0.0
 		return
-	basic_hold_pending = true
-	basic_hold_active = false
-	basic_hold_elapsed = 0.0
+	basic_button_held = true
+	basic_requested.emit(direction)
 
 func _end_basic_press(direction: Vector2 = Vector2.ZERO) -> void:
 	if hud != null:
 		hud.set_control_pressed("attack", false)
+	if player.supports_basic_hold() and not combo_enabled:
+		if basic_hold_pending:
+			basic_requested.emit(direction)
+		elif basic_hold_active:
+			basic_hold_released.emit(direction)
+		_reset_basic_hold_state()
+		return
+	basic_button_held = false
+	_reset_basic_hold_state()
+
+func _begin_drag_press(direction: Vector2 = Vector2.ZERO) -> void:
+	if player == null or not player.supports_basic_hold():
+		return
+	if hud != null:
+		hud.set_control_pressed("drag", true)
+	basic_hold_pending = true
+	basic_hold_active = false
+	basic_hold_elapsed = 0.0
+
+func _end_drag_press(direction: Vector2 = Vector2.ZERO) -> void:
+	if hud != null:
+		hud.set_control_pressed("drag", false)
 	if basic_hold_pending:
 		basic_requested.emit(direction)
 	elif basic_hold_active:
@@ -135,6 +188,7 @@ func _reset_basic_hold_state() -> void:
 	basic_hold_elapsed = 0.0
 
 func _begin_active_press(direction: Vector2 = Vector2.ZERO) -> bool:
+	cancel_basic_auto_intent()
 	if player == null or not player.supports_active_hold():
 		if hud != null:
 			hud.set_control_pressed("active", true)
@@ -167,6 +221,7 @@ func _emit_guard_request(direction: Vector2) -> void:
 	# release that would otherwise re-fire the cancelled attack.
 	mouse_attack_held = false
 	touch_attack_index = -1
+	cancel_basic_auto_intent()
 	_reset_basic_hold_state()
 	guard_requested.emit(direction)
 
@@ -222,6 +277,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				ultimate_requested.emit(Vector2.ZERO)
 	elif event is InputEventMouseButton:
 		if not event.pressed:
+			if event.button_index == MOUSE_BUTTON_LEFT and mouse_drag_held:
+				mouse_drag_held = false
+				_end_drag_press(movement_direction())
+				return
 			if event.button_index == MOUSE_BUTTON_RIGHT and mouse_active_held:
 				mouse_active_held = false
 				_end_active_press(movement_direction())
@@ -246,14 +305,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.position.distance_to(hud.move_center()) <= hud.move_capture_radius():
 				return
-			elif event.position.distance_to(hud.active_center()) < 65.0:
-				mouse_active_held = _begin_active_press(movement_direction())
-			elif event.position.distance_to(hud.ultimate_center()) < 65.0:
-				hud.set_control_pressed("ultimate", true)
-				ultimate_requested.emit(Vector2.ZERO)
-			else:
-				mouse_attack_held = true
-				_begin_basic_press(Vector2.ZERO)
+		elif event.position.distance_to(hud.active_center()) < 65.0:
+			mouse_active_held = _begin_active_press(movement_direction())
+		elif event.position.distance_to(hud.ultimate_center()) < 65.0:
+			hud.set_control_pressed("ultimate", true)
+			ultimate_requested.emit(Vector2.ZERO)
+		elif hud.is_guan_drag_split() and event.position.distance_to(hud.guan_drag_center()) <= 52.0:
+			mouse_drag_held = true
+			_begin_drag_press(Vector2.ZERO)
+		else:
+			mouse_attack_held = true
+			_begin_basic_press(Vector2.ZERO)
 	elif event is InputEventScreenTouch:
 		_handle_touch(event)
 	elif event is InputEventScreenDrag:
@@ -281,6 +343,9 @@ func _handle_touch(event: InputEventScreenTouch) -> void:
 			weapon_stance_requested.emit()
 		elif hud.is_guard_hit(event.position):
 			_emit_guard_request(movement_direction())
+		elif hud.is_guan_drag_split() and event.position.distance_to(hud.guan_drag_center()) <= 52.0:
+			touch_drag_index = event.index
+			_begin_drag_press(Vector2.ZERO)
 		else:
 			touch_attack_index = event.index
 			touch_attack_start = event.position
@@ -292,6 +357,9 @@ func _handle_touch(event: InputEventScreenTouch) -> void:
 		if event.index == touch_attack_index:
 			touch_attack_index = -1
 			_end_basic_press(movement_direction())
+		if event.index == touch_drag_index:
+			touch_drag_index = -1
+			_end_drag_press(movement_direction())
 		if event.index == touch_active_index:
 			touch_active_index = -1
 			_end_active_press(movement_direction())

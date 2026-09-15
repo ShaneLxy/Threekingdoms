@@ -39,11 +39,10 @@ func show_rewarded_video(placement: String) -> bool:
 			return true
 		_complete(placement, false, "广告暂不可用")
 		return false
-	if OS.is_debug_build():
-		get_tree().create_timer(0.35, true).timeout.connect(_complete.bind(placement, true, "开发模拟：广告奖励已发放"))
-		return true
-	_complete(placement, false, "广告服务尚未配置")
-	return false
+	# Ads are not wired yet. Grant the reward immediately so revive/shop/result
+	# flows keep working on device builds.
+	get_tree().create_timer(0.05, true).timeout.connect(_complete.bind(placement, true, ""))
+	return true
 
 func is_showing_rewarded_video() -> bool:
 	return not active_placement.is_empty()

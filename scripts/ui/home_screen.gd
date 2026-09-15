@@ -14,6 +14,8 @@ const CHANGBAN_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/cha
 const BOSS_TRIAL_PREVIEW_TEXTURE = preload("res://assets/art/environment/shilian/trial-preview.png")
 const NON_COMBAT_BACKGROUND_TEXTURE = preload("res://assets/art/ui/backgrounds/bg.png")
 const TITLE_LOGO_TEXTURE = preload("res://assets/art/ui/title/logo.png")
+const TAPTAP_LOGIN_BUTTON_TEXTURE = preload("res://assets/art/ui/title/taptap_login_button.png")
+const TAPTAP_LOGIN_BUTTON_SIZE := Vector2(292.0, 54.0)
 const TITLE_FRAME_DIRECTORY := "res://assets/art/ui/title/frames"
 const TITLE_FRAME_COUNT := 226
 const TITLE_FRAME_RATE := 15.0
@@ -236,6 +238,8 @@ var title_elapsed := 0.0
 var title_start_input_held := false
 var title_enter_seal_remaining := 0.0
 var title_menu_fade_remaining := 0.0
+var title_login_button: Button
+var title_status := ""
 var title_frame_layer: TextureRect
 var title_frame_transition_layer: TextureRect
 var title_frame_paths := PackedStringArray()
@@ -271,6 +275,8 @@ func _ready() -> void:
 	_setup_title_frame_player()
 	profile = SaveService.load_profile()
 	AdService.rewarded_video_completed.connect(_on_rewarded_video_completed)
+	TapAuthService.gate_ready.connect(_on_tap_gate_ready)
+	TapAuthService.auth_state_changed.connect(_on_tap_auth_state_changed)
 	AudioService.apply_settings(profile.get("settings", {}) as Dictionary)
 	AudioService.play_title_bgm()
 	LoadingOverlay.finish_transition()
@@ -296,9 +302,12 @@ func _run_hero_select_layout_diagnostic() -> void:
 func _process(delta: float) -> void:
 	var needs_redraw := false
 	if page == "title":
+		var was_revealed := title_elapsed >= TITLE_REVEAL_DURATION
 		title_elapsed += delta
 		_update_title_frame(delta)
 		needs_redraw = true
+		if not was_revealed and title_elapsed >= TITLE_REVEAL_DURATION:
+			_refresh_title_auth_ui()
 	if title_enter_seal_remaining > 0.0:
 		title_enter_seal_remaining = maxf(0.0, title_enter_seal_remaining - delta)
 		needs_redraw = true
@@ -340,13 +349,77 @@ func _show_title() -> void:
 			title_frame_transition_layer.modulate.a = 0.0
 		_update_title_frame(0.0, true)
 	_clear_buttons()
+	_refresh_title_auth_ui()
 	grab_focus()
 	queue_redraw()
 
 func _enter_from_title() -> void:
 	if page != "title" or title_elapsed < TITLE_REVEAL_DURATION or title_start_input_held or title_enter_seal_remaining > 0.0:
 		return
+	if TapAuthService.requires_taptap_login():
+		return
 	title_enter_seal_remaining = TITLE_ENTER_SEAL_DURATION
+	queue_redraw()
+
+func _on_tap_gate_ready() -> void:
+	if page != "title":
+		return
+	_refresh_title_auth_ui()
+	TapAuthService.start_title_flow()
+
+func _on_tap_auth_state_changed() -> void:
+	if page != "title":
+		return
+	if TapAuthService.last_compliance_code == TapAuthService.COMPLIANCE_OK:
+		_enter_from_title_after_auth()
+		return
+	_refresh_title_auth_ui()
+
+func _create_taptap_login_button(at: Vector2, button_size: Vector2) -> Button:
+	var button := Button.new()
+	button.position = at
+	button.size = button_size
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var empty := StyleBoxEmpty.new()
+	button.add_theme_stylebox_override("normal", empty)
+	button.add_theme_stylebox_override("hover", empty)
+	button.add_theme_stylebox_override("pressed", empty)
+	button.add_theme_stylebox_override("disabled", empty)
+	button.add_theme_stylebox_override("focus", empty)
+	button.pressed.connect(TapAuthService.start_login)
+	var art := TextureRect.new()
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	art.texture = TAPTAP_LOGIN_BUTTON_TEXTURE
+	button.add_child(art)
+	add_child(button)
+	buttons.append(button)
+	return button
+
+func _enter_from_title_after_auth() -> void:
+	if page != "title" or title_enter_seal_remaining > 0.0:
+		return
+	title_enter_seal_remaining = TITLE_ENTER_SEAL_DURATION
+	queue_redraw()
+
+func _refresh_title_auth_ui() -> void:
+	if page != "title":
+		return
+	title_status = TapAuthService.title_prompt_text()
+	if title_status.is_empty():
+		title_status = TapAuthService.status_message
+	if title_login_button != null and is_instance_valid(title_login_button):
+		buttons.erase(title_login_button)
+		title_login_button.queue_free()
+	title_login_button = null
+	if TapAuthService.should_show_login_button() and title_elapsed >= TITLE_REVEAL_DURATION:
+		var button_size := TAPTAP_LOGIN_BUTTON_SIZE
+		var at := Vector2(size.x * 0.76 - button_size.x * 0.5, size.y * 0.72)
+		title_login_button = _create_taptap_login_button(at, button_size)
 	queue_redraw()
 
 func _show_main() -> void:
@@ -449,7 +522,7 @@ func _populate_story_expedition() -> void:
 		var definition := _story_chapter_definition(chapter_id)
 		var unlocked := SaveService.is_story_chapter_unlocked(index + 1)
 		var selected := selected_story_chapter_id == chapter_id
-		var status := "" if selected else ("可出征" if unlocked else "通关前章解锁")
+		var status := "当前选中" if selected else ("可出征" if unlocked else "通关前章解锁")
 		var chapter_title := str(definition.get("title", "第%d章" % (index + 1)))
 		var chapter_button := _create_button(chapter_title, status, _story_route_button_position(index), Callable(self, "_select_story_chapter").bind(chapter_id), STORY_ROUTE_BUTTON_SIZE, not unlocked, 14)
 		if not unlocked:
@@ -457,7 +530,9 @@ func _populate_story_expedition() -> void:
 		elif selected:
 			if not (SaveService.tutorial_stage() == 16 and chapter_id == "story_01"):
 				chapter_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			_set_button_owned_visual(chapter_button)
+			chapter_button.pivot_offset = STORY_ROUTE_BUTTON_SIZE * 0.5
+			chapter_button.scale = Vector2.ONE * 1.05
+			_set_button_selected_visual(chapter_button)
 	var selected_definition := _story_chapter_definition(selected_story_chapter_id)
 	var selected_index := STORY_CHAPTER_IDS.find(selected_story_chapter_id)
 	var can_start := selected_index >= 0 and SaveService.is_story_chapter_unlocked(selected_index + 1)
@@ -706,6 +781,7 @@ func _add_hero_tree_branch(content: Control, branch: Dictionary, branch_y: float
 	var nodes: Array = branch.get("nodes", []) as Array
 	var layouts: Array[Dictionary] = []
 	var layout_by_id: Dictionary = {}
+	var occupied_cells := {}
 	var core_row := 0
 	var free_row := 0
 	var maximum_row := 0
@@ -727,6 +803,9 @@ func _add_hero_tree_branch(content: Control, branch: Dictionary, branch_y: float
 		else:
 			row = free_row
 			free_row += 1
+		while occupied_cells.has("%d,%d" % [column, row]):
+			row += 1
+		occupied_cells["%d,%d" % [column, row]] = true
 		maximum_row = maxi(maximum_row, row)
 		var node_rect := Rect2(
 			Vector2(HERO_TREE_BRANCH_START_X + float(column) * (HERO_TREE_NODE_SIZE.x + HERO_TREE_NODE_GAP), branch_y + HERO_TREE_BRANCH_TITLE_HEIGHT + float(row) * (HERO_TREE_NODE_SIZE.y + HERO_TREE_NODE_GAP)),
@@ -1561,7 +1640,7 @@ func _show_settings() -> void:
 	profile = SaveService.load_profile()
 	notice = ""
 	_clear_buttons()
-	var panel_size := Vector2(minf(640.0, size.x - 56.0), minf(470.0, size.y - 96.0))
+	var panel_size := Vector2(minf(640.0, size.x - 56.0), minf(530.0, size.y - 48.0))
 	var panel_origin := Vector2((size.x - panel_size.x) * 0.5, (size.y - panel_size.y) * 0.5 + 18.0)
 	var panel := Panel.new()
 	panel.position = panel_origin
@@ -1585,6 +1664,7 @@ func _show_settings() -> void:
 	_create_settings_label(panel, "环境", Vector2(28.0, 290.0), Vector2(120.0, 24.0), 18, Color("d6e5e2"))
 	_create_weather_selector(panel_origin + Vector2(154.0, 284.0))
 	_create_button("震动：%s" % vibration_text, "受击与阵法反馈", panel_origin + Vector2(28.0, 348.0), _toggle_vibration, Vector2(content_width, 52.0), false, 17)
+	_create_button("隐私政策", "查看个人信息处理规则", panel_origin + Vector2(28.0, 412.0), Callable(TapAuthService, "show_privacy_policy"), Vector2(content_width, 52.0), false, 17)
 	_create_button("返回", "", Vector2(_safe_margin(), 28.0), _show_main, Vector2(126.0, 46.0))
 	queue_redraw()
 
@@ -1650,15 +1730,38 @@ func _begin_selected_run() -> void:
 	if departure_loading:
 		return
 	var hero_id := _selected_hero_id()
-	if not _is_release_hero_available(hero_id) or not SaveService.equip_hero(hero_id):
+	if not _is_release_hero_available(hero_id):
 		return
-	if SaveService.tutorial_stage() == 19:
-		SaveService.complete_tutorial()
 	departure_loading = true
 	for button in buttons:
 		if is_instance_valid(button):
 			button.disabled = true
+	# Display the transition before synchronous profile writes and scene loading.
+	LoadingOverlay.show_transition("正在确认出战")
+	LoadingOverlay.set_progress(0.0, "正在确认武将与军令")
+	call_deferred("_commit_selected_run_departure", hero_id)
+
+func _commit_selected_run_departure(hero_id: String) -> void:
+	# A real frame boundary lets the CanvasLayer draw before file I/O begins.
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	if not SaveService.equip_hero(hero_id):
+		departure_loading = false
+		for button in buttons:
+			if is_instance_valid(button):
+				button.disabled = false
+		LoadingOverlay.fail_transition("出征武将不可用，请重新选择")
+		return
+	if SaveService.tutorial_stage() == 19:
+		SaveService.complete_tutorial()
 	SceneRouter.start_run(selected_run_mode, selected_run_battlefield_id, selected_run_story_chapter)
+	if not SceneRouter.scene_transition_pending:
+		departure_loading = false
+		for button in buttons:
+			if is_instance_valid(button):
+				button.disabled = false
+		LoadingOverlay.fail_transition("当前战场暂不可出征，请重新选择")
 
 func _start_story() -> void:
 	SceneRouter.start_run("story", "xinye", 1)
@@ -1782,7 +1885,7 @@ func _on_sfx_volume_changed(value: float) -> void:
 	queue_redraw()
 
 func _on_weather_mode_selected(index: int) -> void:
-	var weather_modes: Array[String] = ["auto", "sunny", "rain", "storm"]
+	var weather_modes: Array[String] = ["auto", "sunny", "rain", "storm", "snow"]
 	if index < 0 or index >= weather_modes.size():
 		return
 	SaveService.set_setting_value("weather_mode", weather_modes[index])
@@ -2172,6 +2275,8 @@ func _selected_hero() -> Dictionary:
 func _gui_input(event: InputEvent) -> void:
 	if page != "title":
 		return
+	if TapAuthService.requires_taptap_login():
+		return
 	if not _is_title_start_input(event):
 		return
 	if event.is_pressed():
@@ -2311,8 +2416,8 @@ func _create_volume_slider(at: Vector2, value: float, tooltip: String, callback:
 
 func _create_weather_selector(at: Vector2) -> OptionButton:
 	var selector := OptionButton.new()
-	var weather_modes: Array[String] = ["auto", "sunny", "rain", "storm"]
-	var weather_labels: Array[String] = ["自动（每局随机）", "晴天", "雨天", "雷雨"]
+	var weather_modes: Array[String] = ["auto", "sunny", "rain", "storm", "snow"]
+	var weather_labels: Array[String] = ["自动（每局随机）", "晴天", "雨天", "雷雨", "雪天"]
 	var selected_mode := str(SaveService.setting_value("weather_mode", "auto"))
 	selector.position = at
 	selector.size = Vector2(356.0, 42.0)
@@ -2693,6 +2798,7 @@ func _find_button_prefix_in(node: Node, prefix: String) -> Button:
 	return null
 
 func _clear_buttons() -> void:
+	title_login_button = null
 	_clear_tutorial_overlay()
 	talent_detail_dialog = null
 	strategy_detail_dialog = null
@@ -2774,21 +2880,25 @@ func _draw_title_screen(font: Font) -> void:
 	var prompt_color := Color(0.84, 0.62, 0.30, pulse).lerp(Color(1.0, 0.94, 0.66, pulse), pulse_phase)
 	var prompt_font_size := 24 if size.x >= 720.0 else 20
 	var prompt_y := size.y * 0.79
-	var prompt_width := font.get_string_size(TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size).x
 	var prompt_center_x := size.x * 0.76
+	var prompt_text := TITLE_PROMPT_TEXT
+	if TapAuthService.requires_taptap_login():
+		prompt_text = title_status if not title_status.is_empty() else ""
+	var prompt_width := font.get_string_size(prompt_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size).x
 	var prompt_left := prompt_center_x - prompt_width * 0.5
-	var short_line_gap := 22.0
-	var short_line_width := 42.0
-	var guide_y := prompt_y - 13.0
-	var guide_color := Color(prompt_color.r, prompt_color.g, prompt_color.b, 0.30 + pulse_phase * 0.62)
-	var guide_width := 1.1 + pulse_phase * 1.0
-	draw_line(Vector2(prompt_left - short_line_gap - short_line_width, guide_y), Vector2(prompt_left - short_line_gap, guide_y), guide_color, guide_width)
-	draw_line(Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap, guide_y), Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap + short_line_width, guide_y), guide_color, guide_width)
-	var blade_center := Vector2(prompt_center_x, guide_y)
-	draw_line(blade_center - Vector2(4.0, 0.0), blade_center + Vector2(4.0, 0.0), Color(1.0, 0.82, 0.44, 0.38 + pulse_phase * 0.54), guide_width + 0.3)
-	draw_line(blade_center - Vector2(2.4, 2.4), blade_center + Vector2(2.4, 2.4), Color(1.0, 0.82, 0.44, 0.22 + pulse_phase * 0.54), guide_width)
-	draw_string_outline(font, Vector2(prompt_left, prompt_y), TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, 4, Color(1.0, 0.57, 0.18, 0.10 + pulse_phase * 0.32))
-	draw_string(font, Vector2(prompt_left, prompt_y), TITLE_PROMPT_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, prompt_color)
+	if not prompt_text.is_empty():
+		var short_line_gap := 22.0
+		var short_line_width := 42.0
+		var guide_y := prompt_y - 13.0
+		var guide_color := Color(prompt_color.r, prompt_color.g, prompt_color.b, 0.30 + pulse_phase * 0.62)
+		var guide_width := 1.1 + pulse_phase * 1.0
+		draw_line(Vector2(prompt_left - short_line_gap - short_line_width, guide_y), Vector2(prompt_left - short_line_gap, guide_y), guide_color, guide_width)
+		draw_line(Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap, guide_y), Vector2(prompt_center_x + prompt_width * 0.5 + short_line_gap + short_line_width, guide_y), guide_color, guide_width)
+		var blade_center := Vector2(prompt_center_x, guide_y)
+		draw_line(blade_center - Vector2(4.0, 0.0), blade_center + Vector2(4.0, 0.0), Color(1.0, 0.82, 0.44, 0.38 + pulse_phase * 0.54), guide_width + 0.3)
+		draw_line(blade_center - Vector2(2.4, 2.4), blade_center + Vector2(2.4, 2.4), Color(1.0, 0.82, 0.44, 0.22 + pulse_phase * 0.54), guide_width)
+		draw_string_outline(font, Vector2(prompt_left, prompt_y), prompt_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, 4, Color(1.0, 0.57, 0.18, 0.10 + pulse_phase * 0.32))
+		draw_string(font, Vector2(prompt_left, prompt_y), prompt_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, prompt_font_size, prompt_color)
 	_draw_health_game_notice(font, reveal_eased, prompt_center_x)
 	if reveal_progress < 1.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, 1.0 - reveal_eased))

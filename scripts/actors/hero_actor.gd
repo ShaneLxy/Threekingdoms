@@ -2,9 +2,9 @@ class_name HeroActor
 extends Node2D
 
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
-const COMMON_ATTACK_BONUS := 0.05
-const COMMON_DEFENSE_BONUS := 0.05
-const COMMON_SPEED_BONUS := 0.02
+const COMMON_ATTACK_BONUS := 5.0
+const COMMON_DEFENSE_BONUS := 3.0
+const COMMON_SPEED_BONUS := 8.0
 const COMMON_HEAL_RATIO := 0.10
 const BASIC_ATTACK_MOVEMENT_DISTANCE := 18.0
 const BASIC_ATTACK_MOVEMENT_SPEED_RATIO := 0.42
@@ -380,11 +380,11 @@ func apply_upgrade(_upgrade_id: String) -> void:
 func apply_common_upgrade(upgrade_id: String) -> bool:
 	match upgrade_id:
 		"common_attack":
-			attack_bonus += COMMON_ATTACK_BONUS
+			base_attack += COMMON_ATTACK_BONUS
 		"common_defense":
-			defense_ratio_bonus += COMMON_DEFENSE_BONUS
+			defense_bonus += COMMON_DEFENSE_BONUS
 		"common_speed":
-			speed *= 1.0 + COMMON_SPEED_BONUS
+			speed += COMMON_SPEED_BONUS
 		"common_heal":
 			if health_component == null:
 				return true

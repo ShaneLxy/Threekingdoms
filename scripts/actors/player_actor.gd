@@ -369,8 +369,8 @@ func tick(delta: float, move_direction: Vector2) -> void:
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	if is_defeated() or ultimate_time > 0.0 or is_guard_active():
 		return false
-	if is_action_locked():
-		if current_action == "basic" and combo_stage < BASIC_COMBO_STAGES and not has_buffered_basic:
+	if is_action_locked() or current_action == "basic":
+		if current_action == "basic" and not has_buffered_basic:
 			has_buffered_basic = true
 			buffered_basic_direction = _eight_way_direction(_current_basic_input(direction), last_attack_direction)
 			return true
@@ -533,7 +533,7 @@ func current_stats() -> Dictionary:
 		"max_health": health_component.maximum,
 		"move_speed": effective_move_speed(),
 		"basic_range": BASIC_STRIKE_RANGE + basic_range_bonus,
-		"basic_pierce": 2 + basic_pierce_bonus + _dragon_pierce(),
+		"basic_pierce": 4 + basic_pierce_bonus + _dragon_pierce(),
 		"active_cooldown": active_cooldown_duration,
 		"ultimate_cost": ULTIMATE_COST,
 	}
@@ -885,7 +885,7 @@ func _begin_basic(stage: int) -> void:
 		1:
 			attack_lock_remaining = 0.30
 			hit_delay_remaining = 0.10
-			request = AttackRequest.line(position, last_attack_direction, BASIC_STRIKE_RANGE + basic_range_bonus, 56.0, 1.0, 2 + basic_pierce_bonus + _dragon_pierce(), "点刺")
+			request = AttackRequest.line(position, last_attack_direction, BASIC_STRIKE_RANGE + basic_range_bonus, 56.0, 1.0, 4 + basic_pierce_bonus + _dragon_pierce(), "点刺")
 			request.stance_damage = 10.0
 			request.knockback = 130.0
 			pending_first_strike_shockwave = AttackRequest.circle(position, FIRST_STRIKE_SHOCKWAVE_RANGE, 0.28, 12, "枪势震退")
@@ -896,14 +896,14 @@ func _begin_basic(stage: int) -> void:
 		2:
 			attack_lock_remaining = 0.40
 			hit_delay_remaining = 0.16
-			request = AttackRequest.fan(position, last_attack_direction, BASIC_SWEEP_RADIUS + basic_range_bonus + sweep_range_bonus, deg_to_rad(120.0 + sweep_angle_bonus), 1.1, 5 + basic_pierce_bonus + _dragon_pierce(), "横扫")
+			request = AttackRequest.fan(position, last_attack_direction, BASIC_SWEEP_RADIUS + basic_range_bonus + sweep_range_bonus, deg_to_rad(120.0 + sweep_angle_bonus), 1.1, 7 + basic_pierce_bonus + _dragon_pierce(), "横扫")
 			request.stance_damage = 15.0
 			request.knockback = 260.0 + sweep_knockback_bonus
 			_configure_breakout_knockback(request, 3, 3.0)
 		3:
 			attack_lock_remaining = 0.54
 			hit_delay_remaining = 0.18
-			request = AttackRequest.line(position, last_attack_direction, THIRD_DASH_DISTANCE + third_lunge_bonus, THIRD_DASH_WIDTH, 1.5, 6 + basic_pierce_bonus + _dragon_pierce(), "穿阵挑刺")
+			request = AttackRequest.line(position, last_attack_direction, THIRD_DASH_DISTANCE + third_lunge_bonus, THIRD_DASH_WIDTH, 1.5, 8 + basic_pierce_bonus + _dragon_pierce(), "穿阵挑刺")
 			request.stance_damage = 24.0
 			request.dash_kind = HeroActor.DashKind.BASIC
 			request.knockback = THIRD_DASH_KNOCKBACK

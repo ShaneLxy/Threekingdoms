@@ -3,3 +3,5 @@ build/
 tests
 docs/previews
 keys/
+taptap_local.cfg
+android/build/

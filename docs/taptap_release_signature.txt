@@ -1,0 +1,14 @@
+包名：com.game.threekingdom
+证书：keys/three-kingdom-release.jks（别名 three-kingdom-release）
+
+请把下面指纹填进 TapTap 开发者中心 → 应用配置 → 签名证书（Release 包用这一套）：
+
+MD5：    98:E7:CE:37:2C:97:5E:20:25:B7:5E:59:C1:8F:F2:98
+SHA1：   19:13:27:C2:2D:2C:92:9C:F7:B1:06:F0:45:CE:44:22:CA:B8:0D:9D
+SHA256： C3:3A:5E:91:3D:19:9D:E5:0D:50:E0:83:09:67:65:D1:D9:A4:EE:B2:3D:88:BF:F2:A8:28:48:92:40:AC:AE:6C
+
+无冒号小写（部分后台要这种）：
+MD5：    98e7ce372c975e2025b75e59c18ff298
+SHA1：   191327c22d2c929cf7b106f045ce4422cab80d9d
+
+注意：Debug 包和 Release 包签名不同。你现在打的是正式包，必须填上面这套 Release 指纹，不要填 debug.keystore。

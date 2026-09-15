@@ -26,18 +26,18 @@ const TIANJI_UPGRADE_IDS := [
 const HERO_POOLS := {
 	"zhang_fei": {
 		"upgrade_ids": [
-			"zhang_heavy_roar", "zhang_slam_leap", "zhang_slam_mastery",
+			"zhang_heavy_roar", "zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
 			"zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
 		],
-		"weapon_ids": ["zhang_heavy_roar", "zhang_slam_leap", "zhang_slam_mastery"],
+		"weapon_ids": ["zhang_heavy_roar", "zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery"],
 		"passive_ids": ["zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm"],
 		"active_ids": ["zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave"],
 		"rare_ids": ["zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_war_stomp"],
 		"core_talent_ids": ["zhang_heavy_roar", "zhang_iron_hide", "zhang_rage", "zhang_earthshaker", "zhang_ultimate_bloodlust"],
 		"talent_blueprint_ids": [
-			"zhang_slam_leap", "zhang_slam_mastery",
+			"zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
 			"zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
@@ -118,10 +118,10 @@ const HERO_POOLS := {
 }
 
 const DEFINITIONS := {
-	"common_attack": {"title": "猛攻", "category": "通用强化", "description": "基础攻击力 +5%，最多叠加 4 层。", "max_stacks": 4},
-	"common_defense": {"title": "坚甲", "category": "通用强化", "description": "基础防御力 +5%，最多叠加 4 层。", "max_stacks": 4},
-	"common_speed": {"title": "轻身", "category": "通用强化", "description": "基础移动速度 +2%，最多叠加 4 层。", "max_stacks": 4},
-	"common_heal": {"title": "战地疗伤", "category": "通用强化", "description": "立即回复最大生命值的 10%；溢出部分转为 1 层护体。", "max_stacks": 99},
+	"common_attack": {"title": "猛攻", "category": "通用强化", "description": "基础攻击 +5，最多叠加 4 层。", "max_stacks": 4},
+	"common_defense": {"title": "坚甲", "category": "通用强化", "description": "基础防御力 +3，最多叠加 4 层。", "max_stacks": 4},
+	"common_speed": {"title": "轻身", "category": "通用强化", "description": "基础速度 +8，最多叠加 4 层。", "max_stacks": 4},
+	"common_heal": {"title": "战地疗伤", "category": "通用强化", "description": "立即回复最大生命值的 10%；溢出部分转为 1 层护体。", "max_stacks": 0},
 	"tianji_lightning_activate": {"title": "七星引雷·启阵", "category": "天机", "description": "解锁的七星引雷在本局开始演算。", "max_stacks": 1},
 	"tianji_wind_activate": {"title": "巽风破阵·启阵", "category": "天机", "description": "解锁的巽风破阵在本局开始演算。", "max_stacks": 1},
 	"tianji_water_activate": {"title": "八阵水势·启阵", "category": "天机", "description": "解锁的八阵水势在本局开始演算。", "max_stacks": 1},
@@ -146,6 +146,8 @@ const DEFINITIONS := {
 	"tianji_arrow_damage": {"title": "箭阵·破甲", "category": "万箭穿云", "description": "万箭穿云伤害 +20%。", "max_stacks": 3, "requires": "tianji_arrow_activate"},
 	"tianji_arrow_volley": {"title": "箭阵·加急", "category": "万箭穿云", "description": "万箭穿云额外追加 1 轮齐射。", "max_stacks": 2, "requires": "tianji_arrow_activate"},
 	"zhang_heavy_roar": {"title": "蛇矛掷阵", "category": "掷阵", "description": "普攻范围扩大，飞兵冲量与碰撞击退提高。", "max_stacks": 3},
+	"zhang_fourth_strike": {"title": "蛇矛掷阵·撼地", "category": "掷阵", "description": "怒势期间，第三段普攻后可接第四段；沿攻击方向连续释放四段地波，每段造成伤害并小幅击退。", "max_stacks": 1, "requires": "zhang_heavy_roar", "shop_max_rank": 1, "shop_costs": [900], "shop_rank_limited": true},
+	"zhang_fourth_wave_expand": {"title": "蛇矛掷阵·裂地", "category": "掷阵", "description": "第四段地波沿攻击方向的判定与特效加长 50%；垂直方向仅判定加宽 20%。", "max_stacks": 1, "requires": "zhang_fourth_strike", "shop_max_rank": 1, "shop_costs": [1200], "shop_rank_limited": true},
 	# Retained only so saves from the former three-node tree remain readable.
 	"zhang_slam_range": {"title": "丈八跃砸·震域（旧版）", "category": "旧版兼容", "description": "旧存档兼容数据，不再提供购买或局内选择。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [500], "shop_rank_limited": true},
 	"zhang_slam_leap": {"title": "丈八跃砸·跃步", "category": "跃砸", "description": "第三段短距前跳，可有限修正方向；落地强化击退并造成短暂硬直。", "max_stacks": 1, "requires": "zhang_heavy_roar", "shop_max_rank": 1, "shop_costs": [600], "shop_rank_limited": true},
@@ -171,10 +173,10 @@ const DEFINITIONS := {
 	"guan_drag_steadiness": {"title": "持刃稳步", "category": "拖刀", "description": "拖刀蓄力时的减速幅度降低。商城每升 1 阶，局内最多可选择 1 层：10% / 30% / 50%。", "max_stacks": 3, "requires": "guan_drag_blade", "shop_max_rank": 3, "shop_costs": [500, 850, 1400], "shop_rank_limited": true},
 	"guan_drag_charge": {"title": "蓄势疾斩", "category": "拖刀", "description": "拖刀所需蓄力时间缩短。商城每升 1 阶，局内最多可选择 1 层：10% / 30% / 50%。", "max_stacks": 3, "requires": "guan_drag_blade", "shop_max_rank": 3, "shop_costs": [500, 850, 1400], "shop_rank_limited": true},
 	"guan_drag_waves": {"title": "拖刀分澜", "category": "拖刀", "description": "拖刀固定三道刀浪的有效距离与尺寸提升，最多两级。", "max_stacks": 2, "requires": "guan_drag_blade"},
-	"guan_drag_reach": {"title": "长风拖刀", "category": "拖刀", "description": "拖刀刀浪移动距离与尺寸进一步提升。商城购买后，局内每阶可继续强化。", "max_stacks": 3, "requires": "guan_drag_blade", "shop_max_rank": 3, "shop_costs": [650, 1100, 1700], "shop_rank_limited": true},
+	"guan_drag_reach": {"title": "长风拖刀", "category": "拖刀", "description": "拖刀刀浪移动距离与尺寸进一步提升。", "max_stacks": 3, "requires": "guan_drag_blade", "shop_max_rank": 3, "shop_costs": [650, 1100, 1700], "shop_rank_limited": true},
 	"guan_fourth_strike": {"title": "追锋断浪", "category": "偃月", "description": "普攻连招解锁第四段：向指定方向短距突进，并斩出小型刀浪。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [500], "shop_rank_limited": true},
 	"guan_fourth_dash": {"title": "追锋疾进", "category": "追锋断浪", "description": "第四段普攻的突进距离提高，最多叠加 3 层。", "max_stacks": 3, "requires": "guan_fourth_strike"},
-	"guan_fourth_collision": {"title": "断阵冲势", "category": "追锋断浪", "description": "商城购买后，第四段突进路径可撞开敌人并造成击退。", "max_stacks": 1, "requires": "guan_fourth_strike", "shop_max_rank": 1, "shop_costs": [700], "shop_rank_limited": true},
+	"guan_fourth_collision": {"title": "断阵冲势", "category": "追锋断浪", "description": "第四段突进路径可撞开敌人并造成击退。", "max_stacks": 1, "requires": "guan_fourth_strike", "shop_max_rank": 1, "shop_costs": [700], "shop_rank_limited": true},
 	"guan_fourth_wave": {"title": "追锋横江", "category": "追锋断浪", "description": "第四段刀浪范围、伤害与尺寸提高。", "max_stacks": 3, "requires": "guan_fourth_strike", "shop_max_rank": 3, "shop_costs": [600, 1000, 1600], "shop_rank_limited": true},
 	"guan_fourth_execution": {"title": "追锋斩将", "category": "追锋断浪", "description": "第四段刀浪对精英与领主伤害提高。", "max_stacks": 1, "requires": "guan_fourth_wave", "requires_stacks": 3, "shop_max_rank": 1, "shop_costs": [2200], "shop_rank_limited": true},
 	"guan_martial_pressure": {"title": "兵临之势", "category": "兵势", "description": "近敌增益上限提高，敌阵中的攻防收益提高。", "max_stacks": 2},
@@ -415,6 +417,12 @@ func _take_weighted_candidate(candidates: Array[String], candidate_weights: Dict
 func record_selection(upgrade_id: String) -> void:
 	owned_counts[upgrade_id] = int(owned_counts.get(upgrade_id, 0)) + 1
 
+func stack_count_for(upgrade_id: String) -> int:
+	return int(owned_counts.get(upgrade_id, 0))
+
+func max_stacks_for(upgrade_id: String) -> int:
+	return int(_definition(upgrade_id).get("max_stacks", 1))
+
 func title_for(upgrade_id: String) -> String:
 	return str(_definition(upgrade_id).get("title", upgrade_id))
 
@@ -448,7 +456,8 @@ func _available_tianji_upgrade_ids() -> Array[String]:
 		var definition := _definition(upgrade_id)
 		if int(tianji_ranks.get(skill_id, 0)) < int(definition.get("min_skill_rank", 1)):
 			continue
-		if int(owned_counts.get(upgrade_id, 0)) >= int(definition.get("max_stacks", 1)):
+		var max_stacks := int(definition.get("max_stacks", 1))
+		if max_stacks > 0 and int(owned_counts.get(upgrade_id, 0)) >= max_stacks:
 			continue
 		available.append(upgrade_id)
 	return available
@@ -476,7 +485,7 @@ func _available_from(candidates: Array) -> Array[String]:
 		var max_stacks := int(definition.get("max_stacks", 1))
 		if bool(definition.get("shop_rank_limited", false)):
 			max_stacks = mini(max_stacks, int(unlocked_talent_ranks.get(upgrade_id, 0)))
-		if int(owned_counts.get(upgrade_id, 0)) < max_stacks:
+		if max_stacks <= 0 or int(owned_counts.get(upgrade_id, 0)) < max_stacks:
 			available.append(upgrade_id)
 	return available
 

@@ -45,6 +45,7 @@ static func default_font() -> Font:
 		"res://assets/fonts/ui-title.otf",
 		"res://assets/fonts/ui-regular.ttf",
 		"res://assets/fonts/ui-regular.otf",
+		"res://assets/fonts/noto_sans_sc.otf",
 	]:
 		if ResourceLoader.exists(path):
 			return load(path) as Font

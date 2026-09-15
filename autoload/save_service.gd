@@ -640,6 +640,9 @@ func _ensure_profile_shape() -> bool:
 	elif settings["weather_mode"] == "ash":
 		settings["weather_mode"] = "auto"
 		changed = true
+	if not settings.has("auto_combo_enabled"):
+		settings["auto_combo_enabled"] = true
+		changed = true
 	profile["settings"] = settings
 	return changed
 

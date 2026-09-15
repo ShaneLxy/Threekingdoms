@@ -308,7 +308,7 @@ func begin_basic_hold(direction: Vector2 = Vector2.ZERO) -> bool:
 		return false
 	# A second tap during a basic attack must feed the combo buffer.  Only an
 	# idle press begins the drag-charge hold, otherwise touch input loses stages 2-3.
-	if is_action_locked():
+	if is_action_locked() or current_action == "basic":
 		return request_basic(direction)
 	_lock_basic_attack_direction(_current_basic_input(direction))
 	drag_charging = true
@@ -339,8 +339,8 @@ func release_basic_hold(direction: Vector2 = Vector2.ZERO) -> bool:
 func request_basic(direction: Vector2 = Vector2.ZERO) -> bool:
 	if is_defeated() or drag_charging or is_guard_active():
 		return false
-	if is_action_locked():
-		if current_action == "basic" and combo_stage < _basic_combo_stage_count() and not has_buffered_basic:
+	if is_action_locked() or current_action == "basic":
+		if current_action == "basic" and not has_buffered_basic:
 			# Input confirms the next stage, but its direction is read only when that
 			# stage starts so the active swing cannot be redirected mid-animation.
 			has_buffered_basic = true
@@ -573,7 +573,7 @@ func current_stats() -> Dictionary:
 	}
 
 func _current_pierce() -> int:
-	return 3 + basic_pierce_bonus + (5 if is_wusheng_active() else 0)
+	return 5 + basic_pierce_bonus + (5 if is_wusheng_active() else 0)
 
 func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
 	super.revive_from_rewarded_ad(health_ratio)

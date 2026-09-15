@@ -37,6 +37,7 @@ signal result_reward_requested()
 signal restart_requested()
 signal pause_requested()
 signal resume_requested()
+signal combo_setting_changed(enabled: bool)
 signal home_requested()
 signal retreat_requested()
 
@@ -87,6 +88,9 @@ var combo_count := 0
 var combo_remaining := 0.0
 var combo_pop_remaining := 0.0
 var pressed_controls: Dictionary = {}
+var combo_enabled := true
+var combo_hint_remaining := 0.0
+var combo_setting_button: Button
 var damage_edge_flash_remaining := 0.0
 var damage_edge_flash_severity := 0.0
 
@@ -135,6 +139,7 @@ func set_named_target_indicators(targets: Array[Dictionary]) -> void:
 
 func _process(delta: float) -> void:
 	ui_time += delta
+	combo_hint_remaining = maxf(0.0, combo_hint_remaining - delta)
 	elite_order_refresh_remaining = maxf(0.0, elite_order_refresh_remaining - delta)
 	message_time = maxf(0.0, message_time - delta)
 	if duel_hint_active:
@@ -166,6 +171,23 @@ func set_control_pressed(control_id: String, pressed: bool) -> void:
 		pressed_controls[control_id] = 0.18
 	else:
 		pressed_controls.erase(control_id)
+	queue_redraw()
+
+func is_guan_drag_split() -> bool:
+	return combo_enabled and player != null and player.supports_basic_hold()
+
+func guan_drag_center() -> Vector2:
+	return active_center() + Vector2(-132.0, 0.0)
+
+func set_combo_enabled(value: bool) -> void:
+	combo_enabled = value
+	if combo_setting_button != null and is_instance_valid(combo_setting_button):
+		combo_setting_button.text = "开启自动连击" if combo_enabled else "关闭自动连击"
+		combo_setting_button.add_theme_stylebox_override("normal", _make_box_style(PANEL_FILL if combo_enabled else Color("20282b"), GOLD if combo_enabled else DISABLED, 2))
+	queue_redraw()
+
+func show_combo_hint() -> void:
+	combo_hint_remaining = 2.4
 	queue_redraw()
 
 func record_combo_hits(hit_count: int) -> void:
@@ -263,6 +285,7 @@ func show_pause() -> void:
 	pause_active = true
 	modal_active = true
 	retreat_confirm_active = false
+	combo_hint_remaining = 0.0
 	_rebuild_pause_buttons()
 	queue_redraw()
 
@@ -275,6 +298,7 @@ func hide_pause() -> void:
 	for button in pause_buttons:
 		button.queue_free()
 	pause_buttons.clear()
+	combo_setting_button = null
 	queue_redraw()
 
 func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, selection_limit: int = 1) -> void:
@@ -292,7 +316,10 @@ func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, select
 		button.add_theme_stylebox_override("normal", _make_upgrade_card_style(PANEL_FILL, PANEL_EDGE, 2))
 		button.add_theme_stylebox_override("hover", _make_upgrade_card_style(Color("1a2b33"), DRAGON_BLUE, 3))
 		button.add_theme_stylebox_override("pressed", _make_upgrade_card_style(Color("2e291d"), GOLD_BRIGHT, 3))
-		_add_upgrade_card_text(button, upgrade_system.category_for(options[index]), upgrade_system.title_for(options[index]), upgrade_system.description_for(options[index]))
+		var current_stacks := upgrade_system.stack_count_for(options[index])
+		var max_stacks := upgrade_system.max_stacks_for(options[index])
+		var stack_text := "%d/∞层" % current_stacks if max_stacks <= 0 else "%d/%d层" % [current_stacks, max_stacks]
+		_add_upgrade_card_text(button, upgrade_system.category_for(options[index]), upgrade_system.title_for(options[index]), upgrade_system.description_for(options[index]), stack_text)
 		button.pressed.connect(_on_upgrade_button_pressed.bind(options[index]))
 		add_child(button)
 		upgrade_buttons.append(button)
@@ -333,7 +360,7 @@ func show_revive_prompt(remaining_revives: int = 1) -> void:
 	revive_remaining_count = maxi(0, remaining_revives)
 	revive_prompt_active = true
 	modal_active = true
-	revive_watch_button = _create_modal_action_button("观看广告复活", _on_revive_watch_button_pressed, Vector2(240.0, 52.0), GOLD)
+	revive_watch_button = _create_modal_action_button("复活", _on_revive_watch_button_pressed, Vector2(240.0, 52.0), GOLD)
 	revive_skip_button = _create_modal_action_button("放弃复活并结算", _on_revive_skip_button_pressed, Vector2(240.0, 52.0), Color("7b6644"))
 	_layout_revive_buttons()
 	queue_redraw()
@@ -358,7 +385,7 @@ func set_result_rewarded(total_merit: int) -> void:
 		result_reward_button.text = "已领取双倍军功"
 	queue_redraw()
 
-func _add_upgrade_card_text(button: Button, category: String, title: String, description: String) -> void:
+func _add_upgrade_card_text(button: Button, category: String, title: String, description: String, stack_text: String = "") -> void:
 	var content := VBoxContainer.new()
 	content.position = Vector2(18.0, 20.0)
 	content.size = button.size - Vector2(36.0, 38.0)
@@ -367,10 +394,24 @@ func _add_upgrade_card_text(button: Button, category: String, title: String, des
 	button.add_child(content)
 	var category_label := Label.new()
 	category_label.text = category
+	if not stack_text.is_empty():
+		category_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		category_label.custom_minimum_size = Vector2(0.0, 26.0)
 	category_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	category_label.add_theme_font_size_override("font_size", 14)
+	category_label.add_theme_font_size_override("font_size", 16)
 	category_label.add_theme_color_override("font_color", GOLD)
 	content.add_child(category_label)
+	if not stack_text.is_empty():
+		var stack_label := Label.new()
+		stack_label.text = stack_text
+		stack_label.position = Vector2(button.size.x - 98.0, 17.0)
+		stack_label.size = Vector2(80.0, 28.0)
+		stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		stack_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		stack_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack_label.add_theme_font_size_override("font_size", 17)
+		stack_label.add_theme_color_override("font_color", Color("f4d58d"))
+		button.add_child(stack_label)
 	var title_label := Label.new()
 	title_label.text = title
 	title_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
@@ -542,10 +583,12 @@ func _rebuild_pause_buttons() -> void:
 	for button in pause_buttons:
 		button.queue_free()
 	pause_buttons.clear()
+	combo_setting_button = null
 	if retreat_confirm_active:
 		_create_pause_button("确认收兵", _on_retreat_confirm_button_pressed)
 		_create_pause_button("继续战斗", _on_retreat_cancel_button_pressed)
 	else:
+		_create_combo_setting_button()
 		_create_pause_button("继续", _on_resume_button_pressed)
 		_create_pause_button("重新开始", _on_pause_restart_button_pressed)
 		_create_pause_button("鸣金收兵", _on_retreat_button_pressed)
@@ -564,6 +607,30 @@ func _create_pause_button(label: String, callback: Callable) -> void:
 	button.pressed.connect(callback)
 	add_child(button)
 	pause_buttons.append(button)
+
+func _create_combo_setting_button() -> void:
+	combo_setting_button = Button.new()
+	combo_setting_button.size = Vector2(240.0, 54.0)
+	combo_setting_button.add_theme_font_size_override("font_size", 19)
+	combo_setting_button.add_theme_color_override("font_color", Color("fff0c7"))
+	combo_setting_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	combo_setting_button.add_theme_color_override("font_disabled_color", Color("929b9d"))
+	combo_setting_button.add_theme_stylebox_override("hover", _make_box_style(Color("22323a"), GOLD_BRIGHT, 3))
+	combo_setting_button.add_theme_stylebox_override("pressed", _make_box_style(Color("4a3b24"), GOLD_BRIGHT, 3))
+	combo_setting_button.pressed.connect(_on_combo_setting_button_pressed)
+	add_child(combo_setting_button)
+	pause_buttons.append(combo_setting_button)
+	set_combo_enabled(combo_enabled)
+
+func _on_combo_setting_button_pressed() -> void:
+	combo_enabled = not combo_enabled
+	set_combo_enabled(combo_enabled)
+	combo_setting_changed.emit(combo_enabled)
+	if combo_enabled:
+		show_combo_hint()
+	else:
+		combo_hint_remaining = 0.0
+		queue_redraw()
 
 func _sync_viewport_layout() -> void:
 	position = Vector2.ZERO
@@ -1120,7 +1187,10 @@ func _draw_skill_cluster(font: Font) -> void:
 	# The combat controls keep their established hit areas, but the visual layer
 	# now reads as a compact wuxia ability wheel: weapon-first attack icon and
 	# very short labels for the three ability buttons.
-	_draw_skill_button(attack_center(), 64.0, "", "", DRAGON_BLUE, true, font, "attack")
+	var split_guan_controls := is_guan_drag_split()
+	_draw_skill_button(attack_center(), 68.0, "", "", DRAGON_BLUE, true, font, "attack")
+	if split_guan_controls:
+		_draw_skill_button(guan_drag_center(), 50.0, "拖刀", "蓄力", GOLD, true, font, "drag")
 	# The active skill is charge-based: a non-empty reserve stays visually usable
 	# even while the next charge is recovering in the background.
 	var active_enabled := player != null and player.active_charge_count > 0
@@ -1285,12 +1355,17 @@ func _draw_modal_backdrop(font: Font) -> void:
 			draw_string(font, Vector2(pause_rect.position.x + 34.0, pause_rect.position.y + 138.0), "收兵后无法继续本局", HORIZONTAL_ALIGNMENT_LEFT, pause_rect.size.x - 68.0, 14, Color("b9c5c5"))
 		else:
 			draw_string(font, Vector2(pause_rect.get_center().x - 115.0, pause_rect.position.y + 108.0), "军势暂歇，整顿后再破阵", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("b9c5c5"))
+		if combo_hint_remaining > 0.0 and not retreat_confirm_active:
+			var hint_rect := Rect2(Vector2(pause_rect.get_center().x - 150.0, pause_rect.position.y - 54.0), Vector2(300.0, 42.0))
+			draw_rect(hint_rect, Color(0.05, 0.10, 0.12, 0.86))
+			draw_rect(hint_rect, Color("63b9df"), false, 1.0)
+			draw_string(font, Vector2(hint_rect.position.x, hint_rect.position.y + 27.0), "长按攻击按钮自动攻击", HORIZONTAL_ALIGNMENT_CENTER, hint_rect.size.x, 16, Color("e3f2ef"))
 	elif revive_prompt_active:
 		var revive_rect := _pause_panel_rect()
 		_draw_panel(revive_rect, HEALTH_RED, true)
 		draw_string(font, Vector2(revive_rect.get_center().x - 104.0, revive_rect.position.y + 74.0), "力竭待援", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, Color("ffaaa0"))
 		UITheme.draw_title_divider(self, Rect2(revive_rect.get_center().x - 118.0, revive_rect.position.y + 82.0, 236.0, 18.0))
-		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 116.0), "观看激励视频可复活并继续战斗", HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 16, Color("e3d0a4"))
+		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 116.0), "可复活并继续战斗", HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 16, Color("e3d0a4"))
 		draw_string(font, Vector2(revive_rect.position.x + 34.0, revive_rect.position.y + 144.0), "本局还可复活 %d 次" % revive_remaining_count, HORIZONTAL_ALIGNMENT_LEFT, revive_rect.size.x - 68.0, 14, Color("b9c5c5"))
 	elif result_active:
 		var result_rect := _result_panel_rect()
@@ -1328,7 +1403,7 @@ func _draw_modal_backdrop(font: Font) -> void:
 			draw_string(font, Vector2(upgrade_rect.position.x, 188), choice_label + " · 选择强化，重整枪势", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 15, Color("b9c5c5"))
 
 func _pause_panel_rect() -> Rect2:
-	return Rect2(size.x * 0.5 - 236.0, size.y * 0.5 - 176.0, 472.0, 324.0)
+	return Rect2(size.x * 0.5 - 236.0, size.y * 0.5 - 195.0, 472.0, 390.0)
 
 func _result_panel_rect() -> Rect2:
 	# Keep the result card close to its actual content. The portrait still

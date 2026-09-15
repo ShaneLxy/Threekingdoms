@@ -79,15 +79,20 @@ func _begin_scene_transition(scene_path: String, message: String) -> void:
 func _start_threaded_scene_load() -> void:
 	if not scene_transition_pending or transition_load_started:
 		return
+	# Deferred callbacks run before rendering; wait for a presentable frame so
+	# the loading overlay is visible before synchronous resource parsing starts.
+	await get_tree().process_frame
+	if not scene_transition_pending or transition_load_started:
+		return
 	if transition_target_scene_path.is_empty():
 		transition_target_scene_path = RUN_SCENE
 		pending_scene_path = transition_target_scene_path
 	# Loading the run scene through the threaded API can race Godot's first
 	# texture import/script parse. That race leaves valid PNG resources looking
 	# unavailable and makes the scene fail before RunScene._ready() runs. The
-	# loading overlay is already visible by this deferred callback, so perform a
-	# single deterministic load and keep the rest of the transition asynchronous
-	# from the player's perspective.
+	# loading overlay has now had a full frame to render, so perform a single
+	# deterministic load and keep the rest of the transition asynchronous from
+	# the player's perspective.
 	var loaded_scene := ResourceLoader.load(transition_target_scene_path, "PackedScene", ResourceLoader.CACHE_MODE_REUSE) as PackedScene
 	if loaded_scene == null:
 		push_error("Unable to load scene %s" % transition_target_scene_path)
