@@ -2,7 +2,7 @@ class_name BattlefieldLayout
 extends RefCounted
 
 const EDITOR_SIZE := Vector2(1000.0, 568.0)
-const EDITOR_ORDER: Array[String] = ["xinye", "bowangpo", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "changban", "hulao"]
+const EDITOR_ORDER: Array[String] = ["xinye", "bowangpo", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "jingzhou_siege", "changban", "hulao"]
 const EMBEDDED_MAP_DIRECTORY := "res://data/maps"
 # The trial background is rendered at its source size (1672x941). This
 # rectangle follows the
@@ -61,6 +61,21 @@ const BATTLEFIELDS := {
 		],
 		"baked_scene": true,
 		"save_path": "user://map_editor/xiangyangchetui.json",
+		"assets": [],
+		"defaults": [],
+		"collision_zones": [],
+	},
+	"jingzhou_siege": {
+		"title": "攻取荆州",
+		"ground_fill": "2b2b22",
+		# 3600:836 的攻取荆州新版底图与 6200 × 1440 的攻城世界保持相同画幅，
+		# 避免城楼、箭楼与营地在横向长地图中被拉伸变形。
+		"ground_path": "res://assets/art/environment/jingzhou_siege/ground-canvas.png",
+		"ground_layers": [
+			{"role": "canvas", "path": "res://assets/art/environment/jingzhou_siege/ground-canvas.png", "opacity": 1.0},
+		],
+		"baked_scene": true,
+		"save_path": "user://map_editor/jingzhou_siege.json",
 		"assets": [],
 		"defaults": [],
 		"collision_zones": [],

@@ -18,15 +18,30 @@ const NAMED_ELITE_ROW_HEIGHT := 76.0
 const NAMED_BOSS_ROW_HEIGHT := 86.0
 const NAMED_ROW_GAP := 5.0
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
+const RESULT_HERO_PORTRAITS := {
+	"guan_yu": "res://assets/art/characters/hero_new/guanyu.png",
+	"zhang_fei": "res://assets/art/characters/hero_new/zhangfei.png",
+	"zhao_yun": "res://assets/art/characters/hero_new/zhaoyun.png",
+	"ma_chao": "res://assets/art/characters/hero_new/maochao.png",
+}
 const GUAN_YU_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-01.png")
 const ZHANG_FEI_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-01.png")
 const ZHAO_YUN_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/zhao_yun/sprites/idle_right/zhaoyun-idle-right-01.png")
-const ATTACK_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/attack_button.png")
-const ATTACK_BUTTON_SOURCE_RECT := Rect2(181.0, 178.0, 690.0, 667.0)
+const MOVE_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/moveBtn.png")
+const MOVE_KNOB_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/moveBtn1.png")
+const ATTACK_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/attackBtn.png")
+const SKILL_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/skillBtn.png")
+const SHIELD_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/shield.png")
+const HERO_INFO_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/heroInfo.png")
+const COMBO_BRUSH_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/combo_brush.png")
+const COMBO_KAITI_FONT: Font = preload("res://assets/fonts/kaiti.ttf")
 # The named dual-bar source contains baked-in fills. Reuse the clean single-bar
 # frame twice so health and stance remain entirely runtime-driven.
 const ENEMY_BAR_FRAME_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/hud_bar_frame_2x.png")
 const UPGRADE_FREE_REFRESH_LIMIT := 5
+const UPGRADE_NOTIFICATION_DURATION := 4.0
+const UPGRADE_NOTIFICATION_FADE_DURATION := 0.5
+const SUMMARY_SCROLL_DRAG_THRESHOLD := 10.0
 
 signal upgrade_selected(upgrade_id: String)
 signal upgrade_refresh_requested()
@@ -38,12 +53,17 @@ signal restart_requested()
 signal pause_requested()
 signal resume_requested()
 signal combo_setting_changed(enabled: bool)
+signal damage_numbers_setting_changed(enabled: bool)
+signal upgrade_selection_mode_changed(mode: String)
+signal selected_upgrades_requested()
 signal home_requested()
 signal retreat_requested()
 
+var combo_display_font: FontVariation
 var player: HeroActor
 var boss: BossActor
 var director: RunDirector
+var siege_system: SiegeSystem
 var elites: Array[EliteActor] = []
 var elite_status_order: Array[int] = []
 var elite_order_refresh_remaining := 0.0
@@ -80,9 +100,27 @@ var revive_remaining_count := 1
 var pause_active := false
 var pause_buttons: Array[Button] = []
 var retreat_confirm_active := false
+var upgrade_selection_mode := "manual"
+var upgrade_selection_mode_selector: Button
+var selected_upgrades_button: Button
+var selected_upgrades_summary_active := false
+var selected_upgrades_summary_count := 0
+var selected_upgrades_scroll: ScrollContainer
+var selected_upgrades_list: VBoxContainer
+var selected_upgrades_close_button: Button
+var selected_upgrades_scroll_touch_index := -1
+var selected_upgrades_scroll_drag_start := Vector2.ZERO
+var selected_upgrades_scroll_drag_start_offset := 0
+var selected_upgrades_scroll_dragging := false
+var modal_dismiss_area: Control
+var upgrade_notification_queue: Array[Dictionary] = []
+var active_upgrade_notification: Dictionary = {}
+var upgrade_notification_remaining := 0.0
 var move_stick_offset := Vector2.ZERO
 var run_gold := 0
 var hero_portrait: Texture2D
+var result_hero_portrait: Texture2D
+var battle_skill_textures: Dictionary = {}
 var offscreen_named_targets: Array[Dictionary] = []
 var combo_count := 0
 var combo_remaining := 0.0
@@ -91,12 +129,15 @@ var pressed_controls: Dictionary = {}
 var combo_enabled := true
 var combo_hint_remaining := 0.0
 var combo_setting_button: Button
+var damage_numbers_enabled := true
+var damage_numbers_setting_button: Button
 var damage_edge_flash_remaining := 0.0
 var damage_edge_flash_severity := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_create_modal_dismiss_area()
 	_sync_viewport_layout()
 	get_viewport().size_changed.connect(_sync_viewport_layout)
 
@@ -116,13 +157,22 @@ func configure(player_actor: HeroActor, boss_actor: BossActor, run_director: Run
 	pressed_controls.clear()
 	damage_edge_flash_remaining = 0.0
 	damage_edge_flash_severity = 0.0
+	upgrade_notification_queue.clear()
+	active_upgrade_notification.clear()
+	upgrade_notification_remaining = 0.0
+	selected_upgrades_summary_active = false
+	_create_selected_upgrades_button()
 	if player != null and not player.damaged.is_connected(_on_player_damaged):
 		player.damaged.connect(_on_player_damaged)
 	hero_portrait = null
+	result_hero_portrait = null
 	if player != null:
 		var portrait_path := str(HERO_CATALOG.definition_for(player.hero_id).get("portrait", ""))
 		if not portrait_path.is_empty():
 			hero_portrait = load(portrait_path) as Texture2D
+		var result_portrait_path := str(RESULT_HERO_PORTRAITS.get(player.hero_id, ""))
+		if not result_portrait_path.is_empty():
+			result_hero_portrait = load(result_portrait_path) as Texture2D
 	message = _idle_stage_label()
 	message_time = 2.8
 	queue_redraw()
@@ -133,12 +183,18 @@ func set_elites(elite_actors: Array[EliteActor]) -> void:
 	elite_order_refresh_remaining = 0.0
 	queue_redraw()
 
+func set_siege_system(value: SiegeSystem) -> void:
+	siege_system = value
+	queue_redraw()
+
 func set_named_target_indicators(targets: Array[Dictionary]) -> void:
 	offscreen_named_targets = targets
 	queue_redraw()
 
 func _process(delta: float) -> void:
 	ui_time += delta
+	_sync_selected_upgrades_button_interaction()
+	_sync_modal_dismiss_area()
 	combo_hint_remaining = maxf(0.0, combo_hint_remaining - delta)
 	elite_order_refresh_remaining = maxf(0.0, elite_order_refresh_remaining - delta)
 	message_time = maxf(0.0, message_time - delta)
@@ -164,6 +220,8 @@ func _process(delta: float) -> void:
 		pressed_controls.erase(control_id)
 	if combo_remaining <= 0.0:
 		combo_count = 0
+	if not modal_active:
+		_advance_upgrade_notification(delta)
 	queue_redraw()
 
 func set_control_pressed(control_id: String, pressed: bool) -> void:
@@ -184,6 +242,25 @@ func set_combo_enabled(value: bool) -> void:
 	if combo_setting_button != null and is_instance_valid(combo_setting_button):
 		combo_setting_button.text = "开启自动连击" if combo_enabled else "关闭自动连击"
 		combo_setting_button.add_theme_stylebox_override("normal", _make_box_style(PANEL_FILL if combo_enabled else Color("20282b"), GOLD if combo_enabled else DISABLED, 2))
+	queue_redraw()
+
+func set_damage_numbers_enabled(value: bool) -> void:
+	damage_numbers_enabled = value
+	if damage_numbers_setting_button != null and is_instance_valid(damage_numbers_setting_button):
+		damage_numbers_setting_button.text = "伤害数值：开" if damage_numbers_enabled else "伤害数值：关"
+		damage_numbers_setting_button.add_theme_stylebox_override("normal", _make_box_style(PANEL_FILL if damage_numbers_enabled else Color("20282b"), GOLD if damage_numbers_enabled else DISABLED, 2))
+	queue_redraw()
+
+func set_upgrade_selection_mode(value: String) -> void:
+	upgrade_selection_mode = "automatic" if value == "automatic" else "manual"
+	if upgrade_selection_mode_selector != null and is_instance_valid(upgrade_selection_mode_selector):
+		_sync_upgrade_selection_mode_button()
+	queue_redraw()
+
+func enqueue_upgrade_notification(title: String, description: String) -> void:
+	upgrade_notification_queue.append({"title": title, "description": description})
+	if active_upgrade_notification.is_empty():
+		_start_next_upgrade_notification()
 	queue_redraw()
 
 func show_combo_hint() -> void:
@@ -277,14 +354,16 @@ func pause_center() -> Vector2:
 	return Vector2(size.x - 206.0, 38.0)
 
 func is_pause_hit(at: Vector2) -> bool:
-	return at.distance_to(pause_center()) <= 30.0
+	return at.distance_to(pause_center()) <= 44.0
 
 func show_pause() -> void:
 	if result_active or pause_active:
 		return
 	pause_active = true
-	modal_active = true
+	_set_modal_active(true)
 	retreat_confirm_active = false
+	selected_upgrades_summary_active = false
+	_clear_selected_upgrades_summary_controls()
 	combo_hint_remaining = 0.0
 	_rebuild_pause_buttons()
 	queue_redraw()
@@ -293,16 +372,66 @@ func hide_pause() -> void:
 	if not pause_active:
 		return
 	pause_active = false
-	modal_active = false
+	_set_modal_active(false)
 	retreat_confirm_active = false
-	for button in pause_buttons:
-		button.queue_free()
-	pause_buttons.clear()
-	combo_setting_button = null
+	selected_upgrades_summary_active = false
+	_clear_pause_buttons()
+	_clear_selected_upgrades_summary_controls()
+	queue_redraw()
+
+func show_selected_upgrades(upgrade_ids: Array[String], upgrade_system: UpgradeSystem) -> void:
+	if not pause_active:
+		return
+	retreat_confirm_active = false
+	selected_upgrades_summary_active = true
+	selected_upgrades_summary_count = upgrade_ids.size()
+	_clear_pause_buttons()
+	_clear_selected_upgrades_summary_controls()
+	selected_upgrades_scroll = ScrollContainer.new()
+	selected_upgrades_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	selected_upgrades_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	selected_upgrades_scroll.scroll_deadzone = int(SUMMARY_SCROLL_DRAG_THRESHOLD)
+	selected_upgrades_scroll.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	selected_upgrades_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	selected_upgrades_scroll.gui_input.connect(_on_selected_upgrades_scroll_gui_input.bind(selected_upgrades_scroll))
+	add_child(selected_upgrades_scroll)
+	selected_upgrades_list = VBoxContainer.new()
+	selected_upgrades_list.custom_minimum_size = Vector2(400.0, 0.0)
+	selected_upgrades_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	selected_upgrades_list.add_theme_constant_override("separation", 10)
+	selected_upgrades_scroll.add_child(selected_upgrades_list)
+	if upgrade_ids.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "尚未选择强化"
+		empty_label.custom_minimum_size = Vector2(0.0, 64.0)
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_label.add_theme_font_size_override("font_size", 18)
+		empty_label.add_theme_color_override("font_color", Color("b9c5c5"))
+		selected_upgrades_list.add_child(empty_label)
+	else:
+		for upgrade_id in upgrade_ids:
+			var card := Button.new()
+			card.text = ""
+			# The full descriptions are deliberately shown in the battle summary.
+			# Reserve enough vertical space for wrapped Chinese text instead of
+			# allowing the final line to bleed into the next card.
+			card.custom_minimum_size = Vector2(400.0, 166.0)
+			card.size = card.custom_minimum_size
+			card.focus_mode = Control.FOCUS_NONE
+			card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card.add_theme_stylebox_override("normal", _make_upgrade_card_style(PANEL_FILL, PANEL_EDGE, 2))
+			var current_stacks := upgrade_system.stack_count_for(upgrade_id)
+			var max_stacks := upgrade_system.max_stacks_for(upgrade_id)
+			var stack_text := "%d/∞层" % current_stacks if max_stacks <= 0 else "%d/%d层" % [current_stacks, max_stacks]
+			_add_upgrade_card_text(card, upgrade_system.category_for(upgrade_id), upgrade_system.title_for(upgrade_id), upgrade_system.description_for(upgrade_id), stack_text)
+			selected_upgrades_list.add_child(card)
+	selected_upgrades_close_button = _create_modal_action_button("关闭", _on_selected_upgrades_close_button_pressed, Vector2(200.0, 48.0), GOLD)
+	_layout_selected_upgrades_summary()
 	queue_redraw()
 
 func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, selection_limit: int = 1) -> void:
-	modal_active = true
+	_set_modal_active(true)
 	strategy_choice_active = false
 	upgrade_option_count = options.size()
 	upgrade_selection_limit = clampi(selection_limit, 1, maxi(1, options.size()))
@@ -328,7 +457,7 @@ func show_upgrades(options: Array[String], upgrade_system: UpgradeSystem, select
 	queue_redraw()
 
 func show_run_strategy_choice() -> void:
-	modal_active = true
+	_set_modal_active(true)
 	strategy_choice_active = true
 	upgrade_option_count = 3
 	upgrade_selection_limit = 1
@@ -359,7 +488,7 @@ func show_revive_prompt(remaining_revives: int = 1) -> void:
 		return
 	revive_remaining_count = maxi(0, remaining_revives)
 	revive_prompt_active = true
-	modal_active = true
+	_set_modal_active(true)
 	revive_watch_button = _create_modal_action_button("复活", _on_revive_watch_button_pressed, Vector2(240.0, 52.0), GOLD)
 	revive_skip_button = _create_modal_action_button("放弃复活并结算", _on_revive_skip_button_pressed, Vector2(240.0, 52.0), Color("7b6644"))
 	_layout_revive_buttons()
@@ -369,7 +498,7 @@ func hide_revive_prompt() -> void:
 	if not revive_prompt_active:
 		return
 	revive_prompt_active = false
-	modal_active = false
+	_set_modal_active(false)
 	for button in [revive_watch_button, revive_skip_button]:
 		if is_instance_valid(button):
 			button.queue_free()
@@ -438,13 +567,13 @@ func show_result(victory: bool, value: String, stats: Dictionary = {}) -> void:
 	result_stats = stats.duplicate(true)
 	pause_active = false
 	retreat_confirm_active = false
-	for button in pause_buttons:
-		button.queue_free()
-	pause_buttons.clear()
-	modal_active = true
+	selected_upgrades_summary_active = false
+	_clear_pause_buttons()
+	_clear_selected_upgrades_summary_controls()
+	_set_modal_active(true)
 	restart_button = Button.new()
 	restart_button.text = "重新开始"
-	restart_button.size = Vector2(174.0, 52.0)
+	restart_button.size = Vector2(190.0, 56.0)
 	restart_button.add_theme_font_size_override("font_size", 21)
 	restart_button.add_theme_color_override("font_color", Color("fff0c7"))
 	restart_button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -455,7 +584,7 @@ func show_result(victory: bool, value: String, stats: Dictionary = {}) -> void:
 	add_child(restart_button)
 	result_home_button = Button.new()
 	result_home_button.text = "返回首页"
-	result_home_button.size = Vector2(174.0, 52.0)
+	result_home_button.size = Vector2(190.0, 56.0)
 	result_home_button.add_theme_font_size_override("font_size", 21)
 	result_home_button.add_theme_color_override("font_color", Color("fff0c7"))
 	result_home_button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -477,7 +606,7 @@ func _on_upgrade_button_pressed(upgrade_id: String) -> void:
 		break
 	if upgrade_selection_count >= upgrade_selection_limit:
 		_clear_upgrade_controls()
-		modal_active = false
+		_set_modal_active(false)
 	else:
 		_upgrade_refresh_button_sync()
 		_layout_upgrade_buttons()
@@ -489,7 +618,7 @@ func _on_run_strategy_button_pressed(strategy_id: String) -> void:
 		return
 	strategy_choice_active = false
 	_clear_upgrade_controls()
-	modal_active = false
+	_set_modal_active(false)
 	run_strategy_selected.emit(strategy_id)
 	queue_redraw()
 
@@ -563,6 +692,45 @@ func _on_resume_button_pressed() -> void:
 func _on_pause_restart_button_pressed() -> void:
 	restart_requested.emit()
 
+func _create_selected_upgrades_button() -> void:
+	if selected_upgrades_button != null and is_instance_valid(selected_upgrades_button):
+		_layout_selected_upgrades_button()
+		return
+	selected_upgrades_button = Button.new()
+	selected_upgrades_button.text = "本局强化"
+	selected_upgrades_button.size = Vector2(388.0, 36.0)
+	# This is regular HUD. Modal cards are drawn above it, while the parent HUD
+	# backdrop naturally darkens it whenever a modal is active.
+	selected_upgrades_button.z_index = -1
+	selected_upgrades_button.show_behind_parent = true
+	selected_upgrades_button.add_theme_font_size_override("font_size", 17)
+	selected_upgrades_button.add_theme_color_override("font_color", Color("d9edf0"))
+	selected_upgrades_button.add_theme_color_override("font_hover_color", Color("ffffff"))
+	selected_upgrades_button.add_theme_stylebox_override("normal", _make_box_style(Color(0.05, 0.12, 0.15, 0.90), DRAGON_BLUE, 1))
+	selected_upgrades_button.add_theme_stylebox_override("hover", _make_box_style(Color(0.08, 0.20, 0.24, 0.96), Color("8bd5e8"), 2))
+	selected_upgrades_button.add_theme_stylebox_override("pressed", _make_box_style(Color(0.09, 0.18, 0.21, 0.96), GOLD, 2))
+	selected_upgrades_button.pressed.connect(_on_selected_upgrades_button_pressed)
+	add_child(selected_upgrades_button)
+	_layout_selected_upgrades_button()
+	_sync_selected_upgrades_button_interaction()
+
+func _on_selected_upgrades_button_pressed() -> void:
+	if modal_active or result_active:
+		return
+	selected_upgrades_requested.emit()
+
+func _sync_selected_upgrades_button_interaction() -> void:
+	if selected_upgrades_button == null or not is_instance_valid(selected_upgrades_button):
+		return
+	selected_upgrades_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if modal_active else Control.MOUSE_FILTER_STOP
+
+func _on_selected_upgrades_close_button_pressed() -> void:
+	if not selected_upgrades_summary_active:
+		return
+	selected_upgrades_summary_active = false
+	_clear_selected_upgrades_summary_controls()
+	resume_requested.emit()
+
 func _on_home_button_pressed() -> void:
 	home_requested.emit()
 
@@ -580,19 +748,29 @@ func _on_retreat_cancel_button_pressed() -> void:
 	resume_requested.emit()
 
 func _rebuild_pause_buttons() -> void:
-	for button in pause_buttons:
-		button.queue_free()
-	pause_buttons.clear()
-	combo_setting_button = null
+	_clear_pause_buttons()
+	if selected_upgrades_summary_active:
+		return
 	if retreat_confirm_active:
 		_create_pause_button("确认收兵", _on_retreat_confirm_button_pressed)
 		_create_pause_button("继续战斗", _on_retreat_cancel_button_pressed)
 	else:
 		_create_combo_setting_button()
-		_create_pause_button("继续", _on_resume_button_pressed)
+		_create_upgrade_selection_mode_button()
+		_create_damage_numbers_setting_button()
+		_create_pause_button("继续战斗", _on_resume_button_pressed)
 		_create_pause_button("重新开始", _on_pause_restart_button_pressed)
 		_create_pause_button("鸣金收兵", _on_retreat_button_pressed)
 	_layout_pause_buttons()
+
+func _clear_pause_buttons() -> void:
+	for button in pause_buttons:
+		if is_instance_valid(button):
+			button.queue_free()
+	pause_buttons.clear()
+	combo_setting_button = null
+	damage_numbers_setting_button = null
+	upgrade_selection_mode_selector = null
 
 func _create_pause_button(label: String, callback: Callable) -> void:
 	var button := Button.new()
@@ -622,6 +800,50 @@ func _create_combo_setting_button() -> void:
 	pause_buttons.append(combo_setting_button)
 	set_combo_enabled(combo_enabled)
 
+func _create_upgrade_selection_mode_button() -> void:
+	upgrade_selection_mode_selector = Button.new()
+	upgrade_selection_mode_selector.size = Vector2(240.0, 54.0)
+	upgrade_selection_mode_selector.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	upgrade_selection_mode_selector.add_theme_font_size_override("font_size", 18)
+	upgrade_selection_mode_selector.add_theme_color_override("font_color", Color("fff0c7"))
+	upgrade_selection_mode_selector.add_theme_color_override("font_hover_color", Color.WHITE)
+	upgrade_selection_mode_selector.add_theme_stylebox_override("hover", _make_box_style(Color("22323a"), Color("8bd5e8"), 3))
+	upgrade_selection_mode_selector.add_theme_stylebox_override("pressed", _make_box_style(Color("28332f"), GOLD_BRIGHT, 3))
+	upgrade_selection_mode_selector.pressed.connect(_on_upgrade_selection_mode_button_pressed)
+	add_child(upgrade_selection_mode_selector)
+	pause_buttons.append(upgrade_selection_mode_selector)
+	_sync_upgrade_selection_mode_button()
+
+func _create_damage_numbers_setting_button() -> void:
+	damage_numbers_setting_button = Button.new()
+	damage_numbers_setting_button.size = Vector2(240.0, 54.0)
+	damage_numbers_setting_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_numbers_setting_button.add_theme_font_size_override("font_size", 18)
+	damage_numbers_setting_button.add_theme_color_override("font_color", Color("fff0c7"))
+	damage_numbers_setting_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	damage_numbers_setting_button.add_theme_stylebox_override("hover", _make_box_style(Color("22323a"), GOLD_BRIGHT, 3))
+	damage_numbers_setting_button.add_theme_stylebox_override("pressed", _make_box_style(Color("4a3b24"), GOLD_BRIGHT, 3))
+	damage_numbers_setting_button.pressed.connect(_on_damage_numbers_setting_button_pressed)
+	add_child(damage_numbers_setting_button)
+	pause_buttons.append(damage_numbers_setting_button)
+	set_damage_numbers_enabled(damage_numbers_enabled)
+
+func _on_upgrade_selection_mode_button_pressed() -> void:
+	var selected_mode := "manual" if upgrade_selection_mode == "automatic" else "automatic"
+	set_upgrade_selection_mode(selected_mode)
+	upgrade_selection_mode_changed.emit(selected_mode)
+
+func _on_damage_numbers_setting_button_pressed() -> void:
+	set_damage_numbers_enabled(not damage_numbers_enabled)
+	damage_numbers_setting_changed.emit(damage_numbers_enabled)
+
+func _sync_upgrade_selection_mode_button() -> void:
+	if upgrade_selection_mode_selector == null or not is_instance_valid(upgrade_selection_mode_selector):
+		return
+	var automatic := upgrade_selection_mode == "automatic"
+	upgrade_selection_mode_selector.text = "强化选择：自动" if automatic else "强化选择：手动"
+	upgrade_selection_mode_selector.add_theme_stylebox_override("normal", _make_box_style(Color("173037") if automatic else PANEL_FILL, DRAGON_BLUE if automatic else GOLD, 2))
+
 func _on_combo_setting_button_pressed() -> void:
 	combo_enabled = not combo_enabled
 	set_combo_enabled(combo_enabled)
@@ -632,15 +854,131 @@ func _on_combo_setting_button_pressed() -> void:
 		combo_hint_remaining = 0.0
 		queue_redraw()
 
+func _create_modal_dismiss_area() -> void:
+	if modal_dismiss_area != null and is_instance_valid(modal_dismiss_area):
+		return
+	modal_dismiss_area = Control.new()
+	modal_dismiss_area.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal_dismiss_area.focus_mode = Control.FOCUS_NONE
+	modal_dismiss_area.visible = false
+	modal_dismiss_area.gui_input.connect(_on_modal_dismiss_area_gui_input)
+	add_child(modal_dismiss_area)
+
+func _set_modal_active(value: bool) -> void:
+	modal_active = value
+	_sync_modal_dismiss_area()
+	_sync_selected_upgrades_button_interaction()
+
+func _sync_modal_dismiss_area() -> void:
+	if modal_dismiss_area == null or not is_instance_valid(modal_dismiss_area):
+		return
+	modal_dismiss_area.position = Vector2.ZERO
+	modal_dismiss_area.size = size
+	modal_dismiss_area.visible = modal_active
+
+func _on_modal_dismiss_area_gui_input(event: InputEvent) -> void:
+	# Only the non-destructive pause and summary panels support tap-outside
+	# dismissal. Retreat confirmation, revive and settlement still require an
+	# explicit choice.
+	if not modal_active or retreat_confirm_active or not (pause_active or selected_upgrades_summary_active):
+		return
+	# Android dispatches an emulated mouse press immediately after each physical
+	# screen touch. A pause opened by that touch must not be closed again by its
+	# paired emulated event; real touch and desktop mouse input still dismiss.
+	if event is InputEventMouseButton and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	if not ((event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) or (event is InputEventScreenTouch and event.pressed)):
+		return
+	var panel_rect := _selected_upgrades_summary_panel_rect() if selected_upgrades_summary_active else _pause_panel_rect()
+	if panel_rect.has_point(event.position):
+		return
+	modal_dismiss_area.accept_event()
+	resume_requested.emit()
+
+func _on_selected_upgrades_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			selected_upgrades_scroll_touch_index = event.index
+			selected_upgrades_scroll_drag_start = event.position
+			selected_upgrades_scroll_drag_start_offset = scroll.scroll_vertical
+			selected_upgrades_scroll_dragging = false
+		elif event.index == selected_upgrades_scroll_touch_index:
+			if selected_upgrades_scroll_dragging:
+				scroll.accept_event()
+			selected_upgrades_scroll_touch_index = -1
+			selected_upgrades_scroll_dragging = false
+		return
+	if event is InputEventScreenDrag and event.index == selected_upgrades_scroll_touch_index:
+		if _update_selected_upgrades_scroll(scroll, event.position):
+			scroll.accept_event()
+
+func _update_selected_upgrades_scroll(scroll: ScrollContainer, pointer_position: Vector2) -> bool:
+	var delta_y := pointer_position.y - selected_upgrades_scroll_drag_start.y
+	if not selected_upgrades_scroll_dragging and absf(delta_y) < SUMMARY_SCROLL_DRAG_THRESHOLD:
+		return false
+	selected_upgrades_scroll_dragging = true
+	var bar := scroll.get_v_scroll_bar()
+	var target_scroll := clampf(float(selected_upgrades_scroll_drag_start_offset) - delta_y, bar.min_value, bar.max_value)
+	scroll.scroll_vertical = int(round(target_scroll))
+	return true
+
 func _sync_viewport_layout() -> void:
 	position = Vector2.ZERO
 	size = get_viewport().get_visible_rect().size
+	_sync_modal_dismiss_area()
+	_layout_selected_upgrades_button()
 	_layout_upgrade_buttons()
 	_layout_upgrade_refresh_button()
 	_layout_restart_button()
 	_layout_pause_buttons()
 	_layout_revive_buttons()
+	_layout_selected_upgrades_summary()
 	queue_redraw()
+
+func _layout_selected_upgrades_button() -> void:
+	if selected_upgrades_button == null or not is_instance_valid(selected_upgrades_button):
+		return
+	var width := minf(388.0, maxf(180.0, size.x - 32.0))
+	selected_upgrades_button.size = Vector2(width, 36.0)
+	selected_upgrades_button.position = Vector2(16.0, 202.0)
+
+func _layout_selected_upgrades_summary() -> void:
+	if not selected_upgrades_summary_active:
+		return
+	var panel := _selected_upgrades_summary_panel_rect()
+	if selected_upgrades_scroll != null and is_instance_valid(selected_upgrades_scroll):
+		selected_upgrades_scroll.position = panel.position + Vector2(28.0, 112.0)
+		selected_upgrades_scroll.size = Vector2(panel.size.x - 56.0, maxf(80.0, panel.size.y - 190.0))
+	if selected_upgrades_close_button != null and is_instance_valid(selected_upgrades_close_button):
+		selected_upgrades_close_button.position = Vector2(panel.get_center().x - selected_upgrades_close_button.size.x * 0.5, panel.end.y - selected_upgrades_close_button.size.y - 22.0)
+
+func _clear_selected_upgrades_summary_controls() -> void:
+	if selected_upgrades_scroll != null and is_instance_valid(selected_upgrades_scroll):
+		selected_upgrades_scroll.queue_free()
+	selected_upgrades_scroll = null
+	selected_upgrades_list = null
+	selected_upgrades_scroll_touch_index = -1
+	selected_upgrades_scroll_dragging = false
+	if selected_upgrades_close_button != null and is_instance_valid(selected_upgrades_close_button):
+		selected_upgrades_close_button.queue_free()
+	selected_upgrades_close_button = null
+
+func _advance_upgrade_notification(delta: float) -> void:
+	if active_upgrade_notification.is_empty():
+		_start_next_upgrade_notification()
+		return
+	upgrade_notification_remaining = maxf(0.0, upgrade_notification_remaining - delta)
+	if upgrade_notification_remaining <= 0.0:
+		active_upgrade_notification.clear()
+		_start_next_upgrade_notification()
+
+func _start_next_upgrade_notification() -> void:
+	if upgrade_notification_queue.is_empty():
+		active_upgrade_notification.clear()
+		upgrade_notification_remaining = 0.0
+		return
+	active_upgrade_notification = upgrade_notification_queue.pop_front() as Dictionary
+	upgrade_notification_remaining = UPGRADE_NOTIFICATION_DURATION + UPGRADE_NOTIFICATION_FADE_DURATION
 
 func _layout_upgrade_buttons() -> void:
 	if upgrade_buttons.is_empty():
@@ -668,9 +1006,9 @@ func _layout_upgrade_refresh_button() -> void:
 func _layout_restart_button() -> void:
 	if restart_button == null:
 		return
+	var result_rect := _result_panel_rect()
 	if result_home_button == null:
-		var single_result_rect := _result_panel_rect()
-		restart_button.position = Vector2(single_result_rect.get_center().x - restart_button.size.x * 0.5, single_result_rect.end.y - restart_button.size.y - 22.0)
+		restart_button.position = Vector2(result_rect.get_center().x - restart_button.size.x * 0.5, result_rect.end.y - restart_button.size.y - 18.0)
 		return
 	var gap := 18.0
 	var result_buttons: Array[Button] = [restart_button, result_home_button]
@@ -679,7 +1017,7 @@ func _layout_restart_button() -> void:
 		total_width += button.size.x
 	total_width += gap * float(result_buttons.size() - 1)
 	var start_x := size.x * 0.5 - total_width * 0.5
-	var button_y := _result_panel_rect().end.y - restart_button.size.y - 22.0
+	var button_y := result_rect.end.y - restart_button.size.y - 18.0
 	var cursor_x := start_x
 	for button in result_buttons:
 		button.position = Vector2(cursor_x, button_y)
@@ -701,22 +1039,27 @@ func _layout_pause_buttons() -> void:
 	if pause_buttons.is_empty():
 		return
 	var pause_rect := _pause_panel_rect()
-	var gap := 10.0
-	var total_height := 0.0
-	for button in pause_buttons:
-		total_height += button.size.y
-	total_height += gap * float(maxi(0, pause_buttons.size() - 1))
-	var start_y := pause_rect.end.y - 24.0 - total_height
+	var horizontal_gap := 12.0
+	var vertical_gap := 10.0
+	var side_margin := 32.0
+	var button_width := (pause_rect.size.x - side_margin * 2.0 - horizontal_gap) * 0.5
+	var row_count := ceili(float(pause_buttons.size()) * 0.5)
+	var button_height := pause_buttons[0].size.y
+	var total_height := button_height * row_count + vertical_gap * float(maxi(0, row_count - 1))
+	var content_top := pause_rect.position.y + 132.0
+	var content_bottom := pause_rect.end.y - 28.0
+	var start_y := content_top + maxf(0.0, (content_bottom - content_top - total_height) * 0.5)
 	for index in range(pause_buttons.size()):
-		var offset_y := 0.0
-		for previous_index in range(index):
-			offset_y += pause_buttons[previous_index].size.y
-			offset_y += gap
-		pause_buttons[index].position = Vector2(pause_rect.get_center().x - pause_buttons[index].size.x * 0.5, start_y + offset_y)
+		var button := pause_buttons[index]
+		var column := index % 2
+		var row := index / 2
+		button.size.x = button_width
+		button.position = Vector2(pause_rect.position.x + side_margin + float(column) * (button_width + horizontal_gap), start_y + float(row) * (button_height + vertical_gap))
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	_draw_top_hud(font)
+	_draw_upgrade_notification(font)
 	_draw_combo_counter(font)
 	_draw_tianji_slots(font)
 	_draw_skill_cluster(font)
@@ -787,27 +1130,31 @@ func _damage_edge_flash_strength() -> float:
 func _damage_edge_flash_color() -> Color:
 	return Color("ff7772").lerp(Color("861019"), damage_edge_flash_severity)
 
-func _draw_combo_counter(font: Font) -> void:
+func _draw_combo_counter(_font: Font) -> void:
 	if combo_count <= 0 or modal_active or result_active:
 		return
+	if combo_display_font == null:
+		combo_display_font = FontVariation.new()
+		combo_display_font.base_font = COMBO_KAITI_FONT
+		combo_display_font.variation_embolden = 0.85
 	var pop_ratio := clampf(combo_pop_remaining / COMBO_POP_DURATION, 0.0, 1.0)
 	var fade_ratio := clampf(combo_remaining / COMBO_FADE_DURATION, 0.0, 1.0)
 	var alpha := minf(1.0, fade_ratio)
-	var text_scale := 1.0 + pop_ratio * 0.20
-	var font_size := maxi(18, int(27.0 * text_scale))
-	var text_width := 320.0 * text_scale
-	var lift := (1.0 - fade_ratio) * 10.0
-	var origin := Vector2(size.x * 0.5 - text_width * 0.5, 91.0 - lift)
+	var text_scale := 1.0 + pop_ratio * 0.14
+	var font_size := maxi(30, roundi(39.0 * text_scale))
 	var label := "连击 x %d" % combo_count
-	var outline := Color(0.20, 0.07, 0.015, alpha * 0.94)
-	var fill := Color(1.0, 0.72, 0.20, alpha)
-	for offset in [Vector2(-2, -2), Vector2(2, -2), Vector2(-2, 2), Vector2(2, 2)]:
-		draw_string(font, origin + offset, label, HORIZONTAL_ALIGNMENT_CENTER, text_width, font_size, outline)
-	draw_string(font, origin, label, HORIZONTAL_ALIGNMENT_CENTER, text_width, font_size, fill)
+	var width := maxf(356.0, combo_display_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 88.0)
+	var lift := (1.0 - fade_ratio) * 10.0
+	var brush_rect := Rect2(size.x * 0.5 - width * 0.5, 54.0 - lift, width, 96.0 * text_scale)
+	draw_texture_rect(COMBO_BRUSH_TEXTURE, brush_rect, false, Color(1.0, 1.0, 1.0, alpha * 0.82))
+	var origin := Vector2(brush_rect.position.x, brush_rect.position.y + brush_rect.size.y * 0.70)
+	draw_string_outline(combo_display_font, origin, label, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, 5, Color(0.15, 0.025, 0.01, alpha))
+	draw_string(combo_display_font, origin, label, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color(1.0, 0.72, 0.24, alpha))
 
 func _draw_top_hud(font: Font) -> void:
 	var player_panel := Rect2(16, 14, 388, 184)
-	_draw_panel(player_panel, DRAGON_BLUE)
+	# Match the original HUD footprint, stretching the frame to its full height.
+	draw_texture_rect(HERO_INFO_TEXTURE, player_panel, false)
 	if player != null:
 		var content_rect := _panel_content_rect(player_panel, Vector2(14.0, 10.0))
 		var hero_name := HERO_CATALOG.hud_name_for(player.hero_id)
@@ -858,11 +1205,21 @@ func _draw_top_hud(font: Font) -> void:
 		var stage_content := _panel_content_rect(stage_rect, Vector2(14.0, 7.0))
 		var stage_text: String = str(DUEL_HINTS[duel_hint_index]) if duel_hint_active else (message if message_time > 0.0 else _idle_stage_label())
 		draw_string(font, stage_content.position + Vector2(0.0, 19.0), stage_text, HORIZONTAL_ALIGNMENT_LEFT, stage_content.size.x, 18, Color("f3e3bd"))
+		if siege_system != null and siege_system.is_active():
+			var gate_rect := Rect2(size.x * 0.5 - 184.0, 60, 368, 34)
+			_draw_panel(gate_rect, Color("b66a44"))
+			var gate_content := _panel_content_rect(gate_rect, Vector2(10.0, 6.0))
+			_draw_bar(Rect2(gate_content.position, Vector2(gate_content.size.x, 12.0)), siege_system.objective_ratio(), Color("ba624b"), siege_system.objective_label(), font)
+			var siege_status := siege_system.phase_status_label()
+			var siege_color := Color("f5d37d") if siege_system.is_counterattack_active() else (Color("efcf8e") if not siege_system.is_lone_stand() else HEALTH_RED)
+			draw_string(font, gate_content.position + Vector2(0.0, 25.0), siege_status, HORIZONTAL_ALIGNMENT_CENTER, gate_content.size.x, 12, siege_color)
 		var time_rect := Rect2(size.x - 170.0, 14, 154, 48)
 		_draw_panel(time_rect, GOLD)
 		var time_content := _panel_content_rect(time_rect, Vector2(14.0, 8.0))
 		if director.is_boss_trial():
 			draw_string(font, time_content.position + Vector2(0.0, 23.0), "试炼", HORIZONTAL_ALIGNMENT_CENTER, time_content.size.x, 23, Color("f5e5bb"))
+		elif director.is_siege():
+			draw_string(font, time_content.position + Vector2(0.0, 23.0), "攻城 %02d:%02d" % [int(director.elapsed) / 60, int(director.elapsed) % 60], HORIZONTAL_ALIGNMENT_CENTER, time_content.size.x, 18, Color("f5e5bb"))
 		else:
 			draw_string(font, time_content.position + Vector2(0.0, 24.0), "%02d:%02d" % [int(director.remaining_time()) / 60, int(director.remaining_time()) % 60], HORIZONTAL_ALIGNMENT_CENTER, time_content.size.x, 25, Color("f5e5bb"))
 	var pause_at := pause_center()
@@ -871,6 +1228,42 @@ func _draw_top_hud(font: Font) -> void:
 	draw_line(pause_at + Vector2(-6, -9), pause_at + Vector2(-6, 9), GOLD_BRIGHT, 4.0)
 	draw_line(pause_at + Vector2(6, -9), pause_at + Vector2(6, 9), GOLD_BRIGHT, 4.0)
 	_draw_enemy_status_rack(font)
+
+func _draw_upgrade_notification(font: Font) -> void:
+	if modal_active or active_upgrade_notification.is_empty() or upgrade_notification_remaining <= 0.0:
+		return
+	var button_rect := _selected_upgrades_button_rect()
+	var alpha := 1.0
+	if upgrade_notification_remaining < UPGRADE_NOTIFICATION_FADE_DURATION:
+		alpha = upgrade_notification_remaining / UPGRADE_NOTIFICATION_FADE_DURATION
+	var bubble_rect := Rect2(button_rect.position.x, button_rect.end.y + 10.0, button_rect.size.x, 62.0)
+	var arrow_center := Vector2(button_rect.get_center().x, bubble_rect.position.y)
+	draw_colored_polygon(PackedVector2Array([
+		arrow_center + Vector2(-9.0, 0.0),
+		arrow_center + Vector2(0.0, -8.0),
+		arrow_center + Vector2(9.0, 0.0),
+	]), Color(0.05, 0.12, 0.15, 0.88 * alpha))
+	draw_rect(bubble_rect, Color(0.05, 0.12, 0.15, 0.88 * alpha))
+	draw_rect(bubble_rect, Color(0.39, 0.73, 0.87, 0.82 * alpha), false, 1.0)
+	var status_label := "已获强化"
+	var status_width := font.get_string_size(status_label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14).x
+	var title_width := maxf(64.0, bubble_rect.size.x - 36.0 - status_width)
+	var title := _truncate_upgrade_notification_text(str(active_upgrade_notification.get("title", "强化")), 4, font, 17, title_width)
+	var description := _truncate_upgrade_notification_text(str(active_upgrade_notification.get("description", "")), 20, font, 14, bubble_rect.size.x - 24.0)
+	draw_string(font, bubble_rect.position + Vector2(12.0, 23.0), title, HORIZONTAL_ALIGNMENT_LEFT, title_width, 17, Color(0.96, 0.88, 0.66, alpha))
+	draw_string(font, Vector2(bubble_rect.end.x - status_width - 12.0, bubble_rect.position.y + 22.0), status_label, HORIZONTAL_ALIGNMENT_LEFT, status_width, 14, Color(0.55, 0.80, 0.90, alpha))
+	draw_string(font, bubble_rect.position + Vector2(12.0, 47.0), description, HORIZONTAL_ALIGNMENT_LEFT, bubble_rect.size.x - 24.0, 14, Color(0.84, 0.93, 0.92, alpha))
+
+func _truncate_upgrade_notification_text(value: String, character_limit: int, font: Font, font_size: int, max_width: float) -> String:
+	var clipped := value
+	if clipped.length() > character_limit:
+		clipped = clipped.left(character_limit) + "..."
+	return _truncate_hud_text(clipped, font, font_size, max_width)
+
+func _selected_upgrades_button_rect() -> Rect2:
+	if selected_upgrades_button != null and is_instance_valid(selected_upgrades_button):
+		return Rect2(selected_upgrades_button.position, selected_upgrades_button.size)
+	return Rect2(16.0, 202.0, minf(388.0, maxf(180.0, size.x - 32.0)), 36.0)
 
 func _draw_hero_status_rack(font: Font, rack_rect: Rect2) -> void:
 	if player == null:
@@ -981,6 +1374,8 @@ func _battle_mode_label() -> String:
 		return "剧情战役"
 	if director.is_boss_trial():
 		return "名将斗阵"
+	if director.is_siege():
+		return "无尽 · 攻城略地"
 	if director.mode == "story":
 		return "剧情 · %s" % director.story_chapter_title()
 	match director.battlefield_id:
@@ -996,6 +1391,8 @@ func _idle_stage_label() -> String:
 		return "战场推进"
 	if director.is_boss_trial():
 		return "虎牢关外 · 斗将台"
+	if director.is_siege():
+		return "攻取荆州 · 破门入城"
 	if director.mode == "story":
 		return director.story_chapter_title()
 	match director.battlefield_id:
@@ -1007,6 +1404,12 @@ func _idle_stage_label() -> String:
 			return "长坂坡 · 夜雪战场"
 
 func _draw_enemy_status_rack(font: Font) -> void:
+	var arrow_towers: Array[Dictionary] = []
+	if siege_system != null and siege_system.is_active():
+		arrow_towers = siege_system.active_arrow_towers()
+	if not arrow_towers.is_empty():
+		_draw_arrow_tower_status_rack(arrow_towers, font)
+		return
 	var active_elites: Array[EliteActor] = []
 	for elite in elites:
 		if is_instance_valid(elite) and elite.active:
@@ -1039,6 +1442,38 @@ func _draw_enemy_status_rack(font: Font) -> void:
 		var boss_rect := Rect2(rack_x, row_y, rack_width, NAMED_BOSS_ROW_HEIGHT)
 		var boss_state := "破势" if boss.is_stance_broken() else ("虚弱" if boss.is_vulnerable() else ("天魔降世" if boss.is_ultimate_airborne() or boss.is_ultimate_landing() else ("反击" if boss.has_counterattack() else "第 %d 阶段" % boss.phase)))
 		_draw_enemy_status_bar(boss_rect, "领主", boss.display_name(), boss.health_component.current, boss.health_component.maximum, boss.health_layer_capacity(), boss.stance, boss.stance_max(), boss_state, boss.is_stance_broken(), font)
+
+func _draw_arrow_tower_status_rack(towers: Array[Dictionary], font: Font) -> void:
+	var rack_width := clampf(size.x * 0.54, 460.0, 700.0)
+	var gap := 6.0
+	var row_height := 42.0
+	var column_width := (rack_width - gap) * 0.5
+	var total_height := 22.0 + row_height * 2.0 + gap
+	var rack_x := clampf(size.x * 0.5 - rack_width * 0.5, 14.0, size.x - rack_width - 14.0)
+	var rack_y := maxf(138.0, size.y - 16.0 - total_height)
+	draw_string(font, Vector2(rack_x, rack_y + 15.0), "箭楼防线 · 摧毁箭楼即可突破拒马", HORIZONTAL_ALIGNMENT_CENTER, rack_width, 14, Color("f4d58d"))
+	for index in range(mini(4, towers.size())):
+		var row := index / 2
+		var column := index % 2
+		var tower_rect := Rect2(rack_x + float(column) * (column_width + gap), rack_y + 22.0 + float(row) * (row_height + gap), column_width, row_height)
+		_draw_arrow_tower_status_entry(tower_rect, towers[index], index, font)
+
+func _draw_arrow_tower_status_entry(rect: Rect2, tower: Dictionary, index: int, font: Font) -> void:
+	var current := maxf(0.0, float(tower.get("health", 0.0)))
+	var maximum := maxf(1.0, float(tower.get("maximum", 1.0)))
+	var destroyed := current <= 0.0
+	_draw_panel(rect, Color("566069") if destroyed else Color("b87d3f"))
+	var content := _panel_content_rect(rect, Vector2(8.0, 5.0))
+	var name := "箭楼 %d" % (index + 1)
+	draw_string(font, content.position + Vector2(0.0, 12.0), name, HORIZONTAL_ALIGNMENT_LEFT, 58.0, 13, Color("7b858a") if destroyed else Color("fff1d8"))
+	var status := "已毁" if destroyed else "%d%%" % int(round(current / maximum * 100.0))
+	draw_string(font, Vector2(content.end.x - 44.0, content.position.y + 12.0), status, HORIZONTAL_ALIGNMENT_RIGHT, 44.0, 12, Color("8b9599") if destroyed else Color("f5d37d"))
+	var bar := Rect2(content.position + Vector2(0.0, 19.0), Vector2(content.size.x, 11.0))
+	draw_rect(bar, Color("160f13"))
+	var fill_width := bar.size.x * clampf(current / maximum, 0.0, 1.0)
+	if fill_width > 0.0:
+		draw_rect(Rect2(bar.position + Vector2(1.0, 1.0), Vector2(maxf(0.0, fill_width - 2.0), maxf(1.0, bar.size.y - 2.0))), Color("d95f4c") if not destroyed else Color("596169"))
+	draw_rect(bar, Color("d3a45e") if not destroyed else Color("687278"), false, 1.0)
 
 func _sort_elites_by_player_distance(left: EliteActor, right: EliteActor) -> bool:
 	return left.position.distance_squared_to(player.position) < right.position.distance_squared_to(player.position)
@@ -1184,9 +1619,7 @@ func _health_layer_color(layer_number: int, _total_layers: int) -> Color:
 
 func _draw_skill_cluster(font: Font) -> void:
 	_draw_move_pad(font)
-	# The combat controls keep their established hit areas, but the visual layer
-	# now reads as a compact wuxia ability wheel: weapon-first attack icon and
-	# very short labels for the three ability buttons.
+	# Keep the existing hit areas while replacing only the control artwork.
 	var split_guan_controls := is_guan_drag_split()
 	_draw_skill_button(attack_center(), 68.0, "", "", DRAGON_BLUE, true, font, "attack")
 	if split_guan_controls:
@@ -1333,19 +1766,25 @@ func _draw_named_target_avatar(center: Vector2, kind: String) -> void:
 
 func _draw_move_pad(font: Font) -> void:
 	var center := move_center()
-	draw_circle(center, 88.0, Color(0.01, 0.02, 0.03, 0.52))
-	draw_arc(center, 88.0, 0.0, TAU, 32, Color("5d7680"), 2.5)
-	draw_arc(center, 64.0, 0.0, TAU, 28, Color("334c57"), 1.2)
-	var knob := center + move_stick_offset
-	draw_circle(knob, 25.0, Color("253740"))
-	draw_arc(knob, 25.0, 0.0, TAU, 20, DRAGON_BLUE, 2.0)
+	_draw_texture_centered(MOVE_BUTTON_TEXTURE, center, Vector2(178.0, 178.0), Color.WHITE)
+	# The two source sprites have slightly different visual centers. Keep the
+	# resting knob aligned with the visible base, without altering input math.
+	var knob := center + Vector2(-3.0, 3.0) + move_stick_offset
+	_draw_texture_centered(MOVE_KNOB_TEXTURE, knob, Vector2(58.0, 58.0), Color.WHITE)
 	draw_string(font, center + Vector2(-24, 118), "移动", HORIZONTAL_ALIGNMENT_CENTER, 48, 14, Color("9ab5bd"))
 
 func _draw_modal_backdrop(font: Font) -> void:
 	if not modal_active:
 		return
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.02, 0.03, 0.68))
-	if pause_active:
+	if selected_upgrades_summary_active:
+		var summary_rect := _selected_upgrades_summary_panel_rect()
+		_draw_panel(summary_rect, DRAGON_BLUE, true)
+		draw_string(font, Vector2(summary_rect.get_center().x - 58.0, summary_rect.position.y + 66.0), "本局强化", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, GOLD_BRIGHT)
+		UITheme.draw_title_divider(self, Rect2(summary_rect.get_center().x - 118.0, summary_rect.position.y + 74.0, 236.0, 18.0))
+		var summary_hint := "已选择 %d 项强化，可上下滑动查看" % selected_upgrades_summary_count if selected_upgrades_summary_count > 0 else "本局尚未获得强化"
+		draw_string(font, Vector2(summary_rect.position.x + 28.0, summary_rect.position.y + 106.0), summary_hint, HORIZONTAL_ALIGNMENT_LEFT, summary_rect.size.x - 56.0, 15, Color("b9c5c5"))
+	elif pause_active:
 		var pause_rect := _pause_panel_rect()
 		_draw_panel(pause_rect, GOLD, true)
 		draw_string(font, Vector2(pause_rect.get_center().x - 58.0, pause_rect.position.y + 74.0), "战斗暂停", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, GOLD_BRIGHT)
@@ -1370,20 +1809,36 @@ func _draw_modal_backdrop(font: Font) -> void:
 	elif result_active:
 		var result_rect := _result_panel_rect()
 		_draw_panel(result_rect, GOLD if result_victory else HEALTH_RED, true)
-		var is_boss_trial := director != null and director.is_boss_trial()
-		var voluntary_end := bool(result_stats.get("voluntary_end", false))
-		var title := "鸣金收兵" if voluntary_end else ("名将斗阵完成" if is_boss_trial and result_victory else ("名将斗阵失败" if is_boss_trial else ("长坂坡突围成功" if result_victory else "长坂坡突围失败")))
-		var title_color := GOLD_BRIGHT if result_victory or voluntary_end else Color("ffaaa0")
+		var title_font := FontVariation.new()
+		title_font.base_font = COMBO_KAITI_FONT
+		title_font.variation_embolden = 0.9
+		# The portrait sits directly above the settlement card, while the title
+		# and data text are drawn afterward so they remain readable.
 		var portrait_rect := _result_portrait_rect(result_rect)
-		var content_width := maxf(178.0, portrait_rect.position.x - result_rect.position.x - 34.0)
-		draw_string(font, result_rect.position + Vector2(30.0, 52.0), title, HORIZONTAL_ALIGNMENT_LEFT, content_width, 29, title_color)
-		UITheme.draw_title_divider(self, Rect2(result_rect.position.x + 28.0, result_rect.position.y + 62.0, content_width, 16.0))
-		draw_string(font, result_rect.position + Vector2(30.0, 84.0), result_message, HORIZONTAL_ALIGNMENT_LEFT, content_width, 16, Color("d7dfda"))
-		_draw_result_stat(font, result_rect.position + Vector2(30.0, 132.0), "击破", "%d" % int(result_stats.get("defeated", 0)), GOLD_BRIGHT)
-		_draw_result_stat(font, result_rect.position + Vector2(146.0, 132.0), "受伤", "%d" % int(round(float(result_stats.get("damage_taken", 0.0)))), Color("e99186"))
-		_draw_result_stat(font, result_rect.position + Vector2(30.0, 190.0), "战时", _format_result_time(float(result_stats.get("combat_time", 0.0))), DRAGON_BLUE)
-		_draw_result_stat(font, result_rect.position + Vector2(146.0, 190.0), "军功", "%d" % int(result_stats.get("military_merit", run_gold)), GOLD_BRIGHT)
 		_draw_result_hero_portrait(portrait_rect)
+		# Let the heading float above the compact card instead of consuming the
+		# card's useful content height, and shift it slightly left.
+		var title_brush_rect := Rect2(result_rect.position.x + 20.0, result_rect.position.y - 24.0, result_rect.size.x - 126.0, 70.0)
+		draw_texture_rect(COMBO_BRUSH_TEXTURE, title_brush_rect, false, Color(1.0, 1.0, 1.0, 0.88))
+		draw_string_outline(title_font, Vector2(title_brush_rect.position.x, title_brush_rect.position.y + 50.0), "鸣金收兵", HORIZONTAL_ALIGNMENT_CENTER, title_brush_rect.size.x, 36, 5, Color(0.10, 0.015, 0.01, 0.96))
+		draw_string(title_font, Vector2(title_brush_rect.position.x, title_brush_rect.position.y + 50.0), "鸣金收兵", HORIZONTAL_ALIGNMENT_CENTER, title_brush_rect.size.x, 36, GOLD_BRIGHT)
+		# Keep the battle data column on the left and reserve the right side for
+		# the enlarged portrait.
+		var data_x := result_rect.position.x + 26.0
+		var data_width := result_rect.size.x * 0.43
+		# Move the whole data column upward so the last row stays clear of the
+		# bottom action buttons.
+		draw_string(title_font, Vector2(data_x, result_rect.position.y + 84.0), "战斗数据", HORIZONTAL_ALIGNMENT_LEFT, data_width, 22, GOLD_BRIGHT)
+		UITheme.draw_title_divider(self, Rect2(data_x, result_rect.position.y + 91.0, data_width, 12.0))
+		draw_string(font, Vector2(data_x, result_rect.position.y + 114.0), result_message, HORIZONTAL_ALIGNMENT_LEFT, data_width, 14, Color("d7dfda"))
+		var stat_rect := Rect2(data_x, result_rect.position.y + 130.0, data_width, 37.0)
+		_draw_result_stat(font, stat_rect, "击破", "%d" % int(result_stats.get("defeated", 0)), GOLD_BRIGHT)
+		stat_rect.position.y += 42.0
+		_draw_result_stat(font, stat_rect, "受伤", "%d" % int(round(float(result_stats.get("damage_taken", 0.0)))), Color("e99186"))
+		stat_rect.position.y += 42.0
+		_draw_result_stat(font, stat_rect, "战时", _format_result_time(float(result_stats.get("combat_time", 0.0))), DRAGON_BLUE)
+		stat_rect.position.y += 42.0
+		_draw_result_stat(font, stat_rect, "军功", "%d" % int(result_stats.get("military_merit", run_gold)), GOLD_BRIGHT)
 	else:
 		var choice_count := maxi(1, upgrade_option_count)
 		var card_width := _upgrade_card_width(choice_count)
@@ -1403,44 +1858,63 @@ func _draw_modal_backdrop(font: Font) -> void:
 			draw_string(font, Vector2(upgrade_rect.position.x, 188), choice_label + " · 选择强化，重整枪势", HORIZONTAL_ALIGNMENT_CENTER, upgrade_rect.size.x, 15, Color("b9c5c5"))
 
 func _pause_panel_rect() -> Rect2:
-	return Rect2(size.x * 0.5 - 236.0, size.y * 0.5 - 195.0, 472.0, 390.0)
+	var panel_width := minf(560.0, maxf(342.0, size.x - 36.0))
+	return Rect2(size.x * 0.5 - panel_width * 0.5, size.y * 0.5 - 236.0, panel_width, 472.0)
+
+func _selected_upgrades_summary_panel_rect() -> Rect2:
+	return Rect2(size.x * 0.5 - 236.0, size.y * 0.5 - 236.0, 472.0, 472.0)
 
 func _result_panel_rect() -> Rect2:
-	# Keep the result card close to its actual content. The portrait still
-	# overlaps the right edge, so the card does not need a large empty reserve.
-	var panel_width := minf(560.0, maxf(342.0, size.x - 36.0))
-	var panel_height := minf(326.0, maxf(300.0, size.y - 96.0))
+	# Keep the settlement card close to the compact modal scale used elsewhere.
+	# The portrait is rendered independently and may extend past the card, so the
+	# card does not need extra width or height just to contain the artwork.
+	var panel_width := minf(560.0, maxf(400.0, size.x - 32.0))
+	var panel_height := minf(380.0, maxf(330.0, size.y - 32.0))
 	return Rect2(size.x * 0.5 - panel_width * 0.5, size.y * 0.5 - panel_height * 0.5, panel_width, panel_height)
 
-func _draw_result_stat(font: Font, origin: Vector2, label: String, value: String, accent: Color) -> void:
-	draw_string(font, origin, label, HORIZONTAL_ALIGNMENT_LEFT, 92.0, 13, Color("9fb0b1"))
-	draw_string(font, origin + Vector2(0.0, 23.0), value, HORIZONTAL_ALIGNMENT_LEFT, 96.0, 21, accent)
+func _draw_result_stat(font: Font, rect: Rect2, label: String, value: String, accent: Color) -> void:
+	draw_rect(rect, Color(0.035, 0.055, 0.063, 0.78), true)
+	draw_rect(rect, Color(0.61, 0.49, 0.29, 0.62), false, 1.0)
+	draw_string(font, rect.position + Vector2(12.0, 24.0), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x * 0.52, 16, Color("bdc6c0"))
+	draw_string(font, rect.position + Vector2(rect.size.x * 0.52, 26.0), value, HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x * 0.40, 20, accent)
 
 func _format_result_time(total_seconds: float) -> String:
 	var seconds := maxi(0, int(round(total_seconds)))
 	return "%02d:%02d" % [seconds / 60, seconds % 60]
 
 func _result_portrait_rect(result_rect: Rect2) -> Rect2:
-	if hero_portrait == null:
+	if result_hero_portrait == null:
 		return Rect2()
-	var texture_size := hero_portrait.get_size()
+	var texture_size := result_hero_portrait.get_size()
 	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
 		return Rect2()
-	var target_width := minf(308.0, result_rect.size.x * 0.54)
-	var target_height := target_width * texture_size.y / texture_size.x
-	var max_height := maxf(1.0, result_rect.size.y * 1.18)
-	if target_height > max_height:
-		target_height = max_height
-		target_width = target_height * texture_size.x / texture_size.y
-	var portrait_x := result_rect.end.x - target_width * 0.72
-	var portrait_y := result_rect.end.y - target_height * 0.93
-	return Rect2(portrait_x, portrait_y, target_width, target_height)
+	# The portrait is intentionally allowed to extend beyond the compact card.
+	# This keeps the data panel tight without sacrificing the new full-size artwork.
+	# Scale the new portrait to 1.5x its previous 270px display width.
+	var target_width := minf(405.0, maxf(300.0, result_rect.size.x * 0.724))
+	var target_size := Vector2(target_width, target_width * texture_size.y / texture_size.x)
+	# Place the enlarged portrait on the right side of the data column and
+	# lift it slightly so the upper body remains visible above the compact card.
+	var portrait_x := result_rect.position.x + result_rect.size.x * 0.58 - target_width * 0.25
+	var portrait_y := result_rect.position.y - 42.0
+	return Rect2(Vector2(portrait_x, portrait_y), target_size)
 
 func _draw_result_hero_portrait(rect: Rect2) -> void:
-	if hero_portrait == null:
+	if result_hero_portrait == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
 		return
-	draw_circle(rect.get_center() + Vector2(0.0, rect.size.y * 0.12), rect.size.x * 0.46, Color(0.72, 0.53, 0.24, 0.13))
-	draw_texture_rect(hero_portrait, rect, false, Color(1.0, 1.0, 1.0, 0.98))
+	# The portrait should sit directly on the settlement background; do not add
+	# a decorative circle behind it.
+	draw_texture_rect(result_hero_portrait, rect, false, Color(1.0, 1.0, 1.0, 0.98))
+
+func _draw_texture_centered(texture: Texture2D, center: Vector2, max_size: Vector2, modulate: Color = Color.WHITE) -> void:
+	if texture == null:
+		return
+	var texture_size := texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0 or max_size.x <= 0.0 or max_size.y <= 0.0:
+		return
+	var scale_factor := minf(max_size.x / texture_size.x, max_size.y / texture_size.y)
+	var draw_size := texture_size * scale_factor
+	draw_texture_rect(texture, Rect2(center - draw_size * 0.5, draw_size), false, modulate)
 
 func _draw_panel(rect: Rect2, accent: Color, emphasize: bool = false) -> void:
 	UITheme.draw_panel(self, rect, accent, emphasize)
@@ -1501,53 +1975,80 @@ func _draw_skill_button(center: Vector2, radius: float, title: String, subtitle:
 		radius *= 0.90
 	var pulse := 0.72 + 0.28 * (sin(ui_time * 5.0) + 1.0) * 0.5 if enabled else 0.48
 	var ring_color := accent if enabled else Color("4b555b")
-	var plate_color := Color("17262b") if enabled else Color("141b1f")
-	# Layered metal rim and inset plate make the controls legible over any map.
-	draw_circle(center, radius + 9.0, Color(0.01, 0.015, 0.018, 0.78))
-	draw_arc(center, radius + 7.0, 0.0, TAU, 40, Color(0.70, 0.57, 0.35, 0.28), 2.0)
-	draw_circle(center, radius + 3.0, Color("30251b"))
-	draw_circle(center, radius, plate_color)
-	draw_arc(center, radius, 0.0, TAU, 40, ring_color, 3.0)
-	draw_arc(center, radius - 7.0, -PI * 0.88, PI * 0.15, 28, _alpha(Color("f4d58d"), pulse * 0.82), 1.5)
-	draw_arc(center, radius - 8.5, PI * 0.18, PI * 0.82, 18, _alpha(ring_color, 0.52), 1.0)
-	if enabled:
-		draw_circle(center + Vector2(-radius * 0.26, -radius * 0.30), radius * 0.33, Color(1.0, 0.93, 0.75, 0.055))
-	else:
-		draw_circle(center, radius - 4.0, Color(0.02, 0.03, 0.035, 0.24))
-	var has_icon := icon_kind == "attack" or icon_kind == "weapon"
+	var button_texture: Texture2D = SKILL_BUTTON_TEXTURE
+	var button_size := Vector2(radius * 2.12, radius * 2.30)
+	if icon_kind == "attack":
+		button_texture = ATTACK_BUTTON_TEXTURE
+		button_size = Vector2(radius * 2.16, radius * 1.98)
+	var button_modulate := Color.WHITE if enabled else Color(0.55, 0.60, 0.61, 0.86)
+	# attackBtn.png already contains the weapon artwork; do not cover it with
+	# another skill icon. Draw the other icons UNDER skillBtn.png so its gold
+	# frame masks the square logo corners and keeps the ornament unobstructed.
+	var has_icon := icon_kind == "active" or icon_kind == "ultimate" or icon_kind == "drag" or icon_kind == "guard" or icon_kind == "weapon"
 	if has_icon:
 		_draw_skill_icon(center, radius, icon_kind, ring_color, enabled)
+	_draw_texture_centered(button_texture, center, button_size, button_modulate)
 	if not title.is_empty():
 		var title_size := 15 if radius <= 50.0 else 17
-		var title_y := center.y + radius * 0.62 if has_icon else center.y + 6.0
-		draw_string(font, Vector2(center.x - radius, title_y), title, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, title_size, Color("f0ddb0") if enabled else Color("929b9d"))
+		var title_y := center.y + radius - 2.0 if has_icon else center.y + 6.0
+		var title_at := Vector2(center.x - radius, title_y)
+		draw_string_outline(font, title_at, title, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, title_size, 3, Color("152022"))
+		draw_string(font, title_at, title, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, title_size, Color("f0ddb0") if enabled else Color("929b9d"))
 	if not subtitle.is_empty() and radius >= 45.0:
 		var subtitle_width := clampf(maxf(42.0, float(subtitle.length()) * 7.0 + 8.0), 42.0, radius * 1.75)
-		var subtitle_y := center.y + radius * 0.84 if has_icon else center.y + 27.0
-		draw_string(font, Vector2(center.x - subtitle_width * 0.5, subtitle_y), subtitle, HORIZONTAL_ALIGNMENT_CENTER, subtitle_width, 11, Color("d5e5df") if enabled else Color("7d898d"))
+		var subtitle_y := center.y + radius + 14.0 if has_icon else center.y + 27.0
+		var subtitle_at := Vector2(center.x - subtitle_width * 0.5, subtitle_y)
+		draw_string_outline(font, subtitle_at, subtitle, HORIZONTAL_ALIGNMENT_CENTER, subtitle_width, 11, 3, Color("152022"))
+		draw_string(font, subtitle_at, subtitle, HORIZONTAL_ALIGNMENT_CENTER, subtitle_width, 11, Color("d5e5df") if enabled else Color("7d898d"))
+	if enabled:
+		draw_arc(center, radius + 4.0, -PI * 0.88, PI * 0.15, 28, _alpha(Color("f4d58d"), pulse * 0.82), 1.5)
 
 func _draw_skill_icon(center: Vector2, radius: float, icon_kind: String, accent: Color, enabled: bool) -> void:
-	var icon_color := Color("f3dfaa") if enabled else Color("7d898d")
-	var icon_shadow := Color(0.02, 0.03, 0.035, 0.82)
-	var scale := clampf(radius / 58.0, 0.62, 1.15)
+	var icon_modulate := Color.WHITE if enabled else Color(0.55, 0.60, 0.61, 0.86)
 	match icon_kind:
-		"attack":
-			_draw_attack_button_icon(center, radius)
+		"guard":
+			# Match the shield to the transparent well in skillBtn.png.
+			_draw_texture_centered(SHIELD_TEXTURE, center, Vector2(radius * 1.74, radius * 1.74), icon_modulate)
 		"weapon":
+			var icon_color := Color("f3dfaa") if enabled else Color("7d898d")
+			var icon_shadow := Color(0.02, 0.03, 0.035, 0.82)
 			if player != null and player.is_bow_stance():
-				_draw_bow_icon(center, scale * 0.72, icon_color, icon_shadow)
+				_draw_bow_icon(center, clampf(radius / 58.0, 0.62, 1.15) * 0.62, icon_color, icon_shadow)
 			else:
-				_draw_sword_icon(center, scale * 0.72, icon_color, icon_shadow)
+				_draw_sword_icon(center, clampf(radius / 58.0, 0.62, 1.15) * 0.62, icon_color, icon_shadow)
+		_:
+			var skill_index := 0
+			var skill_hero_id := player.hero_id if player != null else "guan_yu"
+			if icon_kind == "active":
+				skill_index = 2
+			elif icon_kind == "ultimate":
+				skill_index = 3
+			elif icon_kind == "drag":
+				skill_hero_id = "guan_yu"
+				skill_index = 0
+			var texture := _hero_skill_texture(skill_hero_id, skill_index)
+			if texture != null:
+				# Fill the transparent center while keeping the logo proportional.
+				var icon_size := Vector2(radius * 1.78, radius * 1.78)
+				_draw_texture_centered(texture, center, icon_size, icon_modulate)
 
-func _draw_attack_button_icon(center: Vector2, radius: float) -> void:
-	if ATTACK_BUTTON_TEXTURE == null:
-		return
-	var icon_scale := clampf(radius / 64.0, 0.92, 1.08)
-	var icon_size := Vector2(124.0, 120.0) * icon_scale
-	var icon_rect := Rect2(center - icon_size * 0.5, icon_size)
-	# A restrained shadow keeps the supplied ivory blade readable against the dark plate.
-	draw_texture_rect_region(ATTACK_BUTTON_TEXTURE, Rect2(icon_rect.position + Vector2(2.0, 3.0), icon_rect.size), ATTACK_BUTTON_SOURCE_RECT, Color(0.01, 0.02, 0.02, 0.34))
-	draw_texture_rect_region(ATTACK_BUTTON_TEXTURE, icon_rect, ATTACK_BUTTON_SOURCE_RECT, Color(1.0, 0.98, 0.90, 0.72))
+func _hero_skill_texture(hero_id: String, skill_index: int) -> Texture2D:
+	var names := {
+		"guan_yu": "guanyu",
+		"zhang_fei": "zhangfei",
+		"zhao_yun": "zhaoyun",
+		"ma_chao": "machao",
+	}
+	var stem := str(names.get(hero_id, ""))
+	if stem.is_empty() or skill_index < 0:
+		return null
+	var cache_key := "%s:%d" % [hero_id, skill_index]
+	if battle_skill_textures.has(cache_key):
+		return battle_skill_textures[cache_key] as Texture2D
+	var icon_path := "res://assets/art/ui/hero_skills/%s%d.png" % [stem, skill_index + 1]
+	var texture := load(icon_path) as Texture2D if ResourceLoader.exists(icon_path) else null
+	battle_skill_textures[cache_key] = texture
+	return texture
 
 func _draw_spear_icon(center: Vector2, scale: float, color: Color, shadow: Color) -> void:
 	var shaft_start := center + Vector2(-24.0, 19.0) * scale

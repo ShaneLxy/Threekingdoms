@@ -2,6 +2,7 @@ class_name MapEditor
 extends Control
 
 const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
+const NON_COMBAT_FRAME_TEXTURE = preload("res://assets/art/ui/backgrounds/main_menu/mainFrame_new.png")
 const MAP_RECT := Rect2(252.0, 92.0, 1000.0, 568.0)
 const PALETTE_PAGE_SIZE := 8
 const PANEL_FILL := Color("10191f")
@@ -626,8 +627,10 @@ func _object_visual_rect(object: Dictionary) -> Rect2:
 
 func _draw() -> void:
 	var background := Rect2(Vector2.ZERO, size)
-	draw_texture_rect(preload("res://assets/art/ui/backgrounds/bg.png"), background, false, Color(0.78, 0.78, 0.78, 0.94))
-	draw_rect(background, Color(0.02, 0.025, 0.03, 0.62))
+	var texture_size := NON_COMBAT_FRAME_TEXTURE.get_size()
+	var scale_factor := maxf(background.size.x / texture_size.x, background.size.y / texture_size.y)
+	var draw_size := texture_size * scale_factor
+	draw_texture_rect(NON_COMBAT_FRAME_TEXTURE, Rect2(background.get_center() - draw_size * 0.5, draw_size), false)
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(166.0, 47.0), "%s · 地图编辑器" % BATTLEFIELD_LAYOUT.title_for(current_battlefield_id), HORIZONTAL_ALIGNMENT_LEFT, -1, 25, GOLD_BRIGHT)
 	draw_string(font, Vector2(166.0, 70.0), _map_editing_hint(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("a9c2c7"))

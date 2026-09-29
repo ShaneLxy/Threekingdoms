@@ -4,6 +4,9 @@ extends Node2D
 const WORLD_BOUNDS := Rect2(0, 0, 2560, 1440)
 const BOWANGPO_WORLD_BOUNDS := Rect2(0, 0, 2304, 1248)
 const BOSS_TRIAL_WORLD_BOUNDS := Rect2(0, 0, 1672, 941)
+# The revised Jingzhou canvas is 3600 × 836. 6200 × 1440 preserves its aspect
+# ratio while giving the two barricade nodes enough depth to breathe.
+const SIEGE_WORLD_BOUNDS := Rect2(0, 0, 6200, 1440)
 const BOSS_TRIAL_ARENA_BOUNDS := BattlefieldLayout.BOSS_TRIAL_ARENA_BOUNDS
 const CAMERA_LOOK_AHEAD := 68.0
 const DEFAULT_BATTLE_CAMERA_ZOOM := Vector2(1.55, 1.55)
@@ -30,8 +33,6 @@ const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
 const BATTLE_WEATHER_MODES := ["sunny", "rain", "storm", "snow"]
 const BOSS_TRIAL_STARTING_UPGRADES := 5
 const BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT := 5
-const BOSS_TRIAL_UPGRADE_OPTION_COUNT := 3
-const BOSS_TRIAL_UPGRADE_SELECTION_LIMIT := 1
 const UPGRADE_REFRESH_LIMIT := 5
 const WEAPON_CLASH_WINDOW := 0.28
 const PERFECT_WEAPON_CLASH_WINDOW := 0.10
@@ -56,6 +57,12 @@ const BOSS_TRIAL_FIRST_CLEAR_MERIT := 600.0
 const UPGRADE_AD_REFRESH_LIMIT := 0
 const ENDLESS_MILESTONE_TIMES := [300.0, 600.0, 900.0, 1200.0]
 const ENDLESS_MILESTONE_REWARDS := [120.0, 160.0, 200.0, 260.0]
+const SIEGE_COMPANION_HERO_IDS := ["guan_yu", "zhang_fei", "zhao_yun"]
+const SIEGE_COMPANION_SPAWN_OFFSET := Vector2(-96.0, 74.0)
+const SIEGE_COMPANION_TARGET_RANGE := 106.0
+const SIEGE_COMPANION_ACTIVE_RANGE := 248.0
+const SIEGE_COMPANION_DECISION_INTERVAL := 0.12
+const SIEGE_COMPANION_BASIC_BUFFER_PROGRESS := 0.58
 
 @onready var renderer: BattleRenderer = $BattleRenderer
 @onready var player: HeroActor = $Player as HeroActor  # 使用 as 转换以避免类型错误
@@ -66,13 +73,22 @@ var battle_camera: Camera2D
 @onready var upgrades: UpgradeSystem = $UpgradeSystem
 @onready var tianji: TianjiSystem = $TianjiSystem
 @onready var director: RunDirector = $RunDirector
+@onready var siege: SiegeSystem = $SiegeSystem
 @onready var loot: LootSystem = $LootSystem
+@onready var battle_souls: BattleSoulSystem = $BattleSoulSystem
 @onready var input_router: InputRouter = $InputRouter
 @onready var hud: BattleHud = $HudLayer/BattleHud
 @onready var ultimate_cutin: UltimateCutin = $UltimateCutinLayer/UltimateCutin
 
 var telegraphs: Array[Telegraph] = []
 var elites: Array[EliteActor] = []
+var siege_companion: HeroActor
+var siege_companion_upgrades: UpgradeSystem
+var siege_companion_level := 1
+var siege_companion_decision_remaining := 0.0
+var siege_companion_buffered_combo_stage := -1
+var pending_siege_enemy_attacks: Array[Dictionary] = []
+var siege_target_refresh_pending := false
 var upgrade_open := false
 var finished := false
 var restart_settlement_started := false
@@ -120,7 +136,9 @@ var current_upgrade_selection_limit := 1
 var current_upgrade_selection_count := 0
 var opening_strategy_selected := false
 var run_strategy_id := UpgradeSystem.DRAFT_TENDENCY_BALANCED
+var upgrade_selection_mode := "manual"
 var duel_formation_was_sealed := false
+var damage_numbers_enabled := true
 var overtime_settlement_active := false
 var overtime_settlement_remaining := 0.0
 var pending_named_formations: Array[Dictionary] = []
@@ -150,23 +168,39 @@ func _ready() -> void:
 	pending_named_formation_safe_remaining = 0.0
 	armed_named_formation.clear()
 	named_formation_warning_remaining = 0.0
+	pending_siege_enemy_attacks.clear()
+	siege_target_refresh_pending = false
+	siege_companion = null
+	siege_companion_upgrades = null
+	siege_companion_level = 1
+	siege_companion_decision_remaining = 0.0
+	siege_companion_buffered_combo_stage = -1
 	_reset_duel_hit_debug_log()
 	var profile := SaveService.load_profile()
+	upgrade_selection_mode = _normalized_upgrade_selection_mode(str(SaveService.setting_value("upgrade_selection_mode", "manual")))
+	damage_numbers_enabled = bool(SaveService.setting_value("damage_numbers_enabled", true))
 	run_mode = SceneRouter.active_mode
 	endless_milestone_index = 0
 	active_world_bounds = _world_bounds_for_mode(run_mode)
 	active_obstacles = BATTLEFIELD_LAYOUT.obstacle_rects_for(_active_battlefield_id(), active_world_bounds)
 	boss_trial_advance_after_levels = false
-	_install_equipped_hero(SaveService.equipped_hero_id())
+	_install_equipped_hero(SaveService.consume_run_hero_id())
 	if not _battle_dependencies_ready():
 		set_process(false)
 		LoadingOverlay.finish_transition()
 		return
 	boss.set_movement_bounds(active_world_bounds.grow(-NAMED_SPAWN_MARGIN))
 	enemies.reset(active_world_bounds, run_mode)
+	siege.configure(active_world_bounds, enemies, run_mode == RunDirector.SIEGE_MODE)
+	# 攻城城墙由 SiegeSystem 的数学斜线限制；不再把它拆为数十个 Rect2
+	# 交给每个敌兵逐帧寻路、碰撞，避免城楼附近单位聚集时严重掉帧。
 	enemies.set_navigation_obstacles(active_obstacles)
 	loot.reset()
+	battle_souls.reset()
 	player.reset_for_run(active_world_bounds)
+	player.clear_battle_souls()
+	if run_mode == RunDirector.SIEGE_MODE:
+		player.position = Vector2(active_world_bounds.position.x + 248.0, active_world_bounds.get_center().y)
 	player.reset_guard_state()
 	player.position = _resolve_movement_against_obstacles(player.position, player.position, 16.0)
 	player_last_audio_position = player.position
@@ -178,6 +212,8 @@ func _ready() -> void:
 	director.configure_account_progress(profile)
 	director.set_enemy_simulation(enemies)
 	director.reset(active_world_bounds, run_mode, _active_battlefield_id(), SceneRouter.active_story_chapter)
+	director.set_siege_frontline_provider(Callable(siege, "enemy_spawn_limit_x_at_y") if siege.is_active() else Callable())
+	enemies.set_siege_target_provider(Callable(siege, "enemy_target_for") if siege.is_active() else Callable())
 	if director.is_boss_trial():
 		for _level in range(2, director.level + 1):
 			player.apply_level_up_benefits()
@@ -191,10 +227,16 @@ func _ready() -> void:
 	# to the central stone arena.
 	var renderer_bounds := BOSS_TRIAL_WORLD_BOUNDS if director.is_boss_trial() else active_world_bounds
 	renderer.configure(renderer_bounds, enemies, player, boss, telegraphs, loot, elites, _active_battlefield_id())
+	renderer.set_battle_soul_system(battle_souls)
+	renderer.set_siege_system(siege if siege.is_active() else null)
 	renderer.set_battle_camera(battle_camera)
+	renderer.set_damage_numbers_enabled(damage_numbers_enabled)
 	renderer.set_weather_mode("sunny" if run_mode == "endless" else _battle_weather_for(profile))
 	tianji.configure(player, enemies, elites, boss, battle_camera, upgrades.tianji_slot_capacity())
 	hud.configure(player, boss, director, elites, tianji)
+	hud.set_siege_system(siege if siege.is_active() else null)
+	hud.set_damage_numbers_enabled(damage_numbers_enabled)
+	hud.set_upgrade_selection_mode(upgrade_selection_mode)
 	if not active_obstacles.is_empty():
 		hud.set_message("%s · 已载入 %d 处地形障碍" % [BATTLEFIELD_LAYOUT.title_for(_active_battlefield_id()), active_obstacles.size()])
 	hud.set_upgrade_refreshes_remaining(upgrade_refreshes_remaining)
@@ -211,6 +253,8 @@ func _ready() -> void:
 	player.damaged.connect(_on_player_damaged)
 	enemies.enemy_died.connect(_on_enemy_died)
 	loot.collected.connect(_on_loot_collected)
+	battle_souls.soul_spawned.connect(_on_battle_soul_spawned)
+	battle_souls.soul_collected.connect(_on_battle_soul_collected)
 	enemies.enemy_attack_requested.connect(_on_enemy_attack)
 	enemies.enemy_attack_cancelled.connect(_on_enemy_attack_cancelled)
 	enemies.enemy_death_collision.connect(_on_enemy_death_collision)
@@ -226,6 +270,19 @@ func _ready() -> void:
 	director.stage_changed.connect(hud.set_message)
 	director.weather_changed.connect(renderer.set_weather_mode)
 	director.threat_tier_changed.connect(_on_threat_tier_changed)
+	siege.gate_destroyed.connect(_on_siege_gate_destroyed)
+	siege.message_requested.connect(_on_siege_message_requested)
+	siege.targeting_changed.connect(_on_siege_targeting_changed)
+	siege.counterattack_started.connect(_on_siege_counterattack_started)
+	siege.gate_assault_started.connect(_on_siege_gate_assault_started)
+	siege.defense_resumed.connect(_on_siege_defense_resumed)
+	siege.node_challenge_requested.connect(_on_siege_node_challenge_requested)
+	siege.final_challenge_requested.connect(_on_siege_final_challenge_requested)
+	siege.final_hero_reinforcement_requested.connect(_on_siege_final_hero_reinforcement_requested)
+	siege.wall_volley_requested.connect(_on_siege_wall_volley_requested)
+	siege.arrow_tower_shot_requested.connect(_on_siege_arrow_tower_shot_requested)
+	siege.arrow_tower_damaged.connect(_on_siege_arrow_tower_damaged)
+	siege.garrison_volley_requested.connect(_on_siege_garrison_volley_requested)
 	boss.telegraph_requested.connect(_add_telegraph)
 	boss.skill_impact_requested.connect(_on_named_skill_impact)
 	boss.rush_started.connect(_on_boss_rush_started)
@@ -243,8 +300,12 @@ func _ready() -> void:
 	hud.revive_declined.connect(_on_revive_declined)
 	hud.result_reward_requested.connect(_on_result_reward_requested)
 	hud.restart_requested.connect(_on_restart_requested)
+	hud.pause_requested.connect(_on_pause_requested)
 	hud.resume_requested.connect(_on_resume_requested)
 	hud.combo_setting_changed.connect(_on_combo_setting_changed)
+	hud.damage_numbers_setting_changed.connect(_on_damage_numbers_setting_changed)
+	hud.upgrade_selection_mode_changed.connect(_on_upgrade_selection_mode_changed)
+	hud.selected_upgrades_requested.connect(_on_selected_upgrades_requested)
 	hud.home_requested.connect(_on_home_requested)
 	hud.retreat_requested.connect(_on_retreat_requested)
 	AdService.rewarded_video_completed.connect(_on_rewarded_video_completed)
@@ -346,8 +407,12 @@ func _battle_dependencies_ready() -> bool:
 		missing.append("TianjiSystem")
 	if not is_instance_valid(director):
 		missing.append("RunDirector")
+	if not is_instance_valid(siege):
+		missing.append("SiegeSystem")
 	if not is_instance_valid(loot):
 		missing.append("LootSystem")
+	if not is_instance_valid(battle_souls):
+		missing.append("BattleSoulSystem")
 	if not is_instance_valid(input_router):
 		missing.append("InputRouter")
 	if not is_instance_valid(renderer):
@@ -404,9 +469,19 @@ func _process(delta: float) -> void:
 	_tick_endless_milestones()
 	enemies.set_battle_elapsed(director.elapsed)
 	enemies.set_difficulty_ramp(director.difficulty_multiplier())
+	if siege_target_refresh_pending and siege.is_active():
+		enemies.refresh_siege_targets_now(player.position)
+		siege_target_refresh_pending = false
 	var enemy_move_origins := _capture_enemy_positions()
 	enemies.tick(simulation_delta, player.position)
 	_resolve_enemy_obstacles(enemy_move_origins)
+	_tick_pending_siege_enemy_attacks(simulation_delta)
+	if siege.is_active():
+		siege.set_visible_world_rect(_battle_visible_world_rect())
+		siege.tick(simulation_delta, player.position)
+		if siege.gate_has_fallen:
+			return
+	_tick_siege_companion(simulation_delta)
 	if enemies.is_duel_formation_active():
 		player.position = enemies.apply_duel_player_boundary(player_move_origin, player.position)
 		if enemies.is_duel_formation_sealed() and not duel_formation_was_sealed:
@@ -426,13 +501,14 @@ func _process(delta: float) -> void:
 		nearby_enemy_count += 1
 	player.set_nearby_enemy_count(nearby_enemy_count)
 	loot.tick(simulation_delta, player.position)
+	battle_souls.tick(simulation_delta, player.position)
 	var named_move_origins := _capture_named_positions()
 	_tick_named_enemies(simulation_delta)
 	_resolve_named_obstacles(named_move_origins)
 	_tick_pending_named_formation(delta)
 	tianji.tick(simulation_delta)
 	_tick_telegraphs(simulation_delta)
-	if director.is_time_over():
+	if director.is_time_over() and not director.is_boss_encounter_active():
 		if not boss.active and not boss.is_dying():
 			_finish_run(true, director.story_completion_message() if run_mode == "story" else "无尽试炼完成，军功已结算")
 		else:
@@ -494,15 +570,319 @@ func _named_formation_start_message(formation_id: String) -> String:
 func _on_threat_tier_changed(tier: int) -> void:
 	enemies.set_threat_tier(tier)
 
+func _on_siege_message_requested(value: String) -> void:
+	if not finished and not victory_cinematic_active:
+		hud.set_message(value)
+
+func _on_siege_targeting_changed() -> void:
+	# 目标在 SiegeSystem.tick() 中死亡或切换，下一帧敌军模拟前完成重分配。
+	siege_target_refresh_pending = true
+
+func _on_siege_counterattack_started() -> void:
+	if not director.is_siege():
+		return
+	director.set_siege_counterattack_active(true)
+	director.set_spawn_suppressed(true)
+
+func _on_siege_gate_assault_started(_seconds: float) -> void:
+	# 攻城窗口沿用反攻阶段的停刷状态；只让既有守军拦截攻城部队。
+	if director.is_siege():
+		director.set_siege_counterattack_active(true)
+
+func _on_siege_defense_resumed() -> void:
+	if not director.is_siege():
+		return
+	director.set_siege_counterattack_active(false)
+	director.set_spawn_suppressed(false)
+
+func _on_siege_node_challenge_requested(node_index: int, elite_id: String, at: Vector2) -> void:
+	if not director.is_siege():
+		return
+	var elite := _on_elite_requested(elite_id, at)
+	if elite != null:
+		siege.bind_node_elite(node_index, elite.get_instance_id())
+		if node_index == 0:
+			# 首层守备校尉的“败退”属于推进演出：血条清空时喊话撤回盾墙，
+			# 不播放阵亡动画，也不在原地留下尸体。
+			elite.configure_retreat_on_defeat(siege.retreat_destination_for_node(node_index, elite.position), "快撤！快撤！", _battle_visible_world_rect())
+		elif node_index == 1:
+			# 第二层以淳于导为首。降至第五格生命后夏侯恩入场，二人都必须
+			# 被击退才会解除盾墙。
+			elite.configure_retreat_on_defeat(siege.retreat_destination_for_node(node_index, elite.position), "快撤！快撤！", _battle_visible_world_rect())
+
+func _on_siege_final_challenge_requested(at: Vector2) -> void:
+	if not director.is_siege():
+		return
+	# 城下决战先撤走所有普通守军，留下清晰的四将战区。撤离仍通过既有
+	# 单位移动与镜头裁剪完成，避免瞬间清空造成违和。
+	enemies.retreat_all_for_siege_final()
+	director.set_spawn_suppressed(true)
+	# 四将继续使用可并存的精英战斗逻辑；张郃与夏侯惇单独指定真实 Boss
+	# 立绘档案，避免占位模型，也无需受单 Boss 实例位的限制。
+	var formation := [
+		{"id": "xiahou_en", "name": "夏侯恩", "offset": Vector2(-152.0, -188.0), "profile": EliteActor.VisualProfile.DEFAULT},
+		{"id": "chunyu_dao", "name": "淳于导", "offset": Vector2(86.0, -92.0), "profile": EliteActor.VisualProfile.DEFAULT},
+		{"id": "xiahou_lan", "name": "张郃", "offset": Vector2(-58.0, 126.0), "profile": EliteActor.VisualProfile.ZHANG_HE},
+		{"id": "han_hao", "name": "夏侯惇", "offset": Vector2(178.0, 202.0), "profile": EliteActor.VisualProfile.XIAHOU_DUN},
+	]
+	for index in range(formation.size()):
+		var entry := formation[index] as Dictionary
+		var elite := _on_elite_requested(str(entry.get("id", "xiahou_en")), at + (entry.get("offset", Vector2.ZERO) as Vector2))
+		if elite == null:
+			continue
+		elite.configure_siege_identity(str(entry.get("name", elite.display_name())), int(entry.get("profile", EliteActor.VisualProfile.DEFAULT)))
+		elite.configure_retreat_on_defeat(siege.final_retreat_destination(elite.position, index), "快撤！快撤！", _battle_visible_world_rect())
+		siege.bind_final_formation_member(elite.get_instance_id())
+	director.set_boss_encounter_active(true)
+	hud.set_message("城下决战 · 夏侯恩、淳于导、张郃、夏侯惇列阵")
+
+func _on_siege_final_hero_reinforcement_requested() -> void:
+	if not director.is_siege() or is_instance_valid(siege_companion):
+		return
+	_spawn_siege_companion()
+
+func _spawn_siege_companion() -> void:
+	var candidates: Array[String] = []
+	for hero_id_variant in SIEGE_COMPANION_HERO_IDS:
+		var hero_id := str(hero_id_variant)
+		if hero_id != player.hero_id and HERO_CATALOG.is_playable(hero_id):
+			candidates.append(hero_id)
+	if candidates.is_empty():
+		return
+	var companion_id := candidates[randi() % candidates.size()]
+	var companion_scene_path := HERO_CATALOG.actor_scene_for(companion_id)
+	var companion := _instantiate_hero_actor(companion_scene_path)
+	if companion == null:
+		return
+	companion.name = "SiegeCompanion"
+	add_child(companion)
+	companion.configure_hero(companion_id)
+	companion.reset_for_run(active_world_bounds)
+	companion.apply_account_progress(SaveService.load_profile())
+	companion.position = _resolve_movement_against_obstacles(player.position + SIEGE_COMPANION_SPAWN_OFFSET, player.position + SIEGE_COMPANION_SPAWN_OFFSET, 16.0)
+	var companion_camera := companion.get_node_or_null("BattleCamera") as Camera2D
+	if companion_camera != null:
+		companion_camera.enabled = false
+	if battle_camera != null:
+		battle_camera.make_current()
+	companion.attack_requested.connect(_on_siege_companion_attack)
+	siege_companion = companion
+	siege_companion_decision_remaining = 0.0
+	siege_companion_buffered_combo_stage = -1
+	siege_companion_upgrades = UpgradeSystem.new()
+	siege_companion_upgrades.configure_talent_pool(SaveService.load_profile(), companion_id)
+	siege_companion_upgrades.set_draft_tendency(UpgradeSystem.DRAFT_TENDENCY_TALENT)
+	siege_companion_upgrades.randomize_seed()
+	siege_companion_level = 1
+	for level in range(2, director.level + 1):
+		siege_companion.apply_level_up_benefits()
+		_grant_siege_companion_auto_upgrade(level)
+		siege_companion_level = level
+	# 援将登场即具备一次可用无双能量，保证十秒援军不是只站在旁边普攻。
+	siege_companion.add_ultimate_energy(siege_companion.ultimate_cost())
+	renderer.set_siege_companion(siege_companion)
+	siege.deploy_hero_reinforcement(siege_companion.position)
+	hud.set_message("援军赶到：%s率蜀军参战！" % HERO_CATALOG.display_name_for(companion_id))
+
+func _grant_siege_companion_auto_upgrade(level: int) -> void:
+	if not is_instance_valid(siege_companion) or siege_companion_upgrades == null:
+		return
+	siege_companion_upgrades.begin_draft()
+	var candidates: Array[String] = []
+	for upgrade_id_variant in siege_companion_upgrades.draft(level, 3):
+		var upgrade_id := str(upgrade_id_variant)
+		if not siege_companion_upgrades.is_tianji_upgrade(upgrade_id):
+			candidates.append(upgrade_id)
+	if candidates.is_empty():
+		return
+	var health_ratio := clampf(siege_companion.health_component.current / maxf(1.0, siege_companion.health_component.maximum), 0.0, 1.0)
+	var selected_id := siege_companion_upgrades.choose_automatic_upgrade(candidates, UpgradeSystem.DRAFT_TENDENCY_TALENT, health_ratio)
+	if selected_id.is_empty():
+		return
+	siege_companion_upgrades.record_selection(selected_id)
+	siege_companion.apply_upgrade(selected_id)
+
+func _tick_siege_companion(delta: float) -> void:
+	if not is_instance_valid(siege_companion) or not director.is_siege() or not siege.is_active():
+		return
+	var target_position := _siege_companion_target_position()
+	var move_direction := Vector2.ZERO
+	if target_position.is_finite():
+		var to_target := target_position - siege_companion.position
+		if to_target.length() > SIEGE_COMPANION_TARGET_RANGE:
+			move_direction = to_target.normalized()
+	var origin := siege_companion.position
+	siege_companion.tick_guard(delta)
+	siege_companion.tick(delta, move_direction)
+	siege_companion.position = _resolve_movement_against_obstacles(origin, siege_companion.position, 16.0)
+	if not target_position.is_finite():
+		return
+	siege_companion_decision_remaining = maxf(0.0, siege_companion_decision_remaining - delta)
+	var attack_direction := (target_position - siege_companion.position).normalized()
+	if attack_direction.length_squared() <= 0.01:
+		attack_direction = siege_companion.last_attack_direction
+	var target_distance := siege_companion.position.distance_to(target_position)
+	# 普攻仅在当前段接近结束时缓冲下一段，避免每一帧都塞一次输入，
+	# 使援将的连段节奏与真实玩家长按普攻一致而非瞬间跳段。
+	if siege_companion.current_action == "basic":
+		var action_progress := float(siege_companion.call("visual_action_progress")) if siege_companion.has_method("visual_action_progress") else 1.0
+		if action_progress >= SIEGE_COMPANION_BASIC_BUFFER_PROGRESS and siege_companion_buffered_combo_stage != siege_companion.combo_stage:
+			siege_companion.request_basic(attack_direction)
+			siege_companion_buffered_combo_stage = siege_companion.combo_stage
+		return
+	if not siege_companion.current_action.is_empty() or siege_companion.is_action_locked() or siege_companion_decision_remaining > 0.0:
+		return
+	siege_companion_decision_remaining = SIEGE_COMPANION_DECISION_INTERVAL
+	siege_companion_buffered_combo_stage = -1
+	var nearby_enemy_count := enemies.count_active_within(siege_companion.position, SIEGE_COMPANION_ACTIVE_RANGE)
+	var named_target_present := false
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active and not elite.is_retreating() and elite.position.distance_squared_to(siege_companion.position) <= SIEGE_COMPANION_ACTIVE_RANGE * SIEGE_COMPANION_ACTIVE_RANGE:
+			named_target_present = true
+			break
+	if siege_companion.is_ultimate_ready() and target_distance <= SIEGE_COMPANION_ACTIVE_RANGE and (named_target_present or nearby_enemy_count >= 4):
+		siege_companion.request_ultimate(attack_direction)
+	elif siege_companion.can_use_active() and target_distance <= SIEGE_COMPANION_ACTIVE_RANGE and (named_target_present or nearby_enemy_count >= 2):
+		siege_companion.request_active(attack_direction)
+	elif target_distance <= SIEGE_COMPANION_TARGET_RANGE * 1.34:
+		siege_companion.request_basic(attack_direction)
+
+func _siege_companion_target_position() -> Vector2:
+	if not is_instance_valid(siege_companion):
+		return Vector2.INF
+	var best_position := Vector2.INF
+	var best_distance := INF
+	for elite in elites:
+		if not is_instance_valid(elite) or not elite.active or elite.is_retreating():
+			continue
+		var distance := siege_companion.position.distance_squared_to(elite.position)
+		if distance < best_distance:
+			best_distance = distance
+			best_position = elite.position
+	if best_position.is_finite():
+		return best_position
+	for enemy_id in range(EnemySimulation.CAPACITY):
+		if not enemies.is_active(enemy_id) or enemies.duel_exiting[enemy_id] == 1:
+			continue
+		var enemy_position := enemies.positions[enemy_id]
+		var distance := siege_companion.position.distance_squared_to(enemy_position)
+		if distance < best_distance:
+			best_distance = distance
+			best_position = enemy_position
+	return best_position
+
+func _on_siege_companion_attack(request: AttackRequest) -> void:
+	if not is_instance_valid(siege_companion) or not director.is_siege() or finished:
+		return
+	request.armor_ignore_ratio = siege_companion.armor_ignore_ratio_for_request(request)
+	var hit_count := combat.resolve_hero_attack(request, siege_companion.total_attack(), 0.0, enemies)
+	var named_hits := 0
+	for elite in elites:
+		if not is_instance_valid(elite) or not elite.active or elite.is_retreating():
+			continue
+		var elite_id := elite.get_instance_id()
+		if request.one_hit_per_target and request.hit_elite_ids.has(elite_id):
+			continue
+		if not combat.request_hits_point(request, elite.position):
+			continue
+		if request.displacement_only:
+			_apply_elite_guard_knockback(elite, request)
+		else:
+			var damage := CombatMath.final_damage(siege_companion.total_attack(), request.damage_multiplier_at(elite.position), 0.0, elite.armor(), false, request.armor_ignore_ratio)
+			damage = siege_companion.modify_named_target_damage(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, damage)
+			var result := elite.receive_player_hit(damage)
+			if float(result.get("damage", 0.0)) > 0.0:
+				named_hits += 1
+				siege_companion.on_named_target_hit(HeroActor.NamedTargetKind.ELITE, request, float(result.get("damage", 0.0)))
+		request.hit_elite_ids[elite_id] = true
+		request.total_hits += 1
+		hit_count += 1
+	if named_hits > 0:
+		siege_companion.add_ultimate_energy(float(named_hits) * 4.0)
+	if not request.visual_emitted and not request.suppress_visual_feedback:
+		renderer.add_flash(request)
+		request.visual_emitted = true
+	if hit_count > 0:
+		renderer.add_impact(siege_companion.position, request.label, hit_count)
+
+func _begin_second_node_duel(chunyu_dao: EliteActor) -> void:
+	if not is_instance_valid(chunyu_dao):
+		return
+	# 先把淳于导从第五格生命恢复至满血，再让夏侯恩从盾阵后切入。恢复发生
+	# 在同一帧，避免 HUD 出现空血、阵亡动画或掉落奖励的错误反馈。
+	chunyu_dao.restore_full_health()
+	var support_at := siege.second_node_support_spawn_position()
+	var xiahou_en := _on_elite_requested("xiahou_en", support_at)
+	if xiahou_en == null:
+		return
+	siege.bind_second_node_support_elite(xiahou_en.get_instance_id())
+	xiahou_en.configure_retreat_on_defeat(siege.retreat_destination_for_node(1, xiahou_en.position), "快撤！快撤！", _battle_visible_world_rect())
+	hud.set_message("夏侯恩援军入阵 · 淳于导恢复斗志！")
+
+func _on_siege_wall_volley_requested(origin: Vector2, impacts: Array, final_volley: bool) -> void:
+	if not director.is_siege() or finished:
+		return
+	for index in range(impacts.size()):
+		var impact: Vector2 = impacts[index]
+		var windup := 1.10 + float(index) * 0.08
+		var telegraph := Telegraph.circle(impact, 30.0 if final_volley else 26.0, windup, 11.0 if final_volley else 8.0, "siege_wall_volley")
+		telegraph.threat_kind = Telegraph.ThreatKind.BASIC
+		telegraph.source_enemy_id = -9000 - index
+		_add_telegraph(telegraph)
+		renderer.add_archer_projectile(-9000 - index, origin, impact, windup)
+
+func _on_siege_arrow_tower_shot_requested(tower_index: int, origin: Vector2, impact: Vector2) -> void:
+	if not director.is_siege() or finished:
+		return
+	var source_enemy_id := SiegeSystem.ARROW_TOWER_PROJECTILE_SOURCE_BASE - tower_index
+	var windup := SiegeSystem.ARROW_TOWER_PROJECTILE_WINDUP
+	var telegraph := Telegraph.circle(impact, 26.0, windup, SiegeSystem.ARROW_TOWER_PROJECTILE_DAMAGE, "siege_arrow_tower")
+	telegraph.threat_kind = Telegraph.ThreatKind.BASIC
+	telegraph.source_enemy_id = source_enemy_id
+	_add_telegraph(telegraph)
+	renderer.add_archer_projectile(source_enemy_id, origin, impact, windup)
+
+func _on_siege_garrison_volley_requested(shots: Array) -> void:
+	if not director.is_siege() or finished:
+		return
+	# 同一列的五支箭共享起落节奏；下一列由 SiegeSystem 以固定间隔继续
+	# 推进。预警样式由 siege_garrison_volley 专门渲染为红色圆圈。
+	for shot_variant in shots:
+		var shot := shot_variant as Dictionary
+		var source_id := int(shot.get("source_id", -1))
+		var volley_id := int(shot.get("volley_id", -1))
+		var column := int(shot.get("column", -1))
+		var origin: Vector2 = shot.get("origin", Vector2.ZERO)
+		var impact: Vector2 = shot.get("impact", Vector2.ZERO)
+		var telegraph := Telegraph.circle(impact, 26.0, SiegeSystem.GARRISON_VOLLEY_WINDUP, SiegeSystem.GARRISON_VOLLEY_PROJECTILE_DAMAGE, "siege_garrison_volley")
+		telegraph.threat_kind = Telegraph.ThreatKind.BASIC
+		telegraph.source_enemy_id = source_id
+		# 同列五支箭是一个推进格：视觉上覆盖一排区域，伤害上只结算一次，
+		# 不会因玩家恰好站在密集落点而承受五倍叠伤。
+		telegraph.hit_group = "siege_garrison_volley:%d:%d" % [volley_id, column]
+		_add_telegraph(telegraph)
+		renderer.add_archer_projectile(source_id, origin, impact, SiegeSystem.GARRISON_VOLLEY_WINDUP)
+
+func _on_siege_arrow_tower_damaged(at: Vector2, damage: float, tower_index: int) -> void:
+	if damage > 0.0:
+		renderer.add_damage_number("siege_arrow_tower:%d" % tower_index, at, damage, "normal")
+
+func _on_siege_gate_destroyed() -> void:
+	if run_mode != RunDirector.SIEGE_MODE or finished or victory_cinematic_active:
+		return
+	_finish_run(true, "攻取荆州成功 · 城门已破")
+
 func _world_bounds_for_mode(mode: String) -> Rect2:
 	if mode == RunDirector.BOSS_TRIAL_MODE:
 		return BOSS_TRIAL_ARENA_BOUNDS
+	if mode == RunDirector.SIEGE_MODE:
+		return SIEGE_WORLD_BOUNDS
 	return BOWANGPO_WORLD_BOUNDS if _active_battlefield_id() == "bowangpo" else WORLD_BOUNDS
 
 func _active_battlefield_id() -> String:
 	if run_mode == "endless":
 		return "changban"
-	return SceneRouter.active_battlefield_id if SceneRouter.active_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao"] else "changban"
+	return SceneRouter.active_battlefield_id if SceneRouter.active_battlefield_id in ["changban", "xinye", "bowangpo", "bowangpo_story", "huoshaoxinye", "xiangyangchetui", "dangyangduanhou", "hulao", "jingzhou_siege"] else "changban"
 
 func _capture_enemy_positions() -> Array[Vector2]:
 	var origins: Array[Vector2] = []
@@ -521,10 +901,14 @@ func _capture_named_positions() -> Dictionary:
 	return origins
 
 func _resolve_enemy_obstacles(origins: Array[Vector2]) -> void:
-	if active_obstacles.is_empty():
+	if active_obstacles.is_empty() and (siege == null or not siege.is_active()):
 		return
 	for enemy_id in range(EnemySimulation.CAPACITY):
 		if enemies.is_active(enemy_id):
+			# 城下决战的杂兵正沿上下两侧退场；不能再用世界边界裁剪把它们
+			# 拉回画面边缘，否则会出现“走到顶端又卡住”的表现问题。
+			if enemies.duel_exiting[enemy_id] == 1:
+				continue
 			var origin: Vector2 = origins[enemy_id] if enemy_id < origins.size() else enemies.positions[enemy_id]
 			var destination: Vector2 = enemies.positions[enemy_id]
 			var resolved := _resolve_movement_against_obstacles(origin, destination, _enemy_collision_radius(enemies.get_type(enemy_id)))
@@ -533,12 +917,17 @@ func _resolve_enemy_obstacles(origins: Array[Vector2]) -> void:
 			enemies.positions[enemy_id] = resolved
 
 func _resolve_named_obstacles(origins: Dictionary) -> void:
-	if active_obstacles.is_empty():
+	if active_obstacles.is_empty() and (siege == null or not siege.is_active()):
 		return
 	for elite in elites:
 		if is_instance_valid(elite) and elite.active:
+			if elite.is_retreating():
+				# 败退演出需要穿出上下边界；若继续走通用障碍裁剪，会被世界边缘
+				# 拉回而在镜头中卡住，随后看起来像原地消失。
+				continue
 			var origin: Vector2 = origins.get(elite.get_instance_id(), elite.position) as Vector2
-			elite.position = _resolve_movement_against_obstacles(origin, elite.position, 22.0)
+			var enforce_progression_barrier := not (siege != null and siege.is_active() and siege.allows_bound_elite_barrier_crossing(elite.get_instance_id()))
+			elite.position = _resolve_movement_against_obstacles(origin, elite.position, 22.0, enforce_progression_barrier)
 			if enemies.is_duel_formation_active():
 				elite.position = enemies.constrain_named_to_duel_formation(elite.position, 32.0)
 	if boss.active:
@@ -547,10 +936,12 @@ func _resolve_named_obstacles(origins: Dictionary) -> void:
 		if enemies.is_duel_formation_active():
 			boss.position = enemies.constrain_named_to_duel_formation(boss.position, 40.0)
 
-func _resolve_movement_against_obstacles(origin: Vector2, destination: Vector2, radius: float) -> Vector2:
-	if active_obstacles.is_empty():
-		return destination
-	var resolved := BATTLEFIELD_LAYOUT.move_with_obstacles(origin, destination, active_obstacles, radius)
+func _resolve_movement_against_obstacles(origin: Vector2, destination: Vector2, radius: float, enforce_progression_barrier: bool = true) -> Vector2:
+	var resolved := destination
+	if not active_obstacles.is_empty():
+		resolved = BATTLEFIELD_LAYOUT.move_with_obstacles(origin, destination, active_obstacles, radius)
+	if siege != null and siege.is_active():
+		resolved = siege.clamp_to_wall_front(origin, resolved, radius, enforce_progression_barrier)
 	return Vector2(
 		clampf(resolved.x, active_world_bounds.position.x + radius, active_world_bounds.end.x - radius),
 		clampf(resolved.y, active_world_bounds.position.y + radius, active_world_bounds.end.y - radius)
@@ -574,9 +965,15 @@ func _battle_weather_for(profile: Dictionary) -> String:
 		return selected_mode
 	return BATTLE_WEATHER_MODES[randi() % BATTLE_WEATHER_MODES.size()]
 
-func _on_elite_requested(elite_id: String, _scheduled_at: Vector2) -> void:
-	if elites.size() >= 4:
-		return
+func _on_elite_requested(elite_id: String, scheduled_at: Vector2) -> EliteActor:
+	# 攻城节点的败退精英会短暂保留在列表中，直至完全跑出镜头。它们不应
+	# 占用下一节点（尤其城下四将）的在场名额，否则玩家推进较快时会少刷将领。
+	var active_combat_elite_count := 0
+	for existing_elite in elites:
+		if is_instance_valid(existing_elite) and existing_elite.active and not existing_elite.is_retreating():
+			active_combat_elite_count += 1
+	if active_combat_elite_count >= 4:
+		return null
 	var elite := ELITE_ACTOR_SCENE.instantiate() as EliteActor
 	add_child(elite)
 	var archetype: EliteActor.Archetype = EliteActor.Archetype.XIAHOU_EN
@@ -591,18 +988,24 @@ func _on_elite_requested(elite_id: String, _scheduled_at: Vector2) -> void:
 		spawn_min_distance = BOSS_TRIAL_ELITE_SPAWN_MIN_DISTANCE
 		spawn_max_distance = BOSS_TRIAL_ELITE_SPAWN_MAX_DISTANCE
 		threat_tier = 1 if archetype == EliteActor.Archetype.XIAHOU_EN else 2
-	elite.activate(archetype, _choose_named_spawn(spawn_min_distance, spawn_max_distance), threat_tier)
+	var elite_spawn := _choose_named_spawn(spawn_min_distance, spawn_max_distance)
+	if director.is_siege() and scheduled_at.is_finite():
+		elite_spawn = scheduled_at
+	elite.activate(archetype, elite_spawn, threat_tier)
 	elite.telegraph_requested.connect(_on_elite_telegraph)
 	elite.skill_impact_requested.connect(_on_named_skill_impact)
 	elite.defeated.connect(_on_elite_defeated)
+	elite.retreat_started.connect(_on_elite_retreat_started)
+	elite.retreated.connect(_on_elite_retreated)
 	elites.append(elite)
-	if not director.is_boss_trial() and not enemies.is_duel_formation_active():
+	if not director.is_boss_trial() and not director.is_siege() and not enemies.is_duel_formation_active():
 		enemies.begin_duel_formation(player.position)
 		director.set_spawn_background_mode(true)
 		_stop_duel_formation_audio()
 	renderer.set_elites(elites)
 	hud.set_elites(elites)
-	hud.set_message("精英现身：%s · 敌军正在列阵" % elite.display_name())
+	hud.set_message("精英现身：%s%s" % [elite.display_name(), " · 守军列阵拦截" if director.is_siege() else " · 敌军正在列阵"])
+	return elite
 
 func _configure_battle_camera() -> void:
 	# Active bounds are selected before RunDirector.reset(), so they are safe to
@@ -682,7 +1085,7 @@ func _elite_indicator_kind(archetype: EliteActor.Archetype) -> String:
 		EliteActor.Archetype.HAN_HAO: return "elite_han_hao"
 	return "elite_xiahou"
 
-func _on_boss_requested(_scheduled_at: Vector2) -> void:
+func _on_boss_requested(scheduled_at: Vector2) -> BossActor:
 	var spawn_min_distance := BOSS_SPAWN_MIN_DISTANCE
 	var spawn_max_distance := BOSS_SPAWN_MAX_DISTANCE
 	var threat_tier := director.threat_tier()
@@ -695,13 +1098,18 @@ func _on_boss_requested(_scheduled_at: Vector2) -> void:
 		"xiahou_dun": boss.set_archetype(BossActor.Archetype.XIAHOU_DUN)
 		"lvbu": boss.set_archetype(BossActor.Archetype.LV_BU)
 		_: boss.set_archetype(BossActor.Archetype.ZHANG_HE)
-	boss.activate(_choose_named_spawn(spawn_min_distance, spawn_max_distance), threat_tier)
+	var boss_spawn := _choose_named_spawn(spawn_min_distance, spawn_max_distance)
+	if director.is_siege() and scheduled_at.is_finite():
+		boss_spawn = scheduled_at
+	boss.activate(boss_spawn, threat_tier)
+	director.set_boss_encounter_active(true)
 	AudioService.play_boss_entrance_voice()
-	if not director.is_boss_trial() and not enemies.is_duel_formation_active():
+	if not director.is_boss_trial() and not director.is_siege() and not enemies.is_duel_formation_active():
 		enemies.begin_duel_formation(player.position)
 		director.set_spawn_background_mode(true)
 		_stop_duel_formation_audio()
-	hud.set_message("%s·%s 现身 · 敌军正在列阵" % [boss.display_name(), boss.weapon_title()])
+		hud.set_message("%s·%s 现身%s" % [boss.display_name(), boss.weapon_title(), " · 死守城门" if director.is_siege() else " · 敌军正在列阵"])
+	return boss
 
 func _choose_named_spawn(min_distance: float, max_distance: float) -> Vector2:
 	for _attempt in range(18):
@@ -785,6 +1193,10 @@ func _on_player_camera_shake(strength: float) -> void:
 		renderer.add_named_skill_shake(strength)
 
 func _on_player_attack(request: AttackRequest) -> void:
+	var battle_soul_targets: Array[Vector2] = []
+	if player.has_battle_soul("thunder") or player.has_battle_soul("flame"):
+		battle_soul_targets = _battle_soul_target_positions(request)
+	request.armor_ignore_ratio = player.armor_ignore_ratio_for_request(request)
 	if request.label in ["丈八跃砸", "据水断桥·跃砸", "蛇矛掷阵·裂地·首震"]:
 		AudioService.play_zhang_fei_ground_slam()
 	if request.clears_projectiles:
@@ -795,6 +1207,8 @@ func _on_player_attack(request: AttackRequest) -> void:
 	var clashed_elite_ids: Dictionary = {}
 	var clashed_boss := false
 	var hit_count := combat.resolve_hero_attack(request, player.total_attack(), 0.0, enemies)
+	if siege.is_active() and siege.apply_player_attack(request, combat, player.total_attack()):
+		hit_count += 1
 	var combo_hit_count := hit_count
 	for elite in elites:
 		var elite_id := elite.get_instance_id()
@@ -810,14 +1224,22 @@ func _on_player_attack(request: AttackRequest) -> void:
 				request.total_hits += 1
 				hit_count += 1
 				continue
-			var elite_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(elite.position), 0.0, elite.armor())
+			var elite_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(elite.position), 0.0, elite.armor(), false, request.armor_ignore_ratio)
 			elite_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.ELITE, "elite:%d" % elite_id, request, elite_damage)
+			# 中军战的转阶段必须在淳于导被击杀前截住本次伤害；否则高倍率
+			# 无双会直接越过“五格血”触发线，跳过夏侯恩援军演出。
+			var starts_second_node_duel := siege.is_active() and siege.should_trigger_second_node_reinforcement(elite_id, elite.health_component.current, elite_damage)
+			if starts_second_node_duel:
+				var threshold := siege.second_node_reinforcement_threshold(elite_id)
+				elite_damage = minf(elite_damage, maxf(0.0, elite.health_component.current - threshold))
 			var elite_result := elite.receive_player_hit(elite_damage)
 			var elite_actual_damage := float(elite_result.get("damage", 0.0))
 			if enemies.is_duel_formation_active():
 				_log_duel_named_hit("elite_result", elite.display_name(), request, elite.position, true, elite.is_cast_invulnerable(), elite.current_action, elite.health_component.current, elite_actual_damage, elite_result)
 			if elite_actual_damage > 0.0:
 				combo_hit_count += 1
+			if starts_second_node_duel and siege.begin_second_node_reinforcement(elite_id):
+				_begin_second_node_duel(elite)
 			if elite_actual_damage > 0.0 and request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
 				elite.apply_slow(maxf(0.35, request.slow_multiplier + 0.10), request.slow_duration * 0.78)
 			var interrupt_elite := bool(elite_result.get("stance_broken", false))
@@ -844,7 +1266,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 			request.total_hits += 1
 			hit_count += 1
 		else:
-			var boss_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(boss.position), 0.0, boss.armor())
+			var boss_damage := CombatMath.final_damage(player.total_attack(), request.damage_multiplier_at(boss.position), 0.0, boss.armor(), false, request.armor_ignore_ratio)
 			boss_damage = player.modify_named_target_damage(HeroActor.NamedTargetKind.BOSS, "boss", request, boss_damage)
 			var vulnerable_stance_damage := (request.stance_damage if request.stance_damage > 0.0 else BossActor.VULNERABLE_DEFAULT_STANCE_DAMAGE) if boss.is_vulnerable() else 0.0
 			var boss_result := boss.receive_player_hit(boss_damage, vulnerable_stance_damage)
@@ -877,6 +1299,7 @@ func _on_player_attack(request: AttackRequest) -> void:
 		_record_player_attack_audio(request)
 	if combo_hit_count > 0:
 		hud.record_combo_hits(combo_hit_count)
+	player.on_attack_resolved(request, request.total_hits)
 	if not request.visual_emitted and not request.suppress_visual_feedback:
 		renderer.add_flash(request)
 		if request.dash_kind == HeroActor.DashKind.ULTIMATE:
@@ -887,6 +1310,40 @@ func _on_player_attack(request: AttackRequest) -> void:
 		hitstop_remaining = maxf(hitstop_remaining, hitstop)
 		renderer.add_impact(player.position, request.label, hit_count)
 		request.impact_emitted = true
+	if combo_hit_count > 0:
+		for raw_proc in battle_souls.build_proc_requests(player, request, combo_hit_count, battle_soul_targets):
+			var proc: Dictionary = raw_proc as Dictionary
+			var proc_request: AttackRequest = proc.get("request", null) as AttackRequest
+			if proc_request == null:
+				continue
+			renderer.add_battle_soul_proc(str(proc.get("id", "")), proc.get("position", player.position))
+			_on_player_attack(proc_request)
+
+func _battle_soul_target_positions(request: AttackRequest) -> Array[Vector2]:
+	var targets: Array[Vector2] = []
+	if enemies != null:
+		for enemy_id in enemies.query(request):
+			if enemies.is_active(enemy_id):
+				targets.append(enemies.positions[enemy_id])
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active and combat.request_hits_point(request, elite.position):
+			targets.append(elite.position)
+	if boss != null and boss.active and combat.request_hits_point(request, boss.position):
+		targets.append(boss.position)
+	# 雷霆战魂会从首个命中点向附近目标跳转；只在战魂有效时调用该路径，
+	# 避免给常规攻击增加全场扫描。
+	if player.has_battle_soul("thunder") and not targets.is_empty():
+		var chain_origin := targets[0]
+		for enemy_id in range(EnemySimulation.CAPACITY):
+			if targets.size() >= 3:
+				break
+			if not enemies.is_active(enemy_id):
+				continue
+			var candidate := enemies.positions[enemy_id]
+			if candidate.distance_squared_to(chain_origin) > 188.0 * 188.0 or targets.has(candidate):
+				continue
+			targets.append(candidate)
+	return targets
 
 func _reset_duel_hit_debug_log() -> void:
 	var file := FileAccess.open(DUEL_HIT_LOG_PATH, FileAccess.WRITE)
@@ -1231,6 +1688,8 @@ func _audio_action_id_for_request(request: AttackRequest) -> String:
 		"点刺", "枪势震退": return "basic_1"
 		"横扫": return "basic_2"
 		"穿阵挑刺": return "basic_3"
+		"银枪横扫": return "basic_1"
+		"银枪突刺": return "basic_2"
 		"哪吒火轮", "乾坤掷轮": return "firewheel"
 		"破军", "破军收势", "破军枪影": return "active"
 		"七进七出", "七进七出·收势": return "ultimate"
@@ -1332,6 +1791,7 @@ func _on_enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int
 	var death_action_kind := enemies.consume_death_action_kind(enemy_id)
 	if enemies.consume_duel_fodder_reward(enemy_id):
 		return
+	battle_souls.record_enemy_corpse(at)
 	loot.drop_loot(at, experience, enemies.gold_reward(enemy_type))
 	# Regular soldiers only have a 50% chance to drop ultimate energy. Elite
 	# simulation enemies remain guaranteed drops through the same callback.
@@ -1353,7 +1813,18 @@ func _on_loot_collected(experience: int, gold: int) -> void:
 	director.add_experience(experience)
 	_grant_run_merit(float(gold), true)
 
+func _on_battle_soul_spawned(soul_id: String, _at: Vector2) -> void:
+	hud.set_message("%s已掉落，靠近拾取" % battle_souls.title_for(soul_id))
+
+func _on_battle_soul_collected(soul_id: String, title: String, description: String, duration: float) -> void:
+	player.activate_battle_soul(soul_id, duration)
+	renderer.add_battle_soul_pickup(soul_id, player.position)
+	hud.set_message("获得%s：%s（%d秒）" % [title, description, int(round(duration))])
+
 func _on_enemy_attack(enemy_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float, attack_kind: String) -> void:
+	if siege.is_active() and enemies.siege_target_kind_for_enemy(enemy_id) != EnemySimulation.SiegeTargetKind.HERO:
+		_queue_siege_enemy_attack(enemy_id, enemies.siege_target_kind_for_enemy(enemy_id), enemies.siege_target_id_for_enemy(enemy_id), damage, windup)
+		return
 	if enemy_type == EnemySimulation.EnemyType.BANNER:
 		if _available_enemy_attack_slots(enemy_type) <= 0:
 			enemies.cancel_attack(enemy_id)
@@ -1381,12 +1852,16 @@ func _on_enemy_attack(enemy_id: int, origin: Vector2, target: Vector2, enemy_typ
 	elif enemy_type == EnemySimulation.EnemyType.SPEAR:
 		match attack_kind:
 			EnemySimulation.ATTACK_KIND_SPEAR_FORMATION:
+				# The three visual lanes represent one synchronized formation thrust.
+				# Treat it as one ordinary, guardable hit so a correctly timed guard
+				# resolves the whole formation instead of only one lane.
+				var formation_hit_group := "%s:%d" % [source, enemy_id]
 				for index in range(3):
 					var lane_offset := (float(index) - 1.0) * 14.0
 					var thrust_origin := origin + Vector2(0.0, lane_offset)
-					var thrust_windup := windup * (0.70 + float(index) * 0.14)
-					var formation_telegraph := Telegraph.line(thrust_origin, target - origin, 238.0, 54.0, thrust_windup, damage * 0.62, source)
-					_schedule_enemy_telegraph(formation_telegraph, enemy_id, Telegraph.ThreatKind.ACTIVE)
+					var formation_telegraph := Telegraph.line(thrust_origin, target - origin, 238.0, 54.0, windup, damage * 0.62, source)
+					formation_telegraph.hit_group = formation_hit_group
+					_schedule_enemy_telegraph(formation_telegraph, enemy_id, Telegraph.ThreatKind.BASIC)
 				return
 			EnemySimulation.ATTACK_KIND_SPEAR_THRUST_2:
 				telegraph = Telegraph.line(origin, target - origin, 170.0, 36.0, windup, damage * 1.12, source)
@@ -1501,6 +1976,7 @@ func _on_boss_rush_started(at: Vector2, direction: Vector2, segment: int) -> voi
 func _on_elite_defeated(elite: EliteActor) -> void:
 	_cancel_elite_telegraphs(elite.telegraph_source)
 	run_defeated_count += 1
+	battle_souls.record_enemy_corpse(elite.position)
 	loot.drop_loot(elite.position, 12, 60)
 	player.add_ultimate_energy(12.0)
 	player.on_enemy_defeated(EnemySimulation.EnemyType.ELITE, not tianji.is_resolving_damage())
@@ -1513,6 +1989,13 @@ func _on_elite_defeated(elite: EliteActor) -> void:
 	renderer.set_elites(elites)
 	hud.set_elites(elites)
 	elite.call_deferred("queue_free")
+	if director.is_siege():
+		if siege.resolve_final_formation_member(elite.get_instance_id(), player.position):
+			director.set_boss_encounter_active(false)
+			director.set_spawn_suppressed(true)
+			return
+		siege.resolve_node_elite(elite.get_instance_id(), player.position)
+		return
 	if director.is_boss_trial():
 		boss_trial_advance_after_levels = true
 		director.grant_levels(BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT)
@@ -1521,11 +2004,41 @@ func _on_elite_defeated(elite: EliteActor) -> void:
 		director.set_spawn_background_mode(false)
 		_stop_duel_formation_audio()
 
+func _on_elite_retreat_started(elite: EliteActor) -> void:
+	# 攻城略地的败退将领在开始撤退时立即结算推进；模型仍会继续跑出镜头，
+	# 因此下一批敌我单位可以自然接上撤退演出，而不会突兀地原地消失。
+	if not director.is_siege() or not is_instance_valid(elite):
+		return
+	_cancel_elite_telegraphs(elite.telegraph_source)
+	run_defeated_count += 1
+	loot.drop_loot(elite.position, 12, 60)
+	player.add_ultimate_energy(12.0)
+	player.on_enemy_defeated(EnemySimulation.EnemyType.ELITE, not tianji.is_resolving_damage())
+	var retreating_name := elite.display_name()
+	hud.set_message("%s溃退：快撤！快撤！" % retreating_name)
+	if siege.resolve_final_formation_member(elite.get_instance_id(), player.position):
+		director.set_boss_encounter_active(false)
+		director.set_spawn_suppressed(true)
+		return
+	siege.resolve_node_elite(elite.get_instance_id(), player.position)
+
+func _on_elite_retreated(elite: EliteActor) -> void:
+	if not is_instance_valid(elite):
+		return
+	# 直到撤出镜头才移除渲染对象，确保玩家能完整看到败退移动与头顶气泡。
+	elites.erase(elite)
+	renderer.set_elites(elites)
+	hud.set_elites(elites)
+	elite.call_deferred("queue_free")
+
 func _add_telegraph(telegraph: Telegraph) -> void:
 	# Radial Lu Bu thrusts intentionally keep all eight lanes visible at once;
 	# the normal named-threat cap would otherwise discard the final three lanes.
 	var is_lv_bu_cyclone := telegraph.source == "boss" and telegraph.visual_kind == "lvbu_cyclone_thrust"
-	if telegraphs.size() >= (30 if is_lv_bu_cyclone else 22):
+	# 盾阵齐射需要完整保留 50 个规律落点。它每十秒才触发一次，且持续
+	# 不到一秒，临时提高容量比截断阵列更利于玩家判断躲避路径。
+	var is_siege_garrison_volley := telegraph.source == "siege_garrison_volley"
+	if telegraphs.size() >= (64 if is_siege_garrison_volley else (30 if is_lv_bu_cyclone else 22)):
 		return
 	if _is_named_threat_source(telegraph.source) and _named_threat_count() >= 5 and not is_lv_bu_cyclone:
 		return
@@ -1700,6 +2213,39 @@ func _cancel_enemy_telegraphs(enemy_id: int) -> void:
 			telegraphs.remove_at(index)
 	renderer.cancel_archer_projectiles(enemy_id)
 	renderer.cancel_crossbow_bolts(enemy_id)
+	_cancel_pending_siege_enemy_attacks(enemy_id)
+
+func _queue_siege_enemy_attack(enemy_id: int, target_kind: int, target_id: int, damage: float, windup: float) -> void:
+	if target_kind == EnemySimulation.SiegeTargetKind.HERO:
+		return
+	pending_siege_enemy_attacks.append({
+		"enemy_id": enemy_id,
+		"target_kind": target_kind,
+		"target_id": target_id,
+		"damage": damage,
+		"remaining": maxf(0.05, windup),
+	})
+
+func _tick_pending_siege_enemy_attacks(delta: float) -> void:
+	if pending_siege_enemy_attacks.is_empty():
+		return
+	for index in range(pending_siege_enemy_attacks.size() - 1, -1, -1):
+		var attack: Dictionary = pending_siege_enemy_attacks[index]
+		var enemy_id := int(attack.get("enemy_id", -1))
+		if not siege.is_active() or not enemies.is_active(enemy_id):
+			pending_siege_enemy_attacks.remove_at(index)
+			continue
+		attack["remaining"] = float(attack.get("remaining", 0.0)) - delta
+		if float(attack.get("remaining", 0.0)) > 0.0:
+			pending_siege_enemy_attacks[index] = attack
+			continue
+		siege.receive_enemy_attack(int(attack.get("target_kind", EnemySimulation.SiegeTargetKind.HERO)), int(attack.get("target_id", -1)), float(attack.get("damage", 0.0)))
+		pending_siege_enemy_attacks.remove_at(index)
+
+func _cancel_pending_siege_enemy_attacks(enemy_id: int) -> void:
+	for index in range(pending_siege_enemy_attacks.size() - 1, -1, -1):
+		if int((pending_siege_enemy_attacks[index] as Dictionary).get("enemy_id", -1)) == enemy_id:
+			pending_siege_enemy_attacks.remove_at(index)
 
 func _cancel_boss_telegraphs() -> void:
 	for index in range(telegraphs.size() - 1, -1, -1):
@@ -1722,6 +2268,12 @@ func _telegraph_hits_player(telegraph: Telegraph) -> bool:
 func _telegraph_attack_origin(telegraph: Telegraph) -> Vector2:
 	if telegraph.source_enemy_id >= 0 and enemies.is_active(telegraph.source_enemy_id):
 		return enemies.positions[telegraph.source_enemy_id]
+	if telegraph.source == "siege_arrow_tower" and siege.is_active():
+		return siege.arrow_tower_origin_for_projectile(telegraph.source_enemy_id)
+	if telegraph.source == "siege_garrison_volley" and siege.is_active():
+		return siege.garrison_archer_origin_for_projectile(telegraph.source_enemy_id)
+	if telegraph.source == "siege_wall_volley" and siege.is_active():
+		return siege.gate_position
 	if telegraph.source == "boss" and boss.active:
 		return boss.position
 	if telegraph.source.begins_with("elite:"):
@@ -1731,6 +2283,20 @@ func _telegraph_attack_origin(telegraph: Telegraph) -> Vector2:
 	return Vector2.ZERO
 
 func _try_block_projectile_telegraph(telegraph: Telegraph) -> bool:
+	var is_tower_arrow := telegraph.source == "siege_arrow_tower" and siege.is_active() and siege.is_arrow_tower_projectile_source(telegraph.source_enemy_id)
+	var is_garrison_arrow := telegraph.source == "siege_garrison_volley" and siege.is_active() and siege.is_garrison_projectile_source(telegraph.source_enemy_id)
+	if is_tower_arrow or is_garrison_arrow:
+		var projectile_origin := siege.arrow_tower_origin_for_projectile(telegraph.source_enemy_id) if is_tower_arrow else siege.garrison_archer_origin_for_projectile(telegraph.source_enemy_id)
+		if not player.try_block_frontal_projectile(projectile_origin):
+			return false
+		var siege_block_direction := (projectile_origin - player.position).normalized()
+		if siege_block_direction.length_squared() <= 0.01:
+			siege_block_direction = player.last_attack_direction.normalized()
+		if siege_block_direction.length_squared() <= 0.01:
+			siege_block_direction = Vector2.RIGHT
+		renderer.add_weapon_clash(player.position + siege_block_direction * 34.0, false, false, true)
+		renderer.cancel_next_archer_projectile(telegraph.source_enemy_id)
+		return true
 	if telegraph.source_enemy_id < 0 or not enemies.is_active(telegraph.source_enemy_id):
 		return false
 	var enemy_type := enemies.get_type(telegraph.source_enemy_id)
@@ -1782,6 +2348,10 @@ func _try_resolve_guard(telegraph: Telegraph) -> bool:
 			renderer.cancel_next_archer_projectile(telegraph.source_enemy_id)
 		elif enemy_type == EnemySimulation.EnemyType.CROSSBOW:
 			renderer.cancel_next_crossbow_bolt(telegraph.source_enemy_id)
+	elif telegraph.source == "siege_arrow_tower" and siege.is_active() and siege.is_arrow_tower_projectile_source(telegraph.source_enemy_id):
+		renderer.cancel_next_archer_projectile(telegraph.source_enemy_id)
+	elif telegraph.source == "siege_garrison_volley" and siege.is_active() and siege.is_garrison_projectile_source(telegraph.source_enemy_id):
+		renderer.cancel_next_archer_projectile(telegraph.source_enemy_id)
 	return true
 
 func _is_guardable_telegraph(telegraph: Telegraph) -> bool:
@@ -1844,6 +2414,10 @@ func _finalize_guard_minor(telegraph: Telegraph) -> void:
 
 func _on_level_up(level: int) -> void:
 	player.apply_level_up_benefits()
+	if is_instance_valid(siege_companion) and level > siege_companion_level:
+		siege_companion.apply_level_up_benefits()
+		_grant_siege_companion_auto_upgrade(level)
+		siege_companion_level = level
 	if upgrade_open:
 		queued_level_ups.append(level)
 		return
@@ -1851,7 +2425,6 @@ func _on_level_up(level: int) -> void:
 
 func _open_level_up(level: int) -> void:
 	upgrade_open = true
-	AudioService.set_tianji_sounds_paused(true)
 	current_upgrade_level = level
 	var option_count := _upgrade_option_count_for_current_run()
 	current_upgrade_selection_limit = _upgrade_selection_limit_for_current_run()
@@ -1859,8 +2432,12 @@ func _open_level_up(level: int) -> void:
 	upgrades.begin_draft()
 	current_upgrade_options = upgrades.draft(level, option_count)
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
-	input_router.set_input_enabled(false)
 	hud.set_message("等级提升：Lv.%d" % level)
+	if _uses_automatic_upgrade_selection():
+		_resolve_automatic_upgrade_selection()
+		return
+	AudioService.set_tianji_sounds_paused(true)
+	input_router.set_input_enabled(false)
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
 
 func _open_run_strategy_choice() -> void:
@@ -1898,7 +2475,6 @@ func _begin_boss_trial_upgrades(count: int, advance_after_upgrade: bool) -> void
 
 func _open_boss_trial_upgrade() -> void:
 	upgrade_open = true
-	AudioService.set_tianji_sounds_paused(true)
 	current_upgrade_level = director.level
 	var option_count := _upgrade_option_count_for_current_run()
 	current_upgrade_selection_limit = _upgrade_selection_limit_for_current_run()
@@ -1906,9 +2482,13 @@ func _open_boss_trial_upgrade() -> void:
 	upgrades.begin_draft()
 	current_upgrade_options = upgrades.draft(current_upgrade_level, option_count)
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
-	input_router.set_input_enabled(false)
 	var stage_label := "精英击破：选择强化" if boss_trial_advance_after_upgrade else "战前整备：%d选%d" % [current_upgrade_options.size(), current_upgrade_selection_limit]
 	hud.set_message("%s（剩余 %d）" % [stage_label, boss_trial_upgrades_remaining])
+	if _uses_automatic_upgrade_selection():
+		_resolve_automatic_upgrade_selection()
+		return
+	AudioService.set_tianji_sounds_paused(true)
+	input_router.set_input_enabled(false)
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
 
 func _on_upgrade_refresh_requested() -> void:
@@ -1925,17 +2505,17 @@ func _refresh_upgrade_choices(message: String = "") -> void:
 	var refreshed_options := upgrades.draft(current_upgrade_level, _upgrade_option_count_for_current_run())
 	var attempts := 0
 	while _same_upgrade_choices(refreshed_options, current_upgrade_options) and attempts < 6:
-		refreshed_options = upgrades.draft(current_upgrade_level, upgrades.upgrade_option_count())
+		refreshed_options = upgrades.draft(current_upgrade_level, _upgrade_option_count_for_current_run())
 		attempts += 1
 	current_upgrade_options = refreshed_options
 	current_upgrade_selection_limit = mini(current_upgrade_selection_limit, maxi(1, current_upgrade_options.size()))
 	hud.show_upgrades(current_upgrade_options, upgrades, current_upgrade_selection_limit)
 
 func _upgrade_option_count_for_current_run() -> int:
-	return BOSS_TRIAL_UPGRADE_OPTION_COUNT if director.is_boss_trial() else upgrades.upgrade_option_count()
+	return upgrades.upgrade_option_count()
 
 func _upgrade_selection_limit_for_current_run() -> int:
-	return BOSS_TRIAL_UPGRADE_SELECTION_LIMIT if director.is_boss_trial() else upgrades.upgrade_selection_limit()
+	return upgrades.upgrade_selection_limit()
 
 func _same_upgrade_choices(first: Array[String], second: Array[String]) -> bool:
 	if first.size() != second.size():
@@ -1960,10 +2540,26 @@ func _on_upgrade_selected(upgrade_id: String) -> void:
 	else:
 		player.apply_upgrade(upgrade_id)
 	current_upgrade_selection_count += 1
+	hud.enqueue_upgrade_notification(upgrades.title_for(upgrade_id), upgrades.description_for(upgrade_id))
 	hud.set_message("已获得：%s" % upgrades.title_for(upgrade_id))
 	if current_upgrade_selection_count < current_upgrade_selection_limit:
 		hud.set_message("已获得：%s · 继续选择 %d 项" % [upgrades.title_for(upgrade_id), current_upgrade_selection_limit - current_upgrade_selection_count])
 		return
+	_complete_current_upgrade_draft()
+
+func _resolve_automatic_upgrade_selection() -> void:
+	if current_upgrade_options.is_empty():
+		_complete_current_upgrade_draft()
+		return
+	while upgrade_open and current_upgrade_selection_count < current_upgrade_selection_limit and not current_upgrade_options.is_empty():
+		var selected_id := upgrades.choose_automatic_upgrade(current_upgrade_options, run_strategy_id, _player_health_ratio())
+		if selected_id.is_empty():
+			break
+		_on_upgrade_selected(selected_id)
+	if upgrade_open and current_upgrade_selection_count >= current_upgrade_selection_limit:
+		_complete_current_upgrade_draft()
+
+func _complete_current_upgrade_draft() -> void:
 	current_upgrade_options.clear()
 	if boss_trial_upgrades_remaining > 0:
 		boss_trial_upgrades_remaining -= 1
@@ -1991,6 +2587,17 @@ func _on_upgrade_selected(upgrade_id: String) -> void:
 	if should_advance_trial:
 		director.advance_boss_trial_after_named_defeat()
 
+func _uses_automatic_upgrade_selection() -> bool:
+	return upgrade_selection_mode == "automatic"
+
+func _normalized_upgrade_selection_mode(value: String) -> String:
+	return "automatic" if value == "automatic" else "manual"
+
+func _player_health_ratio() -> float:
+	if player == null or player.health_component == null:
+		return 1.0
+	return clampf(player.health_component.current / maxf(1.0, player.health_component.maximum), 0.0, 1.0)
+
 func _on_pause_requested() -> void:
 	if paused or finished or upgrade_open or player_death_cinematic_active or ultimate_cutin.is_playing():
 		return
@@ -2016,6 +2623,23 @@ func _on_resume_requested() -> void:
 func _on_combo_setting_changed(value: bool) -> void:
 	input_router.combo_enabled = value
 	SaveService.set_setting("auto_combo_enabled", value)
+
+func _on_damage_numbers_setting_changed(value: bool) -> void:
+	damage_numbers_enabled = value
+	renderer.set_damage_numbers_enabled(damage_numbers_enabled)
+	SaveService.set_setting("damage_numbers_enabled", damage_numbers_enabled)
+
+func _on_upgrade_selection_mode_changed(value: String) -> void:
+	upgrade_selection_mode = _normalized_upgrade_selection_mode(value)
+	SaveService.set_setting_value("upgrade_selection_mode", upgrade_selection_mode)
+	hud.set_upgrade_selection_mode(upgrade_selection_mode)
+
+func _on_selected_upgrades_requested() -> void:
+	if paused or finished or upgrade_open or player_death_cinematic_active or ultimate_cutin.is_playing():
+		return
+	_on_pause_requested()
+	if paused:
+		hud.show_selected_upgrades(upgrades.selected_upgrade_ids(), upgrades)
 
 func _on_home_requested() -> void:
 	SceneRouter.go_home()
@@ -2104,7 +2728,7 @@ func _on_rewarded_video_completed(placement: String, rewarded: bool, message: St
 			player.revive_from_rewarded_ad()
 			enemies.unfreeze_for_cinematic()
 			input_router.set_input_enabled(true)
-			hud.set_message("援军护住阵脚，继续破阵")
+			hud.set_message("背水")
 		elif not rewarded and revive_prompt_active:
 			hud.set_message(message if not message.is_empty() else "广告未完成，可选择放弃复活")
 		return
@@ -2120,7 +2744,9 @@ func _on_rewarded_video_completed(placement: String, rewarded: bool, message: St
 
 func _on_boss_defeated() -> void:
 	var defeated_boss_name := boss.display_name()
+	battle_souls.record_enemy_corpse(boss.position)
 	_cancel_boss_telegraphs()
+	director.set_boss_encounter_active(false)
 	enemies.clear_duel_formation()
 	director.set_spawn_background_mode(false)
 	_stop_duel_formation_audio()
@@ -2128,6 +2754,10 @@ func _on_boss_defeated() -> void:
 	var boss_merit := BOSS_TRIAL_BOSS_DEFEAT_MERIT if director.is_boss_trial() else BOSS_DEFEAT_MERIT
 	_grant_run_merit(boss_merit)
 	player.apply_military_boss_defeat_reward(not tianji.is_resolving_damage())
+	if director.is_siege():
+		if siege.resolve_final_boss(player.position):
+			director.set_spawn_suppressed(true)
+		return
 	if director.is_boss_trial():
 		if not tianji.is_resolving_damage():
 			player.apply_boss_trial_defeat_recovery()

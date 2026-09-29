@@ -1,0 +1,92 @@
+11:signal gate_destroyed()
+12:signal message_requested(value: String)
+13:signal targeting_changed()
+14:signal counterattack_started()
+15:signal gate_assault_started(seconds: float)
+16:signal defense_resumed()
+17:signal node_challenge_requested(node_index: int, elite_id: String, at: Vector2)
+18:signal final_challenge_requested(at: Vector2)
+19:signal final_hero_reinforcement_requested()
+20:signal wall_volley_requested(origin: Vector2, impacts: Array, final_volley: bool)
+21:signal arrow_tower_shot_requested(tower_index: int, origin: Vector2, impact: Vector2)
+22:signal arrow_tower_damaged(at: Vector2, damage: float, tower_index: int)
+23:signal garrison_volley_requested(shots: Array)
+240:var active := false
+241:var world_bounds := Rect2()
+242:var enemies: EnemySimulation
+243:var siege_elapsed := 0.0
+244:var phase := SiegePhase.DEFENSE
+245:var gate_assault_remaining := 0.0
+246:var progression_nodes: Array[Dictionary] = []
+247:var active_node_index := -1
+248:var active_node_elite_id := -1
+249:var second_node_reinforcement_triggered := false
+250:var second_node_support_elite_id := -1
+251:var second_node_primary_defeated := false
+252:var second_node_support_defeated := false
+253:var final_challenge_started := false
+254:var final_hero_reinforcement_remaining := INF
+255:var final_hero_reinforcement_emitted := false
+256:var final_formation_elite_ids: Dictionary = {}
+257:var final_formation_defeated_ids: Dictionary = {}
+258:var final_duel_left_wall_units: Array[Dictionary] = []
+259:var volley_remaining := NODE_VOLLEY_INTERVAL
+260:var volley_serial := 0
+261:var arrow_tower_volley_remaining := INF
+262:var arrow_tower_shot_queue: Array[Dictionary] = []
+263:var garrison_volley_remaining := GARRISON_VOLLEY_FIRST_DELAY
+264:var garrison_volley_serial := 0
+265:var garrison_volley_columns: Array = []
+266:var garrison_volley_column_remaining := 0.0
+267:var garrison_firing_refs: Array[Dictionary] = []
+268:var garrison_rng := RandomNumberGenerator.new()
+269:var garrison_residual_release_queue: Array[Dictionary] = []
+270:var visible_world_rect := Rect2()
+271:var gate_position := Vector2.ZERO
+272:var gate_durability := GATE_MAX_DURABILITY
+273:var gate_breach_remaining := 0.0
+274:var gate_hit_flash := 0.0
+275:var gate_has_fallen := false
+277:var reserves := INITIAL_RESERVES
+278:var reinforcement_timer := FRIENDLY_REINFORCEMENT_INTERVAL
+279:var friendly_units: Array[Dictionary] = []
+280:var friendly_corpses: Array[Dictionary] = []
+283:var battlefield_friendly_units: Array[Dictionary] = []
+284:var battlefield_friendly_deployment_queue: Array[Dictionary] = []
+285:var battlefield_friendly_serial := 0
+286:var battlefield_friendly_deployment_remaining := 0.0
+287:var battlefield_pressure_sample_remaining := 0.0
+288:var battlefield_pressure := 0
+289:var friendly_attack_assignments: Dictionary = {}
+290:var friendly_serial := 0
+291:var lone_stand_announced := false
+292:var armory_effects: Dictionary = {}
+294:var ram_state := RamState.INACTIVE
+295:var ram_position := Vector2.ZERO
+296:var ram_health := 0.0
+297:var ram_attack_remaining := 0.0
+298:var ram_deployment_remaining := FIRST_RAM_DEPLOYMENT_DELAY
+299:var ram_hit_flash := 0.0
+301:var offense_stacks := 0
+302:var offense_remaining := 0.0
+303:var defense_stacks := 0
+304:var defender_target_assignments: Dictionary = {}
+305:var friendly_defender_counts: Dictionary = {}
+306:var ram_melee_defender_count := 0
+307:var ram_ranged_defender_count := 0
+308:var assignment_prune_remaining := 0.0
+383:func is_active() -> bool:
+386:func gate_ratio() -> float:
+418:func arrow_towers_for_render() -> Array[Dictionary]:
+441:func arrow_tower_origin_for_projectile(source_enemy_id: int) -> Vector2:
+453:func is_arrow_tower_projectile_source(source_enemy_id: int) -> bool:
+456:func is_garrison_projectile_source(source_enemy_id: int) -> bool:
+459:func garrison_archer_origin_for_projectile(source_enemy_id: int) -> Vector2:
+468:func gate_visual_rect() -> Rect2:
+640:func friendly_count() -> int:
+643:func ram_is_active() -> bool:
+646:func ram_health_ratio() -> float:
+649:func ram_status_label() -> String:
+673:func is_counterattack_active() -> bool:
+676:func is_final_assault_active() -> bool:
+835:func is_lone_stand() -> bool:

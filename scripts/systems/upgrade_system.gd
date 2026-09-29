@@ -9,11 +9,12 @@ const DRAFT_TENDENCY_TIANJI := "tianji"
 const DRAFT_TENDENCIES := [DRAFT_TENDENCY_BALANCED, DRAFT_TENDENCY_TALENT, DRAFT_TENDENCY_TIANJI]
 const EARLY_DRAFT_LIMIT := 3
 const EARLY_TALENT_APPEAR_CHANCE := 0.70
+const ZHANG_FEI_FOLLOWUP_APPEAR_CHANCE := 0.70
 # Strategy shifts weight only between hero talents and Tianji choices. This
 # keeps the common-upgrade draw chance identical for every opening strategy.
 const DRAFT_TENDENCY_GROUP_SHIFT := 0.35
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
-const COMMON_UPGRADE_IDS := ["common_attack", "common_defense", "common_speed", "common_heal"]
+const COMMON_UPGRADE_IDS := ["common_attack", "common_defense", "common_speed", "common_armor_ignore", "common_heal"]
 const TIANJI_ACTIVATION_IDS := ["tianji_lightning_activate", "tianji_wind_activate", "tianji_water_activate", "tianji_fire_activate", "tianji_arrow_activate"]
 const TIANJI_UPGRADE_IDS := [
 	"tianji_lightning_cooldown", "tianji_lightning_damage", "tianji_lightning_targets",
@@ -23,24 +24,49 @@ const TIANJI_UPGRADE_IDS := [
 	"tianji_arrow_cooldown", "tianji_arrow_damage", "tianji_arrow_volley",
 ]
 
+# Automatic selection always uses upgrade IDs rather than localized text. This
+# keeps the decision stable even when a card's Chinese copy is adjusted.
+const GUAN_YU_CORE_ROUTE_IDS := ["guan_drag_blade", "guan_drag_steadiness", "guan_drag_charge", "guan_drag_waves", "guan_drag_reach"]
+const ZHANG_FEI_CORE_ROUTE_IDS := ["zhang_heavy_roar", "zhang_slam_leap", "zhang_fourth_strike", "zhang_slam_mastery", "zhang_fourth_wave_expand"]
+const ZHAO_YUN_CORE_ROUTE_IDS := ["firewheel", "firewheel_duration", "firewheel_capstone"]
+const AUTOMATIC_STRONG_COMMON_IDS := ["common_attack", "common_armor_ignore"]
+# These two sustain chains are deliberately curated. They sit directly below
+# 猛攻 in automatic selection, so a run can establish its sustain engine early.
+const AUTOMATIC_SUSTAIN_CHAIN_IDS := ["guan_martial_pressure", "guan_pressure_recovery", "dragon_scale", "dragon_scale_regen"]
+const AUTOMATIC_HERO_SUSTAIN_IDS := ["zhang_ultimate_bloodlust"]
+const AUTOMATIC_DEFENSIVE_IDS := [
+	"common_defense", "common_heal",
+	"zhang_iron_hide", "zhang_immovable", "zhang_ultimate_bloodlust",
+	"guan_iron_guard", "guan_pressure_recovery", "guan_sweeping_guard", "guan_sweeping_guard_large",
+	"dragon_armor", "dragon_scale", "dragon_scale_regen", "dragon_focus_guard", "dragon_focus_invulnerable",
+]
+const AUTOMATIC_FUNCTIONAL_IDS := [
+	"tianji_lightning_cooldown", "tianji_wind_cooldown", "tianji_wind_slow", "tianji_wind_knockback",
+	"tianji_water_cooldown", "tianji_water_duration", "tianji_water_radius", "tianji_water_slow",
+	"tianji_fire_cooldown", "tianji_arrow_cooldown",
+	"zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_bridge_repel",
+	"guan_drag_steadiness", "guan_battlefield_radius", "guan_pressure_recovery", "guan_mark_hunt", "guan_breaking_step",
+	"dragon_stride", "dragon_stride_double", "dragon_stride_threefold", "dragon_focus",
+]
+
 const HERO_POOLS := {
 	"zhang_fei": {
 		"upgrade_ids": [
 			"zhang_heavy_roar", "zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
-			"zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
+			"zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_ultimate_armor_pierce", "zhang_ultimate_bloodlust", "zhang_war_stomp",
 		],
 		"weapon_ids": ["zhang_heavy_roar", "zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery"],
 		"passive_ids": ["zhang_rage", "zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm"],
 		"active_ids": ["zhang_iron_hide", "zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave"],
-		"rare_ids": ["zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_war_stomp"],
+		"rare_ids": ["zhang_earthshaker", "zhang_immovable", "zhang_battle_cry", "zhang_ultimate_armor_pierce", "zhang_war_stomp"],
 		"core_talent_ids": ["zhang_heavy_roar", "zhang_iron_hide", "zhang_rage", "zhang_earthshaker", "zhang_ultimate_bloodlust"],
 		"talent_blueprint_ids": [
 			"zhang_fourth_strike", "zhang_fourth_wave_expand", "zhang_slam_leap", "zhang_slam_mastery",
 			"zhang_rage_hunt", "zhang_rage_fervor", "zhang_rage_overwhelm",
 			"zhang_active_charge", "zhang_bridge_breaker", "zhang_bridge_repel", "zhang_bridge_shockwave",
-			"zhang_immovable", "zhang_battle_cry", "zhang_ultimate_bloodlust", "zhang_war_stomp",
+			"zhang_immovable", "zhang_battle_cry", "zhang_ultimate_armor_pierce", "zhang_ultimate_bloodlust", "zhang_war_stomp",
 		],
 		"progression_chains": [],
 	},
@@ -50,12 +76,12 @@ const HERO_POOLS := {
 			"guan_fourth_strike", "guan_fourth_dash", "guan_fourth_collision", "guan_fourth_wave", "guan_fourth_execution",
 			"guan_martial_pressure", "guan_battlefield_radius", "guan_iron_guard", "guan_pressure_recovery", "guan_mark_hunt",
 			"guan_breaking_wave", "guan_rending_tide", "guan_wave_count", "guan_breaking_step", "guan_river_cleaver",
-			"guan_saintly_wrath", "guan_war_banner", "guan_saintly_duration", "guan_saintly_warfront", "guan_sweeping_guard", "guan_sweeping_guard_large",
+			"guan_saintly_wrath", "guan_war_banner", "guan_saintly_duration", "guan_saintly_armor_pierce", "guan_saintly_warfront", "guan_sweeping_guard", "guan_sweeping_guard_large",
 		],
 		"weapon_ids": ["guan_broad_edge", "guan_heavy_blade", "guan_drag_blade", "guan_drag_steadiness", "guan_drag_charge", "guan_drag_waves", "guan_drag_reach", "guan_fourth_strike", "guan_fourth_dash", "guan_fourth_collision", "guan_fourth_wave", "guan_fourth_execution", "guan_sweeping_guard", "guan_sweeping_guard_large"],
 		"passive_ids": ["guan_martial_pressure", "guan_battlefield_radius", "guan_iron_guard", "guan_pressure_recovery", "guan_mark_hunt"],
 		"active_ids": ["guan_breaking_wave", "guan_rending_tide", "guan_wave_count", "guan_breaking_step", "guan_river_cleaver"],
-		"rare_ids": ["guan_saintly_wrath", "guan_war_banner", "guan_saintly_duration", "guan_saintly_warfront"],
+		"rare_ids": ["guan_saintly_wrath", "guan_war_banner", "guan_saintly_duration", "guan_saintly_armor_pierce", "guan_saintly_warfront"],
 		"core_talent_ids": [
 			"guan_broad_edge", "guan_heavy_blade", "guan_drag_waves", "guan_fourth_dash",
 			"guan_martial_pressure", "guan_iron_guard", "guan_breaking_wave", "guan_rending_tide",
@@ -65,7 +91,7 @@ const HERO_POOLS := {
 			"guan_sweeping_guard", "guan_sweeping_guard_large", "guan_drag_blade", "guan_drag_steadiness", "guan_drag_charge", "guan_drag_reach",
 			"guan_fourth_strike", "guan_fourth_collision", "guan_fourth_wave", "guan_fourth_execution",
 			"guan_battlefield_radius", "guan_pressure_recovery", "guan_mark_hunt",
-			"guan_breaking_step", "guan_river_cleaver", "guan_saintly_duration", "guan_saintly_warfront",
+			"guan_breaking_step", "guan_river_cleaver", "guan_saintly_armor_pierce", "guan_saintly_duration", "guan_saintly_warfront",
 		],
 		"progression_chains": [],
 	},
@@ -73,7 +99,7 @@ const HERO_POOLS := {
 		"upgrade_ids": [
 			"spear_reach", "sweeping_wind", "dash_echo", "firewheel", "dragon_armor",
 			"dragon_stride", "dragon_scale", "seven_edge", "snake_spin",
-			"spear_shadow", "white_dragon", "returning_spear", "triumph", "dragon_focus",
+			"spear_shadow", "white_dragon", "returning_spear", "zhao_ultimate_armor_pierce", "triumph", "dragon_focus",
 			"firewheel_duration", "firewheel_capstone",
 			"sweeping_guard", "sweeping_guard_large", "dragon_scale_regen",
 			"dragon_stride_double", "dragon_stride_threefold", "dragon_focus_guard", "dragon_focus_invulnerable",
@@ -81,14 +107,14 @@ const HERO_POOLS := {
 		"weapon_ids": ["spear_reach", "sweeping_wind", "dash_echo"],
 		"passive_ids": ["dragon_armor", "dragon_stride", "dragon_scale", "dragon_focus"],
 		"active_ids": ["seven_edge", "snake_spin", "spear_shadow"],
-		"rare_ids": ["firewheel"],
+		"rare_ids": ["firewheel", "zhao_ultimate_armor_pierce"],
 		"core_talent_ids": [
 			"spear_reach", "sweeping_wind", "dash_echo",
 			"dragon_armor", "dragon_stride", "dragon_scale",
 			"seven_edge", "snake_spin",
 		],
 		"talent_blueprint_ids": [
-			"firewheel", "firewheel_duration", "firewheel_capstone",
+			"firewheel", "firewheel_duration", "firewheel_capstone", "zhao_ultimate_armor_pierce",
 			"dragon_focus", "spear_shadow", "white_dragon", "returning_spear", "triumph",
 			"sweeping_guard", "sweeping_guard_large", "dragon_scale_regen",
 			"dragon_stride_double", "dragon_stride_threefold", "dragon_focus_guard", "dragon_focus_invulnerable",
@@ -121,6 +147,7 @@ const DEFINITIONS := {
 	"common_attack": {"title": "猛攻", "category": "通用强化", "description": "基础攻击 +5，最多叠加 4 层。", "max_stacks": 4},
 	"common_defense": {"title": "坚甲", "category": "通用强化", "description": "基础防御力 +3，最多叠加 4 层。", "max_stacks": 4},
 	"common_speed": {"title": "轻身", "category": "通用强化", "description": "基础速度 +8，最多叠加 4 层。", "max_stacks": 4},
+	"common_armor_ignore": {"title": "破甲", "category": "通用强化", "description": "基础无视防御 +3%；对普通敌人等比例增伤，最多叠加 3 层。", "max_stacks": 3},
 	"common_heal": {"title": "战地疗伤", "category": "通用强化", "description": "立即回复最大生命值的 10%；溢出部分转为 1 层护体。", "max_stacks": 0},
 	"tianji_lightning_activate": {"title": "七星引雷·启阵", "category": "天机", "description": "解锁的七星引雷在本局开始演算。", "max_stacks": 1},
 	"tianji_wind_activate": {"title": "巽风破阵·启阵", "category": "天机", "description": "解锁的巽风破阵在本局开始演算。", "max_stacks": 1},
@@ -165,6 +192,7 @@ const DEFINITIONS := {
 	"zhang_earthshaker": {"title": "万夫莫开", "category": "无双", "description": "万夫莫开的飞兵伤害与架势伤害提高。", "max_stacks": 3},
 	"zhang_immovable": {"title": "万夫壁垒", "category": "无双", "description": "万夫状态减伤提高。", "max_stacks": 2, "requires": "zhang_earthshaker", "shop_max_rank": 2, "shop_costs": [600, 1100], "shop_rank_limited": true},
 	"zhang_battle_cry": {"title": "当阳怒喝", "category": "无双", "description": "万夫状态每级持续时间 +5 秒。", "max_stacks": 2, "requires": "zhang_immovable", "shop_max_rank": 2, "shop_costs": [750, 1300], "shop_rank_limited": true},
+	"zhang_ultimate_armor_pierce": {"title": "万夫·裂甲", "category": "无双", "description": "万夫期间无视防御 +10%；对普通敌人等比例增伤，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
 	"zhang_ultimate_bloodlust": {"title": "万夫回生", "category": "无双", "description": "万夫期间普攻击杀：1级 8% 回复1点，2级 10% 回复2点，3级 15% 回复3点生命。", "max_stacks": 3},
 	"zhang_war_stomp": {"title": "裂地余威", "category": "无双", "description": "万夫初始震阵范围、伤害与击退提高。", "max_stacks": 1, "requires": "zhang_battle_cry", "shop_max_rank": 1, "shop_costs": [2200], "shop_rank_limited": true},
 	"guan_broad_edge": {"title": "偃月展锋", "category": "偃月", "description": "三段横扫范围扩大，穿透 +2。", "max_stacks": 3},
@@ -192,6 +220,7 @@ const DEFINITIONS := {
 	"guan_saintly_wrath": {"title": "武圣怒斩", "category": "武圣", "description": "武圣期间刀浪与冲击波伤害、架势伤害提高。", "max_stacks": 3},
 	"guan_war_banner": {"title": "军威如岳", "category": "武圣", "description": "无双能量获取效率提高，并立刻获得 12 点能量。", "max_stacks": 2},
 	"guan_saintly_duration": {"title": "武圣久战", "category": "武圣", "description": "武圣持续时间 +2秒。", "max_stacks": 2, "requires": "guan_saintly_wrath", "shop_max_rank": 2, "shop_costs": [700, 1200], "shop_rank_limited": true},
+	"guan_saintly_armor_pierce": {"title": "武圣·破甲斩", "category": "武圣", "description": "武圣期间无视防御 +10%；对普通敌人等比例增伤，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
 	"guan_saintly_warfront": {"title": "武圣压阵", "category": "武圣", "description": "武圣震阵范围、伤害与击退提高。", "max_stacks": 2, "requires": "guan_saintly_duration", "requires_stacks": 2, "shop_max_rank": 2, "shop_costs": [1100, 2000], "shop_rank_limited": true},
 	"guan_sweeping_guard": {"title": "偃月拦矢", "category": "偃月", "description": "普攻、拖刀斩浪与青龙断浪期间，可拦下正前方约 110° 内最多 3 枚弓箭或弩箭。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [450], "shop_rank_limited": true},
 	"guan_sweeping_guard_large": {"title": "青龙御矢", "category": "偃月", "description": "正前方拦截范围扩大至约 160°，每个动作最多可拦截 5 枚弹道。", "max_stacks": 1, "requires": "guan_sweeping_guard", "shop_max_rank": 1, "shop_costs": [700], "shop_rank_limited": true},
@@ -217,6 +246,7 @@ const DEFINITIONS := {
 	"spear_shadow": {"title": "枪影随行", "category": "破军", "description": "破军结束后追加一次延迟枪影补击；本战法仅可获得一次。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [800], "shop_rank_limited": true},
 	"white_dragon": {"title": "白龙长驱", "category": "无双", "description": "七进七出每段突进距离 +24，并立刻获得 30 无双能量。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [600, 1100, 1800], "shop_rank_limited": true},
 	"returning_spear": {"title": "回马穿心", "category": "无双", "description": "七进七出每次穿阵的伤害提高。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
+	"zhao_ultimate_armor_pierce": {"title": "七进·穿云", "category": "无双", "description": "七进七出无视防御 +5%；对普通敌人等比例增伤，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
 	"triumph": {"title": "凯歌", "category": "无双", "description": "无双充能效率提高；击败精英额外回血并充能。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [1500], "shop_rank_limited": true},
 	"ma_long_stride": {"title": "踏雪长驱", "category": "银枪", "description": "普攻距离提高，并立刻获得部分奔势。", "max_stacks": 3},
 	"ma_iron_hoof": {"title": "铁骑余威", "category": "奔势", "description": "招式伤害与击退强度提高。", "max_stacks": 3},
@@ -230,6 +260,7 @@ const DEFINITIONS := {
 
 var rng := RandomNumberGenerator.new()
 var owned_counts: Dictionary = {}
+var selection_history: Array[String] = []
 var unlocked_talents: Dictionary = {}
 var unlocked_talent_ranks: Dictionary = {}
 var active_hero_id := "zhao_yun"
@@ -327,11 +358,13 @@ func begin_draft() -> void:
 func seed_with(value: int) -> void:
 	rng.seed = value
 	owned_counts.clear()
+	selection_history.clear()
 	reset_draft_progress()
 
 func randomize_seed() -> void:
 	rng.randomize()
 	owned_counts.clear()
+	selection_history.clear()
 	reset_draft_progress()
 
 func draft(_level: int, option_count: int = -1) -> Array[String]:
@@ -358,19 +391,21 @@ func draft(_level: int, option_count: int = -1) -> Array[String]:
 			if not available.has(candidate_id):
 				available.append(candidate_id)
 				candidate_weights[candidate_id] = candidate_weight
-	var early_talent_id := _early_talent_id()
-	var early_talent_available := early_draft_active and not early_talent_id.is_empty() and available.has(early_talent_id)
-	if early_talent_available:
+	for featured_talent_id in _featured_talent_ids():
+		if result.size() >= requested_count or not available.has(featured_talent_id):
+			continue
 		# Remove the featured talent before the normal weighted draw so the
-		# configured 70% remains an actual appearance chance, not an extra weight
-		# layered on top of the ordinary pool.
-		available.erase(early_talent_id)
-		candidate_weights.erase(early_talent_id)
-		if rng.randf() < EARLY_TALENT_APPEAR_CHANCE:
-			result.append(early_talent_id)
+		# configured appearance chance is exact, not an extra weight layered on
+		# top of the ordinary pool. Keep its original category weight if the roll
+		# fails and it returns to the ordinary candidate pool.
+		var original_weight := float(candidate_weights.get(featured_talent_id, 1.0))
+		available.erase(featured_talent_id)
+		candidate_weights.erase(featured_talent_id)
+		if rng.randf() < _featured_talent_appearance_chance(featured_talent_id):
+			result.append(featured_talent_id)
 		else:
-			available.append(early_talent_id)
-			candidate_weights[early_talent_id] = 1.0
+			available.append(featured_talent_id)
+			candidate_weights[featured_talent_id] = original_weight
 	var activation_slots_remaining := maxi(0, tianji_slot_limit - active_tianji_ids.size())
 	var activation_picks := 0
 	while result.size() < requested_count and not available.is_empty():
@@ -386,11 +421,30 @@ func draft(_level: int, option_count: int = -1) -> Array[String]:
 		result.append(upgrade_id)
 	return result
 
-func _early_talent_id() -> String:
-	match active_hero_id:
-		"guan_yu": return "guan_drag_blade"
-		"zhang_fei": return "zhang_slam_leap"
-	return ""
+func _featured_talent_ids() -> Array[String]:
+	var featured_ids: Array[String] = []
+	if early_draft_active:
+		match active_hero_id:
+			"guan_yu":
+				featured_ids.append("guan_drag_blade")
+			"zhang_fei":
+				# The core must appear first; its two branches become featured once
+				# the player has actually selected the core during this run.
+				if int(owned_counts.get("zhang_heavy_roar", 0)) <= 0:
+					featured_ids.append("zhang_heavy_roar")
+			"zhao_yun":
+				featured_ids.append("firewheel")
+	if active_hero_id == "zhang_fei" and int(owned_counts.get("zhang_heavy_roar", 0)) > 0:
+		# Follow-up targeting remains active until both available branches have
+		# been selected, even when the core was obtained after the opening drafts.
+		featured_ids.append("zhang_slam_leap")
+		featured_ids.append("zhang_fourth_strike")
+	return featured_ids
+
+func _featured_talent_appearance_chance(upgrade_id: String) -> float:
+	if upgrade_id in ["zhang_slam_leap", "zhang_fourth_strike"]:
+		return ZHANG_FEI_FOLLOWUP_APPEAR_CHANCE
+	return EARLY_TALENT_APPEAR_CHANCE
 
 func _strategy_category_weight(category_id: String, category_count: int, opposite_count: int) -> float:
 	if draft_tendency == DRAFT_TENDENCY_BALANCED or category_count <= 0 or opposite_count <= 0:
@@ -416,6 +470,88 @@ func _take_weighted_candidate(candidates: Array[String], candidate_weights: Dict
 
 func record_selection(upgrade_id: String) -> void:
 	owned_counts[upgrade_id] = int(owned_counts.get(upgrade_id, 0)) + 1
+	if not selection_history.has(upgrade_id):
+		selection_history.append(upgrade_id)
+
+func selected_upgrade_ids() -> Array[String]:
+	return selection_history.duplicate()
+
+func choose_automatic_upgrade(options: Array[String], tendency: String = "", health_ratio: float = 1.0) -> String:
+	var best_score := 9999
+	var tied_options: Array[String] = []
+	var normalized_tendency := tendency if DRAFT_TENDENCIES.has(tendency) else draft_tendency
+	for upgrade_id in options:
+		var score := _automatic_selection_score(upgrade_id, normalized_tendency, health_ratio)
+		if score < best_score:
+			best_score = score
+			tied_options = [upgrade_id]
+		elif score == best_score:
+			tied_options.append(upgrade_id)
+	if tied_options.is_empty():
+		return ""
+	return tied_options[rng.randi_range(0, tied_options.size() - 1)]
+
+func _automatic_selection_score(upgrade_id: String, tendency: String, health_ratio: float) -> int:
+	# Preserve a critically wounded run when the immediate-heal card is present.
+	if health_ratio <= 0.25 and upgrade_id == "common_heal":
+		return -100
+	var core_priority := _automatic_core_route_priority(upgrade_id)
+	if core_priority >= 0:
+		return core_priority
+	var strong_common_priority := AUTOMATIC_STRONG_COMMON_IDS.find(upgrade_id)
+	if strong_common_priority >= 0:
+		return 10 if strong_common_priority == 0 else 12
+	if AUTOMATIC_SUSTAIN_CHAIN_IDS.has(upgrade_id):
+		return 11
+	var hero_sustain_priority := AUTOMATIC_HERO_SUSTAIN_IDS.find(upgrade_id)
+	if hero_sustain_priority >= 0:
+		# Below 45% health, favor a qualified hero sustain card immediately after
+		# the hero's build-defining route. At safer health it remains above playstyle
+		# tendency and ordinary functional/defensive cards, but below strong offense.
+		return (5 if health_ratio <= 0.45 else 12) + hero_sustain_priority
+	# Movement is strategically valuable, but should not crowd out the hero or
+	# Tianji route selected for this run.
+	if upgrade_id == "common_speed":
+		return 40
+	if COMMON_UPGRADE_IDS.has(upgrade_id):
+		# The remaining common cards are defense or recovery. Keep them after
+		# movement unless the critical-health recovery override was triggered.
+		return 50 + _automatic_role_priority(upgrade_id)
+	var tendency_priority := _automatic_tendency_priority(upgrade_id, tendency)
+	var role_priority := _automatic_role_priority(upgrade_id)
+	return 20 + tendency_priority * 10 + role_priority
+
+func _automatic_core_route_priority(upgrade_id: String) -> int:
+	match active_hero_id:
+		"guan_yu":
+			var guan_index := GUAN_YU_CORE_ROUTE_IDS.find(upgrade_id)
+			return guan_index if guan_index >= 0 else -1
+		"zhang_fei":
+			# 跃步固定排在撼地之前，满足同次出现时优先选择跃步的规则。
+			var zhang_index := ZHANG_FEI_CORE_ROUTE_IDS.find(upgrade_id)
+			return zhang_index if zhang_index >= 0 else -1
+		"zhao_yun":
+			var zhao_index := ZHAO_YUN_CORE_ROUTE_IDS.find(upgrade_id)
+			return zhao_index if zhao_index >= 0 else -1
+	return -1
+
+func _automatic_tendency_priority(upgrade_id: String, tendency: String) -> int:
+	var is_tianji := is_tianji_upgrade(upgrade_id)
+	var is_hero_talent := _pool_ids("upgrade_ids").has(upgrade_id)
+	match tendency:
+		DRAFT_TENDENCY_TALENT:
+			return 0 if is_hero_talent else (1 if is_tianji else 2)
+		DRAFT_TENDENCY_TIANJI:
+			return 0 if is_tianji else (1 if is_hero_talent else 2)
+		_:
+			return 0 if (is_hero_talent or is_tianji) else 1
+
+func _automatic_role_priority(upgrade_id: String) -> int:
+	if AUTOMATIC_DEFENSIVE_IDS.has(upgrade_id):
+		return 2
+	if AUTOMATIC_FUNCTIONAL_IDS.has(upgrade_id):
+		return 1
+	return 0
 
 func stack_count_for(upgrade_id: String) -> int:
 	return int(owned_counts.get(upgrade_id, 0))

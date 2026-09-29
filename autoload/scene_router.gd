@@ -46,6 +46,8 @@ func start_run(mode: String, battlefield_id: String = "changban", story_chapter:
 		return
 	if mode == "endless" and not SaveService.is_battlefield_unlocked("changban"):
 		return
+	if mode == "siege" and not SaveService.is_battlefield_unlocked("jingzhou_siege"):
+		return
 	if mode == "boss_trial" and not SaveService.is_battlefield_unlocked("hulao"):
 		return
 	active_mode = mode
@@ -236,6 +238,7 @@ func restart_run() -> void:
 
 func go_home() -> void:
 	LoadingOverlay.show_transition("正在回营 · 整备军务")
+	SaveService.clear_run_hero()
 	get_tree().change_scene_to_file(HOME_SCENE)
 
 func is_map_editor_available() -> bool:

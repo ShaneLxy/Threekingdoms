@@ -63,8 +63,10 @@ func activate_skill(skill_id: String) -> bool:
 	if not can_activate(skill_id):
 		return false
 	slot_order.append(skill_id)
+	var definition := TIANJI_CATALOG.definition_for(skill_id)
+	var rank := clampi(SaveService.tianji_rank(skill_id), 1, 5)
 	skill_states[skill_id] = {
-		"rank": SaveService.tianji_rank(skill_id),
+		"rank": rank,
 		"cooldown_remaining": 1.35,
 		"cooldown_started": true,
 		"effect_finished": true,
@@ -78,6 +80,9 @@ func activate_skill(skill_id: String) -> bool:
 		"target_bonus": 0,
 		"slow_bonus": 0.0,
 		"knockback_bonus": 0.0,
+		"armor_ignore_ratio": _rank_array_value(definition, "armor_ignore_ratio", rank, 0.0),
+		"wind_execute_chance": _rank_array_value(definition, "wind_execute_chance", rank, 0.0),
+		"wind_execute_checked": {},
 		"radius_ratio": 1.0,
 		"duration_bonus": 0.0,
 		"strike_bonus": 0,
@@ -530,7 +535,8 @@ func _apply_water_wave(state: Dictionary, definition: Dictionary, damage: float,
 			continue
 		if not _point_crossed_by_water_wave(enemies.positions[id], previous_front, front, start, direction, travel_distance, wave_half_height):
 			continue
-		var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id))
+		var armor_ignore_ratio := float(state.get("armor_ignore_ratio", 0.0)) if str(definition.get("kind", "")) == "water" else 0.0
+		var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id), false, armor_ignore_ratio) if enemies.get_type(id) == EnemySimulation.EnemyType.ELITE else CombatMath.final_damage_against_regular_enemy(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id), false, armor_ignore_ratio)
 		var enemy_knockback := knockback
 		if protect_duel_formation and enemies.get_type(id) != EnemySimulation.EnemyType.ELITE:
 			enemy_knockback = 0.0
@@ -542,12 +548,12 @@ func _apply_water_wave(state: Dictionary, definition: Dictionary, damage: float,
 			continue
 		if not _point_crossed_by_water_wave(elite.position, previous_front, front, start, direction, travel_distance, wave_half_height):
 			continue
-		elite.receive_player_hit(CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, elite.armor()))
+		elite.receive_player_hit(CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, elite.armor(), false, float(state.get("armor_ignore_ratio", 0.0))))
 		elite.apply_guard_knockback(direction, knockback, knockback * 0.025)
 		elite.apply_slow(slow_multiplier, slow_duration)
 		hit_count += 1
 	if boss != null and boss.active and target_rect.has_point(boss.position) and _point_crossed_by_water_wave(boss.position, previous_front, front, start, direction, travel_distance, wave_half_height):
-		boss.receive_player_hit(CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, boss.armor()), BossActor.VULNERABLE_DEFAULT_STANCE_DAMAGE)
+		boss.receive_player_hit(CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, boss.armor(), false, float(state.get("armor_ignore_ratio", 0.0))), BossActor.VULNERABLE_DEFAULT_STANCE_DAMAGE)
 		boss.apply_guard_knockback(direction, knockback, knockback * 0.018)
 		boss.apply_slow(slow_multiplier, slow_duration)
 		hit_count += 1
@@ -992,8 +998,14 @@ func _release_wind_unit(state: Dictionary, definition: Dictionary, unit: Diction
 	if protect_duel_formation and unit.has("origin_position"):
 		enemies.update_tianji_position(id, unit.get("origin_position", enemies.positions[id]))
 	enemies.set_tianji_lifted(id, false)
-	var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id))
-	var defeated := enemies.apply_tianji_damage(id, final_damage)
+	var execute_chance := clampf(float(state.get("wind_execute_chance", 0.0)), 0.0, 0.10)
+	var protected_target := enemies.is_named_formation_shield_wall(id) or enemies.is_iron_bucket_shield(id) or (enemies.is_duel_shield(id) and enemies.is_duel_formation_sealed())
+	var defeated := false
+	if execute_chance > 0.0 and not protected_target and randf() < execute_chance:
+		defeated = enemies.apply_tianji_damage(id, 9999999.0)
+	else:
+		var final_damage := CombatMath.final_damage(player.total_attack(), damage / maxf(0.01, player.total_attack()), 0.0, enemies.get_armor(id))
+		defeated = enemies.apply_tianji_damage(id, final_damage)
 	if was_active:
 		damage_applied.emit(1)
 	if not defeated and enemies.is_active(id) and not protect_duel_formation:
@@ -1044,6 +1056,12 @@ func _duel_formation_blocks_regular_enemy_displacement() -> bool:
 	return enemies != null and enemies.is_duel_formation_active()
 
 func _wind_rank_value(definition: Dictionary, key: String, rank: int, fallback: float) -> float:
+	var values: Array = definition.get(key, []) as Array
+	if values.is_empty():
+		return fallback
+	return float(values[clampi(rank - 1, 0, values.size() - 1)])
+
+func _rank_array_value(definition: Dictionary, key: String, rank: int, fallback: float) -> float:
 	var values: Array = definition.get(key, []) as Array
 	if values.is_empty():
 		return fallback

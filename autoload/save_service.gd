@@ -4,18 +4,21 @@ const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 const UPGRADE_SYSTEM = preload("res://scripts/systems/upgrade_system.gd")
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
+const SIEGE_ARMORY = preload("res://scripts/domain/siege_armory.gd")
+const BATTLE_SOUL_ARMORY = preload("res://scripts/domain/battle_soul_armory.gd")
 
 const PROFILE_PATH := "user://profile.json"
 const PROFILE_BACKUP_PATH := "user://profile.json.bak"
 const PROFILE_TEMP_PATH := "user://profile.json.tmp"
-const CURRENT_SAVE_VERSION := 9
+const CURRENT_SAVE_VERSION := 11
 const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu", "zhang_fei", "zhao_yun"]
 const DEFAULT_NEW_PROFILE_TIANJI_SKILLS := {
 	"fire_rain_burning": 1,
 	"xun_wind_break": 1,
 	"arrow_support_volley": 1,
 }
-const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := false
+# 仅供本地测试：跳过剧情与战场的解锁条件。提交/导出正式包前必须恢复为 false。
+const LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS := true
 
 var profile: Dictionary = {
 	"save_version": CURRENT_SAVE_VERSION,
@@ -25,14 +28,18 @@ var profile: Dictionary = {
 	"completed_boss_trials": [],
 	"purchased_upgrades": [],
 	"military_strategies": {},
+	"siege_armory": {},
+	"battle_soul_armory": {},
 	"tianji_skills": DEFAULT_NEW_PROFILE_TIANJI_SKILLS.duplicate(),
 	"hero_talents": {"guan_yu": [], "zhang_fei": [], "zhao_yun": [], "ma_chao": [], "huang_zhong": []},
 	"hero_talent_ranks": {"guan_yu": {}, "zhang_fei": {}, "zhao_yun": {}, "ma_chao": {}, "huang_zhong": {}},
 	"tutorial_stage": 0,
 	"tutorial_completed": false,
 	"equipped_hero_id": "guan_yu",
-	"settings": {"sound_enabled": true, "vibration_enabled": true, "music_volume": 1.0, "sfx_volume": 1.0, "weather_mode": "auto"},
+	"settings": {"sound_enabled": true, "vibration_enabled": true, "music_volume": 1.0, "sfx_volume": 1.0, "weather_mode": "auto", "upgrade_selection_mode": "manual", "damage_numbers_enabled": true},
 }
+var trial_equipped_hero_id := ""
+var run_hero_id := ""
 
 func load_profile() -> Dictionary:
 	var loaded_profile: Dictionary = _read_profile_file(PROFILE_PATH)
@@ -97,7 +104,7 @@ func is_battlefield_unlocked(battlefield_id: String) -> bool:
 	if LOCAL_TEST_UNLOCK_ALL_BATTLEFIELDS:
 		return true
 	match battlefield_id:
-		"changban", "hulao": return has_completed_chapter("story_05")
+		"changban", "hulao", "jingzhou_siege": return has_completed_chapter("story_05")
 		"bowangpo": return has_completed_chapter("changban") or has_completed_chapter("story_01")
 		_: return false
 
@@ -146,6 +153,60 @@ func purchase_strategy(strategy_id: String) -> bool:
 	ranks[strategy_id] = current_rank + 1
 	profile["military_strategies"] = ranks
 	profile["military_merit"] = int(profile.get("military_merit", 0)) - MILITARY_STRATEGY.cost_for(strategy_id, current_rank)
+	save_profile()
+	return true
+
+func siege_armory_rank(armory_id: String) -> int:
+	_ensure_profile_shape()
+	var ranks: Dictionary = profile.get("siege_armory", {}) as Dictionary
+	return clampi(int(ranks.get(armory_id, 0)), 0, SIEGE_ARMORY.max_rank_for(armory_id))
+
+func siege_armory_cost(armory_id: String) -> int:
+	return SIEGE_ARMORY.cost_for(armory_id, siege_armory_rank(armory_id))
+
+func can_purchase_siege_armory(armory_id: String) -> bool:
+	_ensure_profile_shape()
+	var definition := SIEGE_ARMORY.definition_for(armory_id)
+	var current_rank := siege_armory_rank(armory_id)
+	if definition.is_empty() or current_rank >= SIEGE_ARMORY.max_rank_for(armory_id):
+		return false
+	return int(profile.get("military_merit", 0)) >= SIEGE_ARMORY.cost_for(armory_id, current_rank)
+
+func purchase_siege_armory(armory_id: String) -> bool:
+	if not can_purchase_siege_armory(armory_id):
+		return false
+	var ranks: Dictionary = profile.get("siege_armory", {}) as Dictionary
+	var current_rank := siege_armory_rank(armory_id)
+	ranks[armory_id] = current_rank + 1
+	profile["siege_armory"] = ranks
+	profile["military_merit"] = int(profile.get("military_merit", 0)) - SIEGE_ARMORY.cost_for(armory_id, current_rank)
+	save_profile()
+	return true
+
+func battle_soul_armory_rank(armory_id: String) -> int:
+	_ensure_profile_shape()
+	var ranks: Dictionary = profile.get("battle_soul_armory", {}) as Dictionary
+	return clampi(int(ranks.get(armory_id, 0)), 0, BATTLE_SOUL_ARMORY.max_rank_for(armory_id))
+
+func battle_soul_armory_cost(armory_id: String) -> int:
+	return BATTLE_SOUL_ARMORY.cost_for(armory_id, battle_soul_armory_rank(armory_id))
+
+func can_purchase_battle_soul_armory(armory_id: String) -> bool:
+	_ensure_profile_shape()
+	var definition := BATTLE_SOUL_ARMORY.definition_for(armory_id)
+	var current_rank := battle_soul_armory_rank(armory_id)
+	if definition.is_empty() or current_rank >= BATTLE_SOUL_ARMORY.max_rank_for(armory_id):
+		return false
+	return int(profile.get("military_merit", 0)) >= BATTLE_SOUL_ARMORY.cost_for(armory_id, current_rank)
+
+func purchase_battle_soul_armory(armory_id: String) -> bool:
+	if not can_purchase_battle_soul_armory(armory_id):
+		return false
+	var ranks: Dictionary = profile.get("battle_soul_armory", {}) as Dictionary
+	var current_rank := battle_soul_armory_rank(armory_id)
+	ranks[armory_id] = current_rank + 1
+	profile["battle_soul_armory"] = ranks
+	profile["military_merit"] = int(profile.get("military_merit", 0)) - BATTLE_SOUL_ARMORY.cost_for(armory_id, current_rank)
 	save_profile()
 	return true
 
@@ -309,13 +370,41 @@ func equipped_hero_id() -> String:
 	_ensure_profile_shape()
 	return str(profile.get("equipped_hero_id", "guan_yu"))
 
+func consume_run_hero_id() -> String:
+	_ensure_profile_shape()
+	if not run_hero_id.is_empty():
+		return run_hero_id
+	if not trial_equipped_hero_id.is_empty():
+		run_hero_id = trial_equipped_hero_id
+		trial_equipped_hero_id = ""
+		return run_hero_id
+	run_hero_id = str(profile.get("equipped_hero_id", "guan_yu"))
+	return run_hero_id
+
+func clear_run_hero() -> void:
+	run_hero_id = ""
+	trial_equipped_hero_id = ""
+
 func equip_hero(hero_id: String) -> bool:
 	_ensure_profile_shape()
 	var unlocked: Array = profile.get("unlocked_heroes", [])
 	if not HERO_CATALOG.is_playable(hero_id) or not unlocked.has(hero_id):
 		return false
+	trial_equipped_hero_id = ""
+	run_hero_id = ""
 	profile["equipped_hero_id"] = hero_id
 	save_profile()
+	return true
+
+func equip_hero_for_trial(hero_id: String) -> bool:
+	# Trial entry changes the currently equipped actor without granting a
+	# permanent roster unlock. This keeps preview-only heroes out of the normal
+	# shop/unlock flow while still allowing the hero-select page to launch a run.
+	_ensure_profile_shape()
+	if not HERO_CATALOG.is_playable(hero_id):
+		return false
+	run_hero_id = ""
+	trial_equipped_hero_id = hero_id
 	return true
 
 func tutorial_stage() -> int:
@@ -374,6 +463,12 @@ func _migrate_profile() -> bool:
 	if save_version < 9:
 		changed = _migrate_to_version_9() or changed
 		save_version = 9
+	if save_version < 10:
+		changed = _migrate_to_version_10() or changed
+		save_version = 10
+	if save_version < 11:
+		changed = _migrate_to_version_11() or changed
+		save_version = 11
 	if save_version != stored_version:
 		profile["save_version"] = save_version
 		changed = true
@@ -548,6 +643,18 @@ func _migrate_to_version_9() -> bool:
 			profile["tutorial_completed"] = true
 	return true
 
+func _migrate_to_version_10() -> bool:
+	if profile.has("siege_armory"):
+		return false
+	profile["siege_armory"] = {}
+	return true
+
+func _migrate_to_version_11() -> bool:
+	if profile.has("battle_soul_armory"):
+		return false
+	profile["battle_soul_armory"] = {}
+	return true
+
 func _has_any_talent_rank() -> bool:
 	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
 	for ranks_variant in all_ranks.values():
@@ -583,6 +690,12 @@ func _ensure_profile_shape() -> bool:
 		changed = true
 	if not profile.has("military_strategies"):
 		profile["military_strategies"] = {}
+		changed = true
+	if not profile.has("siege_armory"):
+		profile["siege_armory"] = {}
+		changed = true
+	if not profile.has("battle_soul_armory"):
+		profile["battle_soul_armory"] = {}
 		changed = true
 	for obsolete_key in ["tianji_seals", "tianji_slots", "tianji_pity", "tianji_free_spin_used"]:
 		if profile.has(obsolete_key):
@@ -642,6 +755,15 @@ func _ensure_profile_shape() -> bool:
 		changed = true
 	if not settings.has("auto_combo_enabled"):
 		settings["auto_combo_enabled"] = true
+		changed = true
+	if not settings.has("upgrade_selection_mode"):
+		settings["upgrade_selection_mode"] = "manual"
+		changed = true
+	elif str(settings["upgrade_selection_mode"]) not in ["manual", "automatic"]:
+		settings["upgrade_selection_mode"] = "manual"
+		changed = true
+	if not settings.has("damage_numbers_enabled"):
+		settings["damage_numbers_enabled"] = true
 		changed = true
 	profile["settings"] = settings
 	return changed

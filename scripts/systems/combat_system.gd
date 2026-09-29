@@ -21,8 +21,9 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 			if request.one_hit_per_target:
 				request.hit_targets[id] = true
 			continue
-		var damage := CombatMath.final_damage(hero_attack, request.damage_multiplier_at(enemies.positions[id]), hero_bonus, enemies.get_armor(id))
-		if enemies.get_type(id) == EnemySimulation.EnemyType.SHIELD:
+		var enemy_type := enemies.get_type(id)
+		var damage := CombatMath.final_damage(hero_attack, request.damage_multiplier_at(enemies.positions[id]), hero_bonus, enemies.get_armor(id), false, request.armor_ignore_ratio) if enemy_type == EnemySimulation.EnemyType.ELITE else CombatMath.final_damage_against_regular_enemy(hero_attack, request.damage_multiplier_at(enemies.positions[id]), hero_bonus, enemies.get_armor(id), false, request.armor_ignore_ratio)
+		if enemy_type == EnemySimulation.EnemyType.SHIELD:
 			var attacker_direction := (request.origin - enemies.positions[id]).normalized()
 			if enemies.get_facing_direction(id).dot(attacker_direction) >= 0.35:
 				damage *= 0.45
@@ -50,7 +51,10 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 				maxf(1.0, damage * request.launch_collision_damage_multiplier),
 				request.launch_collision_knockback,
 				request.launch_collision_max_targets,
-				request.launch_relay_count
+				request.launch_relay_count,
+				request.launch_landing_damage,
+				request.launch_landing_knockback,
+				request.launch_hold_until_duration
 			):
 				launched_targets += 1
 		if request.slow_duration > 0.0 and request.slow_multiplier < 1.0:

@@ -13,6 +13,8 @@
 [ext_resource type="Script" uid="uid://of827w7ckvro" path="res://scripts/systems/loot_system.gd" id="11_loot"]
 [ext_resource type="Script" uid="uid://bpkdth07s52jr" path="res://scripts/ui/ultimate_cutin.gd" id="12_cutin"]
 [ext_resource type="Script" uid="uid://b3l4l0gbea4po" path="res://scripts/systems/tianji_system.gd" id="13_tianji"]
+[ext_resource type="Script" uid="uid://c0fysnylf486i" path="res://scripts/systems/siege_system.gd" id="14_siege"]
+[ext_resource type="Script" uid="uid://box8oft6dooaw" path="res://scripts/systems/battle_soul_system.gd" id="15_battle_souls"]
 
 [node name="RunScene" type="Node2D" unique_id=1466211227]
 script = ExtResource("1_run")
@@ -39,8 +41,14 @@ script = ExtResource("13_tianji")
 [node name="RunDirector" type="Node" parent="." unique_id=590726810]
 script = ExtResource("8_director")
 
+[node name="SiegeSystem" type="Node" parent="." unique_id=1945205811]
+script = ExtResource("14_siege")
+
 [node name="LootSystem" type="Node" parent="." unique_id=960345287]
 script = ExtResource("11_loot")
+
+[node name="BattleSoulSystem" type="Node" parent="." unique_id=651492708]
+script = ExtResource("15_battle_souls")
 
 [node name="InputRouter" type="Node" parent="." unique_id=1179043767]
 script = ExtResource("10_input")

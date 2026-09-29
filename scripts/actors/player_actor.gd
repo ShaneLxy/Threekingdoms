@@ -144,6 +144,7 @@ var active_knockback_bonus := 0.0
 var active_recovery_bonus := 0.0
 var ultimate_dash_distance_bonus := 0.0
 var ultimate_damage_bonus := 0.0
+var zhao_ultimate_armor_ignore_bonus := 0.0
 var ultimate_energy_gain_multiplier := 1.0
 var triumph_enabled := false
 var firewheel_enabled := false
@@ -178,6 +179,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	position = bounds.get_center()
 	base_attack = float(base_stats.get("attack", 14.0))
 	base_defense = float(base_stats.get("defense", 0.0))
+	armor_ignore_ratio = float(base_stats.get("armor_ignore_ratio", 0.0))
 	attack_bonus = 0.0
 	defense_bonus = 0.0
 	defense_ratio_bonus = 0.0
@@ -258,6 +260,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	active_recovery_bonus = 0.0
 	ultimate_dash_distance_bonus = 0.0
 	ultimate_damage_bonus = 0.0
+	zhao_ultimate_armor_ignore_bonus = 0.0
 	ultimate_energy_gain_multiplier = 1.0
 	triumph_enabled = false
 	firewheel_enabled = false
@@ -280,10 +283,9 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	health_component.reset(float(base_stats.get("health", 120.0)))
 
 func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
-	if health_component == null:
-		return
-	health_component.current = clampf(health_component.maximum * health_ratio, 1.0, health_component.maximum)
-	health_component.health_changed.emit(health_component.current, health_component.maximum)
+	super.revive_from_rewarded_ad(health_ratio)
+	# The shared revive routine owns the health restore, burst, energy, and
+	# temporary recovery state. Zhao Yun only clears state unique to his kit.
 	current_action = ""
 	combo_stage = 0
 	combo_window = 0.0
@@ -295,7 +297,6 @@ func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
 	ultimate_time = 0.0
 	ultimate_segment_index = 0
 	ultimate_state = UltimateState.INACTIVE
-	reset_guard_state()
 
 func configure_hero(selected_hero_id: String) -> void:
 	hero_id = selected_hero_id if HERO_CATALOG.has_hero(selected_hero_id) else "zhao_yun"
@@ -313,6 +314,8 @@ func tick(delta: float, move_direction: Vector2) -> void:
 	if is_defeated():
 		return
 	tick_movement_slow(delta)
+	tick_revive_surge(delta)
+	tick_battle_souls(delta)
 	current_move_direction = move_direction
 	_update_buffered_basic_direction()
 	tick_active_charge_recovery(delta, _active_cooldown_for_current_state())
@@ -336,9 +339,10 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		attack_requested.emit(echo_attack)
 		echo_attack = null
 	var was_locked := attack_lock_remaining > 0.0
-	attack_lock_remaining = maxf(0.0, attack_lock_remaining - delta)
+	var basic_action_speed := attack_speed_multiplier() if current_action == "basic" else 1.0
+	attack_lock_remaining = maxf(0.0, attack_lock_remaining - delta * basic_action_speed)
 	var was_waiting_for_hit := hit_delay_remaining > 0.0
-	hit_delay_remaining = maxf(0.0, hit_delay_remaining - delta)
+	hit_delay_remaining = maxf(0.0, hit_delay_remaining - delta * basic_action_speed)
 	if combo_window <= 0.0 and not (current_action == "basic" and was_locked):
 		combo_stage = 0
 	if was_waiting_for_hit and hit_delay_remaining <= 0.0:
@@ -487,7 +491,7 @@ func apply_upgrade(upgrade_id: String) -> void:
 		"dragon_focus_invulnerable":
 			dragon_shield_invulnerability_enabled = true
 		"seven_edge":
-			active_cooldown_duration = maxf(4.5, active_cooldown_duration - 1.25)
+			active_cooldown_duration = maxf(2.0, active_cooldown_duration - 1.25)
 		"snake_spin":
 			active_range_bonus += 38.0
 			active_damage_bonus += 0.50
@@ -501,6 +505,8 @@ func apply_upgrade(upgrade_id: String) -> void:
 			add_ultimate_energy(30.0)
 		"returning_spear":
 			ultimate_damage_bonus += 0.45
+		"zhao_ultimate_armor_pierce":
+			zhao_ultimate_armor_ignore_bonus = minf(0.15, zhao_ultimate_armor_ignore_bonus + 0.05)
 		"triumph":
 			triumph_enabled = true
 			ultimate_energy_gain_multiplier = minf(1.8, ultimate_energy_gain_multiplier + 0.20)
@@ -508,7 +514,7 @@ func apply_upgrade(upgrade_id: String) -> void:
 	health_component.health_changed.emit(health_component.current, health_component.maximum)
 
 func total_attack() -> float:
-	return base_attack * (1.0 + attack_bonus)
+	return base_attack * (1.0 + attack_bonus) * revive_surge_attack_multiplier()
 
 func total_defense() -> float:
 	return base_defense * (1.0 + defense_ratio_bonus) + defense_bonus
@@ -521,13 +527,15 @@ func apply_level_up_benefits() -> void:
 
 func apply_account_progress(profile: Dictionary) -> void:
 	_apply_military_strategy(profile)
-	active_cooldown_duration = maxf(4.0, active_cooldown_duration - military_active_cooldown_reduction)
+	_apply_battle_soul_armory(profile)
+	active_cooldown_duration = maxf(2.0, active_cooldown_duration - military_active_cooldown_reduction)
 	reset_active_charges()
 	basic_pierce_bonus += military_pierce_bonus
 
 func current_stats() -> Dictionary:
 	return {
 		"attack": total_attack(),
+		"armor_ignore_ratio": armor_ignore_ratio,
 		"defense": total_defense(),
 		"health": health_component.current,
 		"max_health": health_component.maximum,
@@ -538,8 +546,12 @@ func current_stats() -> Dictionary:
 		"ultimate_cost": ULTIMATE_COST,
 	}
 
+func armor_ignore_ratio_for_request(request: AttackRequest) -> float:
+	var ultimate_bonus := zhao_ultimate_armor_ignore_bonus if request.action_kind == AttackRequest.ActionKind.ULTIMATE else 0.0
+	return clampf(armor_ignore_ratio + ultimate_bonus, 0.0, 1.0)
+
 func effective_move_speed() -> float:
-	return speed * _dragon_move_multiplier() * movement_speed_multiplier()
+	return speed * _dragon_move_multiplier() * movement_speed_multiplier() * revive_surge_move_speed_multiplier()
 
 func _active_cooldown_for_current_state() -> float:
 	return active_cooldown_duration
@@ -552,6 +564,10 @@ func dragon_stack_count() -> int:
 
 func hud_status_effects() -> Array[Dictionary]:
 	var effects: Array[Dictionary] = []
+	effects.append_array(battle_soul_hud_effects())
+	var revive_effect := revive_surge_hud_effect()
+	if not revive_effect.is_empty():
+		effects.append(revive_effect)
 	var slow_effect := movement_slow_hud_effect()
 	if not slow_effect.is_empty():
 		effects.append(slow_effect)
@@ -692,8 +708,11 @@ func receive_damage(amount: float, source: String, _attack_origin: Vector2 = Vec
 		protection_broken.emit()
 		return 0.0
 	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense()) * incoming_damage_multiplier(_attack_origin)
+	var pre_surge_amount := reduced_amount
 	if dragon_timer > 0.0 and dragon_damage_reduction > 0.0:
 		reduced_amount *= 1.0 - dragon_damage_reduction
+	reduced_amount = apply_battle_soul_damage_reduction(reduced_amount)
+	reduced_amount = apply_revive_surge_damage_reduction(reduced_amount, pre_surge_amount)
 	var applied_damage := health_component.take_damage(reduced_amount)
 	if applied_damage > 0.0:
 		damaged.emit(applied_damage)

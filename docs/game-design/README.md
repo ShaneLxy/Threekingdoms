@@ -21,6 +21,7 @@
 - [战斗与成长规则](03-combat-progression.md)：移动端操控、战斗公式、升级、无双充能与难度曲线。
 - [移动端 UI/UX 规范](04-mobile-ui-ux.md)：HUD、触控、升级、教学与安全区规则。
 - [模式设计](modes.md)：剧情模式与无尽模式。
+- [无尽模式变体：攻城略地](siege-conquest.md)：攻城锤推进、有限兵力、士气与首版战局流程。
 - [英雄：赵云](heroes/zhao-yun.md)：首位可玩武将的战斗原型与强化池。
 - [英雄：张飞、马超、黄忠](heroes/zhang-fei-ma-chao-huang-zhong.md)：三名差异化武将的首轮可玩原型。
 - [基础敌兵](enemies/basic-soldiers.md)：刀兵、戟兵、枪兵、弓兵、盾兵的职责。

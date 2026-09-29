@@ -4,11 +4,17 @@ extends Node2D
 signal telegraph_requested(telegraph: Telegraph)
 signal skill_impact_requested(strength: float)
 signal defeated(elite: EliteActor)
+signal retreat_started(elite: EliteActor)
+signal retreated(elite: EliteActor)
+signal damage_received(at: Vector2, damage: float, stance_broken: bool)
 signal attack_effect_requested(effect_type: String, at: Vector2, scale_multiplier: float)
 signal attack_sound_requested(sound_type: String)
 
 enum Archetype { XIAHOU_EN, CHUNYU_DAO, XIAHOU_LAN, HAN_HAO }
-enum State { INACTIVE, APPROACH, WINDUP, DASH, RECOVER, REPOSITION }
+enum State { INACTIVE, APPROACH, WINDUP, DASH, RECOVER, REPOSITION, RETREAT }
+# 攻城城下战允许沿用精英的多单位战斗逻辑，同时指定独立的真实武将立绘。
+# 这避免把四将强行塞入当前只有一个实例位的 BossActor 管线。
+enum VisualProfile { DEFAULT, ZHANG_HE, XIAHOU_DUN }
 
 const HEALTH_LAYER_CAPACITY := 120.0
 const XIAHOU_EN_DEATH_ANIMATION_DURATION := 0.56
@@ -37,7 +43,9 @@ const STANCE_BREAK_KNOCKBACK_BUDGET := 110.0
 const STANCE_BREAK_MAX_HIT_KNOCKBACK := 45.0
 const STANCE_BREAK_RECOIL_DURATION := 0.18
 const GUARD_REACTION_DISTANCE := 96.0
-const PERFECT_GUARD_REACTION_DISTANCE := 176.0
+# Perfect guards preserve the longer punish window, but keep the elite in
+# follow-up range instead of sending it beyond most heroes' attacks.
+const PERFECT_GUARD_REACTION_DISTANCE := GUARD_REACTION_DISTANCE
 const GUARD_REACTION_DURATION := 1.0
 const PERFECT_GUARD_REACTION_DURATION := 2.0
 const DRAG_COOLDOWN := 2.4
@@ -53,6 +61,8 @@ const COUNTERATTACK_DAMAGE_MULTIPLIER := 1.30
 const REPOSITION_COOLDOWN := 2.15
 const REPOSITION_DURATION := 0.52
 const REPOSITION_SPEED := 184.0
+const RETREAT_SPEED := 450.0
+const RETREAT_SPEECH_HOLD_DURATION := 0.55
 const PLAYER_STATIONARY_SPEED := 34.0
 
 @onready var health_component: HealthComponent = %HealthComponent
@@ -106,6 +116,14 @@ var tactical_reposition_allowed := true
 var reposition_target := Vector2.ZERO
 var player_is_attacking := false
 var navigation_waypoint := Vector2.ZERO
+var retreat_on_defeat := false
+var retreating := false
+var retreat_target := Vector2.ZERO
+var retreat_speech := ""
+var retreat_speech_hold_remaining := 0.0
+var display_name_override := ""
+var visual_profile: VisualProfile = VisualProfile.DEFAULT
+var retreat_exit_rect := Rect2()
 
 func _ready() -> void:
 	health_component.died.connect(_on_died)
@@ -162,7 +180,39 @@ func activate(new_archetype: Archetype, at: Vector2, new_threat_tier: int = 0) -
 	tactical_reposition_allowed = true
 	reposition_target = position
 	navigation_waypoint = Vector2.ZERO
+	retreat_on_defeat = false
+	retreating = false
+	retreat_target = Vector2.ZERO
+	retreat_speech = ""
+	retreat_speech_hold_remaining = 0.0
+	display_name_override = ""
+	visual_profile = VisualProfile.DEFAULT
+	retreat_exit_rect = Rect2()
 	health_component.reset(max_health())
+
+func configure_siege_identity(name_override: String, profile: VisualProfile = VisualProfile.DEFAULT) -> void:
+	display_name_override = name_override.strip_edges()
+	visual_profile = profile
+
+func restore_full_health() -> void:
+	if health_component == null:
+		return
+	health_component.current = health_component.maximum
+	health_component.health_changed.emit(health_component.current, health_component.maximum)
+
+func configure_retreat_on_defeat(target: Vector2, speech: String = "快撤！快撤！", exit_rect: Rect2 = Rect2()) -> void:
+	# 攻城略地首层的夏侯恩被击破后并非真正阵亡，而是作为败退演出撤回盾墙。
+	# 该设置只由攻城节点主动调用，其他精英仍走原有死亡流程。
+	retreat_on_defeat = target.is_finite()
+	retreat_target = target
+	retreat_speech = speech
+	retreat_exit_rect = exit_rect
+
+func is_retreating() -> bool:
+	return active and retreating
+
+func retreat_speech_text() -> String:
+	return retreat_speech if is_retreating() else ""
 
 func set_navigation_waypoint(value: Vector2) -> void:
 	navigation_waypoint = value
@@ -181,6 +231,9 @@ func tick(delta: float, player_position: Vector2, player_attacking: bool = false
 			defeated.emit(self)
 		return
 	if not active:
+		return
+	if retreating:
+		_tick_retreat(delta)
 		return
 	_track_player_motion(delta, player_position)
 	player_is_attacking = player_attacking
@@ -271,9 +324,13 @@ func receive_player_hit(amount: float) -> Dictionary:
 		return {"damage": 0.0, "stance_broken": false}
 	if cast_invulnerable:
 		return {"damage": 0.0, "stance_broken": false, "invulnerable": true}
-	var actual := amount * (stance_break_damage_multiplier if is_stance_broken() else 1.0)
+	var was_stance_broken := is_stance_broken()
+	var actual := amount * (stance_break_damage_multiplier if was_stance_broken else 1.0)
 	hurt_remaining = 0.14
-	return {"damage": health_component.take_damage(actual), "stance_broken": false}
+	var dealt := health_component.take_damage(actual)
+	if dealt > 0.0:
+		damage_received.emit(position, dealt, was_stance_broken)
+	return {"damage": dealt, "stance_broken": false}
 
 func apply_slow(multiplier: float, duration: float) -> void:
 	if not active or duration <= 0.0:
@@ -409,6 +466,8 @@ func armor() -> float:
 	return base_armor + float(threat_tier) * 2.0
 
 func display_name() -> String:
+	if not display_name_override.is_empty():
+		return display_name_override
 	match archetype:
 		Archetype.XIAHOU_EN: return "夏侯恩"
 		Archetype.CHUNYU_DAO: return "淳于导"
@@ -506,7 +565,7 @@ func is_high_risk_action_active() -> bool:
 	return active and state in [State.WINDUP, State.DASH] and _is_high_risk_action(current_action)
 
 func is_cast_invulnerable() -> bool:
-	return active and cast_invulnerable
+	return active and cast_invulnerable and not retreating
 
 func grant_counterattack() -> void:
 	if not active or is_stance_broken():
@@ -900,6 +959,32 @@ func _threat_damage(base_damage: float) -> float:
 func _on_died() -> void:
 	if not active:
 		return
+	if retreat_on_defeat and retreat_target.is_finite():
+		# HealthComponent 已经把生命扣至 0。保留一个极小正值以避免撤退途中
+		# 再次触发 died 信号；对玩家而言 HUD 仍显示为被击破的空血条。
+		health_component.current = 1.0
+		retreat_on_defeat = false
+		retreating = true
+		retreat_speech_hold_remaining = RETREAT_SPEECH_HOLD_DURATION
+		dying = false
+		state = State.RETREAT
+		state_timer = 0.0
+		moving = true
+		attack_animation_elapsed = 0.0
+		current_action = ""
+		queued_followup = ""
+		pending_dash_target = Vector2.ZERO
+		pending_dash_duration = 0.0
+		pending_dash_recovery = 0.0
+		dash_target = position
+		dash_speed = 0.0
+		dash_recovery = 0.0
+		cast_invulnerable = true
+		combo_steps.clear()
+		counterattack_remaining = 0.0
+		counterattack_action_multiplier = 1.0
+		retreat_started.emit(self)
+		return
 	active = false
 	visible = false
 	state = State.INACTIVE
@@ -911,3 +996,39 @@ func _on_died() -> void:
 	counterattack_action_multiplier = 1.0
 	dying = true
 	death_animation_elapsed = 0.0
+
+func _tick_retreat(delta: float) -> void:
+	if retreat_speech_hold_remaining > 0.0:
+		# 先留出极短的“快撤！快撤！”喊话，再高速斜向离场，避免台词一闪而过。
+		retreat_speech_hold_remaining = maxf(0.0, retreat_speech_hold_remaining - delta)
+		moving = false
+		return
+	var to_target := retreat_target - position
+	if to_target.length_squared() > 0.01:
+		current_direction = to_target.normalized()
+	position = position.move_toward(retreat_target, RETREAT_SPEED * delta)
+	# 城外目标仅按地图边界计算时，镜头靠近上下缘仍可能看见精英到达
+	# 目标后突然消失。只要离开击败时的可视区域便完成退场；若镜头很宽，
+	# 则继续沿原方向延伸目标，绝不在画面边缘停住。
+	var exited_view := retreat_exit_rect.size.x > 0.0 and retreat_exit_rect.size.y > 0.0 and not retreat_exit_rect.grow(80.0).has_point(position)
+	var reached_target := position.distance_squared_to(retreat_target) <= 16.0
+	moving = not exited_view
+	if not exited_view and reached_target:
+		var escape_direction := current_direction.normalized()
+		if escape_direction.length_squared() <= 0.01:
+			escape_direction = Vector2.UP
+		retreat_target += escape_direction * 240.0
+		moving = true
+	if moving:
+		return
+	_finish_retreat()
+
+func _finish_retreat() -> void:
+	# 离开镜头后的精英不留下尸体，也不再占 HUD 槽位或后续 AI 更新。
+	retreating = false
+	active = false
+	visible = false
+	state = State.INACTIVE
+	cast_invulnerable = false
+	retreat_speech = ""
+	retreated.emit(self)

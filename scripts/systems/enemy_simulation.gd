@@ -4,6 +4,7 @@ extends Node
 const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
 
 signal enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int, ultimate_energy: float)
+signal enemy_damaged(enemy_id: int, at: Vector2, damage: float)
 signal enemy_attack_requested(enemy_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float, attack_kind: String)
 signal enemy_attack_cancelled(enemy_id: int)
 signal enemy_death_collision(at: Vector2, direction: Vector2)
@@ -18,6 +19,7 @@ enum EnemyType { SWORD, HALBERD, ARCHER, SHIELD, ELITE, GUARD, SPEAR, CROSSBOW, 
 enum AttackState { APPROACH, WINDUP, RECOVER }
 enum DeathState { NONE, FALLING, LAUNCHED }
 enum EngagementLayer { ENGAGE, PRESSURE, ATMOSPHERE }
+enum SiegeTargetKind { HERO, RAM, FRIENDLY }
 enum DuelRole { NONE, SHIELD_RING, SPEAR_RING, RANGED_RING }
 enum DuelPhase { NONE, ASSEMBLING, SEALED }
 enum NamedFormationRole { FRONT, SPEAR, RANGED, FLANK, RESERVE, SHIELD_WALL, CAVALRY_CHANNEL }
@@ -251,6 +253,9 @@ var launch_collision_damages := PackedFloat32Array()
 var launch_collision_knockbacks := PackedFloat32Array()
 var launch_collision_charges := PackedByteArray()
 var launch_relay_charges := PackedByteArray()
+var launch_landing_damages := PackedFloat32Array()
+var launch_landing_knockbacks := PackedFloat32Array()
+var launch_hold_until_durations := PackedByteArray()
 var launch_hit_targets: Array[Dictionary] = []
 var forced_displacement_timers := PackedFloat32Array()
 var forced_displacement_velocities: Array[Vector2] = []
@@ -293,6 +298,14 @@ var threat_tier := 0
 var battle_mode := "story"
 var battle_elapsed := 0.0
 var difficulty_ramp := 1.0
+var siege_morale_stacks := 0
+var siege_health_multiplier := 1.0
+var siege_damage_multiplier := 1.0
+var siege_armor_bonus := 0.0
+var siege_target_provider: Callable
+var siege_target_positions: Array[Vector2] = []
+var siege_target_kinds := PackedByteArray()
+var siege_target_ids := PackedInt32Array()
 var formation_time := 0.0
 var last_player_position := Vector2.ZERO
 var player_velocity := Vector2.ZERO
@@ -325,6 +338,7 @@ var duel_wall_left_shield_ids: Array[int] = []   # 左盾墙盾兵ID列表
 var duel_wall_right_shield_ids: Array[int] = []  # 右盾墙盾兵ID列表
 var duel_wall_top_shield_ids: Array[int] = []    # 上盾墙盾兵ID列表
 var duel_wall_bottom_shield_ids: Array[int] = [] # 下盾墙盾兵ID列表
+var duel_wall_shield_original_health: Dictionary = {}
 var duel_wall_spear_harassment_cooldown := 0.0   # 枪兵骚扰冷却
 var duel_wall_archer_harassment_cooldown := 0.0  # 弓兵骚扰冷却
 var duel_wall_crossbow_harassment_cooldown := 0.0 # 弩兵骚扰冷却
@@ -389,6 +403,9 @@ func _ready() -> void:
 	launch_collision_knockbacks.resize(CAPACITY)
 	launch_collision_charges.resize(CAPACITY)
 	launch_relay_charges.resize(CAPACITY)
+	launch_landing_damages.resize(CAPACITY)
+	launch_landing_knockbacks.resize(CAPACITY)
+	launch_hold_until_durations.resize(CAPACITY)
 	launch_hit_targets.resize(CAPACITY)
 	forced_displacement_timers.resize(CAPACITY)
 	forced_displacement_velocities.resize(CAPACITY)
@@ -499,11 +516,23 @@ func set_threat_tier(value: int) -> void:
 func set_difficulty_ramp(value: float) -> void:
 	difficulty_ramp = clampf(value, 0.70, 1.20)
 
+func set_siege_morale(stacks: int) -> void:
+	# 仅由攻城略地调用。守势只参与新单位生成，避免已受伤敌兵的最大生命和
+	# 血条在战斗中跳变。
+	siege_morale_stacks = clampi(stacks, 0, 2)
+	siege_health_multiplier = 1.0 + float(siege_morale_stacks) * 0.12
+	siege_damage_multiplier = 1.0 + float(siege_morale_stacks) * 0.10
+	siege_armor_bonus = float(siege_morale_stacks) * 2.0
+
+func set_siege_target_provider(value: Callable) -> void:
+	siege_target_provider = value
+
 func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	bounds = world_bounds
 	battle_mode = selected_mode
 	battle_elapsed = 0.0
 	difficulty_ramp = 1.0
+	set_siege_morale(0)
 	formation_time = 0.0
 	last_player_position = world_bounds.get_center()
 	player_velocity = Vector2.ZERO
@@ -527,6 +556,9 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	navigation_replan_timers.resize(CAPACITY)
 	navigation_waypoint_active.resize(CAPACITY)
 	navigation_preferred_sides.resize(CAPACITY)
+	siege_target_positions.resize(CAPACITY)
+	siege_target_kinds.resize(CAPACITY)
+	siege_target_ids.resize(CAPACITY)
 	free_ids.clear()
 	spatial_cells.clear()
 	active_count = 0
@@ -566,6 +598,9 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 		patrol_offsets[id] = Vector2.ZERO
 		attack_wait_times[id] = 0.0
 		attack_turn_grants[id] = 0
+		siege_target_positions[id] = Vector2.ZERO
+		siege_target_kinds[id] = SiegeTargetKind.HERO
+		siege_target_ids[id] = -1
 		spear_combo_stages[id] = 0
 		spear_combo_timers[id] = 0.0
 		command_aura_strengths[id] = 0.0
@@ -652,6 +687,7 @@ func begin_duel_formation(center: Vector2) -> void:
 	duel_ranged_attack_cooldown = 0.0
 
 func clear_duel_formation() -> void:
+	_restore_duel_wall_shield_health()
 	duel_phase = DuelPhase.NONE
 	for id in range(CAPACITY):
 		duel_roles[id] = DuelRole.NONE
@@ -688,10 +724,7 @@ func _build_duel_shield_walls() -> void:
 			duel_roles[shield_id] = DuelRole.SHIELD_RING
 			duel_slots[shield_id] = i
 			movement_targets[shield_id] = Vector2(left_wall_x, y_pos)
-			# 只有盾墙盾兵设置为无敌，不影响其他单位
-			if types[shield_id] == EnemyType.SHIELD:
-				hit_points[shield_id] = 999999.0  # 使用大数值而不是INF
-				max_hit_points[shield_id] = 999999.0
+			_set_duel_wall_shield_invulnerable(shield_id)
 
 	# 上下横向盾墙补足纵向边界。槽位从左右两列之后连续编号。
 	for i in range(shield_count_per_wall):
@@ -702,9 +735,7 @@ func _build_duel_shield_walls() -> void:
 			duel_roles[shield_id] = DuelRole.SHIELD_RING
 			duel_slots[shield_id] = shield_count_per_wall * 2 + i
 			movement_targets[shield_id] = Vector2(x_pos, top_wall_y)
-			if types[shield_id] == EnemyType.SHIELD:
-				hit_points[shield_id] = 999999.0
-				max_hit_points[shield_id] = 999999.0
+			_set_duel_wall_shield_invulnerable(shield_id)
 
 	for i in range(shield_count_per_wall):
 		var x_pos := _duel_wall_x(i, shield_count_per_wall)
@@ -714,9 +745,7 @@ func _build_duel_shield_walls() -> void:
 			duel_roles[shield_id] = DuelRole.SHIELD_RING
 			duel_slots[shield_id] = shield_count_per_wall * 3 + i
 			movement_targets[shield_id] = Vector2(x_pos, bottom_wall_y)
-			if types[shield_id] == EnemyType.SHIELD:
-				hit_points[shield_id] = 999999.0
-				max_hit_points[shield_id] = 999999.0
+			_set_duel_wall_shield_invulnerable(shield_id)
 
 	# 收集或生成盾兵用于右盾墙
 	for i in range(shield_count_per_wall):
@@ -727,10 +756,25 @@ func _build_duel_shield_walls() -> void:
 			duel_roles[shield_id] = DuelRole.SHIELD_RING
 			duel_slots[shield_id] = i + shield_count_per_wall
 			movement_targets[shield_id] = Vector2(right_wall_x, y_pos)
-			# 只有盾墙盾兵设置为无敌，不影响其他单位
-			if types[shield_id] == EnemyType.SHIELD:
-				hit_points[shield_id] = 999999.0  # 使用大数值而不是INF
-				max_hit_points[shield_id] = 999999.0
+			_set_duel_wall_shield_invulnerable(shield_id)
+
+func _set_duel_wall_shield_invulnerable(id: int) -> void:
+	if id < 0 or id >= CAPACITY or types[id] != EnemyType.SHIELD:
+		return
+	if not duel_wall_shield_original_health.has(id):
+		duel_wall_shield_original_health[id] = {"health": hit_points[id], "maximum": max_hit_points[id]}
+	hit_points[id] = 999999.0
+	max_hit_points[id] = 999999.0
+
+func _restore_duel_wall_shield_health() -> void:
+	for id_variant in duel_wall_shield_original_health:
+		var id := int(id_variant)
+		if id < 0 or id >= CAPACITY or active[id] == 0:
+			continue
+		var original: Dictionary = duel_wall_shield_original_health[id] as Dictionary
+		max_hit_points[id] = float(original.get("maximum", max_hit_points[id]))
+		hit_points[id] = minf(max_hit_points[id], float(original.get("health", hit_points[id])))
+	duel_wall_shield_original_health.clear()
 
 func _find_or_spawn_shield_for_wall(target_pos: Vector2) -> int:
 	# 先尝试找附近的现有盾兵
@@ -910,6 +954,18 @@ func _mark_duel_soldier_for_exit(id: int) -> void:
 	attack_timers[id] = 0.0
 	decision_timers[id] = 0.0
 	movement_targets[id] = retreat_target
+
+func retreat_all_for_siege_final() -> int:
+	# 城下四将列阵时，场上的普通敌兵不再继续围攻英雄；它们沿上下两侧
+	# 有序撤出，保留连续移动表现，同时也不再占用受击、攻击或渲染开销。
+	var retreating_count := 0
+	for id in range(CAPACITY):
+		if active[id] == 0 or duel_exiting[id] == 1:
+			continue
+		_mark_duel_soldier_for_exit(id)
+		enemy_attack_cancelled.emit(id)
+		retreating_count += 1
+	return retreating_count
 
 
 
@@ -2669,14 +2725,14 @@ func spawn(enemy_type: int, at: Vector2, is_boss_guard: bool = false) -> int:
 		enemy_type = EnemyType.SWORD
 	var id: int = free_ids.pop_back()
 	var stats: Dictionary = _stats(enemy_type)
-	var health_multiplier := _threat_health_multiplier() * difficulty_ramp
+	var health_multiplier := _threat_health_multiplier() * difficulty_ramp * siege_health_multiplier
 	positions[id] = at
 	types[id] = enemy_type
 	hit_points[id] = float(stats.hp) * health_multiplier
 	max_hit_points[id] = hit_points[id]
-	armor[id] = (float(stats.armor) + _threat_armor_bonus()) * difficulty_ramp
+	armor[id] = (float(stats.armor) + _threat_armor_bonus() + siege_armor_bonus) * difficulty_ramp
 	move_speeds[id] = stats.speed
-	damage_multipliers[id] = _threat_damage_multiplier() * difficulty_ramp
+	damage_multipliers[id] = _threat_damage_multiplier() * difficulty_ramp * siege_damage_multiplier
 	cooldowns[id] = randf_range(1.2, 1.8)
 	hurt_timers[id] = 0.0
 	attack_states[id] = AttackState.APPROACH
@@ -2792,6 +2848,8 @@ func tick(delta: float, player_position: Vector2) -> void:
 	layer_refresh_remaining = maxf(0.0, layer_refresh_remaining - delta)
 	layer_rotation_remaining = maxf(0.0, layer_rotation_remaining - delta)
 	if layer_refresh_remaining <= 0.0:
+		if battle_mode == "siege" and siege_target_provider.is_valid():
+			_refresh_siege_targets(player_position)
 		_assign_desired_behavior_layers(player_position)
 		layer_refresh_remaining = LAYER_REFRESH_INTERVAL
 		if layer_rotation_remaining <= 0.0:
@@ -2870,12 +2928,12 @@ func tick(delta: float, player_position: Vector2) -> void:
 					attack_states[id] = AttackState.APPROACH
 					current_attack_kinds[id] = ""
 			continue
+		var combat_target := _combat_target_position(id, player_position)
 		decision_timers[id] = maxf(0.0, decision_timers[id] - delta)
 		if decision_timers[id] <= 0.0:
-			_refresh_movement_decision(id, player_position)
+			_refresh_movement_decision(id, combat_target)
 		navigation_replan_timers[id] = maxf(0.0, navigation_replan_timers[id] - delta)
-		var to_player := player_position - positions[id]
-		var distance := to_player.length()
+		var distance := combat_target.distance_to(positions[id])
 		var formation_target := movement_targets[id]
 		var to_formation_target := formation_target - positions[id]
 		var formation_direction := to_formation_target.normalized() if to_formation_target.length_squared() > FORMATION_ARRIVAL_DISTANCE * FORMATION_ARRIVAL_DISTANCE else Vector2.ZERO
@@ -2891,13 +2949,13 @@ func tick(delta: float, player_position: Vector2) -> void:
 			var slow_multiplier := slow_multipliers[id] if slow_timers[id] > 0.0 else 1.0
 			positions[id] += move_intent.limit_length(1.0) * move_speeds[id] * _layer_speed_multiplier(behavior_layers[id]) * _command_speed_multiplier(id) * slow_multiplier * delta
 		_clamp_position(id)
-		if attack_turn_grants[id] == 1 and cooldowns[id] <= 0.0 and _can_trigger_attack(id, player_position, distance):
-			var attack_kind := _choose_attack_kind(id, player_position, distance)
+		if attack_turn_grants[id] == 1 and cooldowns[id] <= 0.0 and _can_trigger_attack(id, combat_target, distance):
+			var attack_kind := _choose_attack_kind(id, combat_target, distance)
 			cooldowns[id] = _attack_cooldown_for_kind(types[id], attack_kind)
 			attack_wait_times[id] = 0.0
 			attack_states[id] = AttackState.WINDUP
 			attack_timers[id] = _attack_windup_for_kind(types[id], attack_kind)
-			var attack_target := _attack_target_for_kind(id, attack_kind, player_position)
+			var attack_target := _attack_target_for_kind(id, attack_kind, combat_target)
 			current_attack_kinds[id] = attack_kind
 			if types[id] == EnemyType.HALBERD:
 				facing_directions[id] = _halberd_horizontal_direction(id, attack_target)
@@ -3083,6 +3141,26 @@ func apply_tianji_damage(id: int, value: float) -> bool:
 		value *= (1.0 - tianji_resistance)  # 应用天机减伤
 	return apply_hit(id, value, Vector2.ZERO, 0.0)
 
+func apply_siege_friendly_damage(id: int, value: float) -> bool:
+	# 攻城略地中的敌我杂兵互砍不复用英雄攻击的受击路径。后者会取消攻击、
+	# 写入硬直和击退，导致守军刚准备反击就不断被我方杂兵打断。
+	if id < 0 or id >= CAPACITY or active[id] == 0 or tianji_lifted[id] == 1:
+		return false
+	var actual_damage := minf(maxf(0.0, value), hit_points[id])
+	if actual_damage <= 0.0:
+		return false
+	hit_points[id] -= actual_damage
+	enemy_damaged.emit(id, positions[id], actual_damage)
+	if hit_points[id] > 0.0:
+		# 保留一帧极轻的视觉受击反馈，但不改动 attack_states、hurt_timers
+		# 或移动速度，确保双方能够持续对砍。
+		hit_feedback_strengths[id] = 0.58
+		hit_feedback_durations[id] = 0.07
+		hit_feedback_timers[id] = hit_feedback_durations[id]
+		return false
+	_begin_death(id, Vector2.RIGHT)
+	return true
+
 func set_death_action_kind(id: int, action_kind: int) -> void:
 	if id >= 0 and id < CAPACITY:
 		death_action_kinds[id] = action_kind
@@ -3147,7 +3225,11 @@ func apply_hit(id: int, value: float, direction: Vector2, knockback: float, igno
 		block_iron_bucket_shield_hit(id)
 		return false
 	value *= duel_damage_multiplier(id) * named_formation_damage_multiplier(id) * iron_bucket_damage_multiplier(id)
-	hit_points[id] -= value
+	var actual_damage := minf(maxf(0.0, value), hit_points[id])
+	if actual_damage <= 0.0:
+		return false
+	hit_points[id] -= actual_damage
+	enemy_damaged.emit(id, positions[id], actual_damage)
 	if hit_points[id] > 0.0:
 		if attack_states[id] == AttackState.WINDUP:
 			_cancel_attack(id, 0.35)
@@ -3205,7 +3287,7 @@ func update_tianji_position(id: int, at: Vector2) -> bool:
 func is_tianji_lifted(id: int) -> bool:
 	return id >= 0 and id < CAPACITY and active[id] == 1 and tianji_lifted[id] == 1
 
-func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, collision_damage: float, collision_knockback: float, collision_targets: int, relay_count: int = 0) -> bool:
+func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, collision_damage: float, collision_knockback: float, collision_targets: int, relay_count: int = 0, landing_damage: float = 0.0, landing_knockback: float = 0.0, hold_until_duration: bool = false) -> bool:
 	if id < 0 or id >= CAPACITY or (active[id] == 0 and death_states[id] == DeathState.NONE):
 		return false
 	if not _can_be_launched(id) or direction.length_squared() <= 0.01:
@@ -3220,6 +3302,9 @@ func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, co
 	launch_collision_knockbacks[id] = maxf(0.0, collision_knockback)
 	launch_collision_charges[id] = clampi(collision_targets, 1, 8)
 	launch_relay_charges[id] = clampi(relay_count, 0, 1)
+	launch_landing_damages[id] = maxf(0.0, landing_damage)
+	launch_landing_knockbacks[id] = maxf(0.0, landing_knockback)
+	launch_hold_until_durations[id] = 1 if hold_until_duration else 0
 	launch_hit_targets[id].clear()
 	facing_directions[id] = normalized_direction
 	attack_states[id] = AttackState.APPROACH
@@ -3241,7 +3326,7 @@ func launch_visual_offset(id: int) -> Vector2:
 	if not is_enemy_launched(id) or launch_durations[id] <= 0.0:
 		return Vector2.ZERO
 	var progress := clampf(1.0 - launch_timers[id] / launch_durations[id], 0.0, 1.0)
-	return Vector2.UP * sin(progress * PI) * 38.0
+	return Vector2.UP * sin(progress * PI) * 78.0
 
 func _tick_enemy_launch(id: int, delta: float) -> void:
 	launch_timers[id] = maxf(0.0, launch_timers[id] - delta)
@@ -3253,7 +3338,7 @@ func _tick_enemy_launch(id: int, delta: float) -> void:
 		launch_velocities[id] = velocity.move_toward(Vector2.ZERO, LAUNCH_DECELERATION * delta)
 		_clamp_position(id)
 		_apply_launch_collision(id, direction, start_position, positions[id])
-	if launch_timers[id] <= 0.0 or launch_velocities[id].length() < LAUNCH_MIN_SPEED:
+	if launch_timers[id] <= 0.0 or (not launch_hold_until_durations[id] and launch_velocities[id].length() < LAUNCH_MIN_SPEED):
 		_stop_enemy_launch(id)
 
 func _apply_launch_collision(source_id: int, direction: Vector2, start_position: Vector2, end_position: Vector2) -> void:
@@ -3290,6 +3375,10 @@ func _apply_launch_collision(source_id: int, direction: Vector2, start_position:
 
 func _stop_enemy_launch(id: int) -> void:
 	var was_active := active[id] == 1
+	var landing_damage := launch_landing_damages[id]
+	var landing_knockback := launch_landing_knockbacks[id]
+	if was_active and landing_damage > 0.0:
+		apply_hit(id, landing_damage, facing_directions[id], landing_knockback)
 	_clear_launch_state(id)
 	if was_active:
 		hurt_timers[id] = maxf(hurt_timers[id], 0.12)
@@ -3306,6 +3395,9 @@ func _clear_launch_state(id: int) -> void:
 	launch_collision_knockbacks[id] = 0.0
 	launch_collision_charges[id] = 0
 	launch_relay_charges[id] = 0
+	launch_landing_damages[id] = 0.0
+	launch_landing_knockbacks[id] = 0.0
+	launch_hold_until_durations[id] = 0
 	launch_hit_targets[id] = {}
 
 func get_armor(id: int) -> float:
@@ -3786,6 +3878,50 @@ func _separation_refresh_interval(layer: int) -> float:
 		EngagementLayer.ATMOSPHERE: return ATMOSPHERE_SEPARATION_REFRESH_INTERVAL
 		_: return 0.0
 
+func siege_target_kind_for_enemy(id: int) -> int:
+	if id < 0 or id >= siege_target_kinds.size() or battle_mode != "siege":
+		return SiegeTargetKind.HERO
+	return int(siege_target_kinds[id])
+
+func siege_target_id_for_enemy(id: int) -> int:
+	if id < 0 or id >= siege_target_ids.size() or battle_mode != "siege":
+		return -1
+	return siege_target_ids[id]
+
+func _refresh_siege_targets(player_position: Vector2) -> void:
+	for id in range(CAPACITY):
+		if active[id] == 0 or attack_states[id] != AttackState.APPROACH:
+			continue
+		var target_value = siege_target_provider.call(id, positions[id], types[id], player_position)
+		if not (target_value is Dictionary):
+			siege_target_positions[id] = player_position
+			siege_target_kinds[id] = SiegeTargetKind.HERO
+			siege_target_ids[id] = -1
+			continue
+		var target: Dictionary = target_value as Dictionary
+		var target_position: Vector2 = target.get("position", player_position) as Vector2
+		siege_target_positions[id] = target_position if target_position.is_finite() else player_position
+		siege_target_kinds[id] = clampi(int(target.get("kind", SiegeTargetKind.HERO)), SiegeTargetKind.HERO, SiegeTargetKind.FRIENDLY)
+		siege_target_ids[id] = int(target.get("id", -1))
+
+func refresh_siege_targets_now(player_position: Vector2) -> void:
+	# 攻城目标死亡、攻城锤出阵或被毁后不能等常规 0.55 秒刷新；下一帧
+	# 立即重分配，避免守军继续围着已经不存在的目标发呆。
+	if battle_mode != "siege" or not siege_target_provider.is_valid():
+		return
+	_refresh_siege_targets(player_position)
+	_assign_desired_behavior_layers(player_position)
+	layer_refresh_remaining = minf(layer_refresh_remaining, 0.08)
+
+func _combat_target_position(id: int, player_position: Vector2) -> Vector2:
+	if battle_mode != "siege" or not siege_target_provider.is_valid() or id < 0 or id >= siege_target_positions.size():
+		return player_position
+	var target := siege_target_positions[id]
+	return target if target.is_finite() and target.length_squared() > 0.01 else player_position
+
+func _is_siege_nonhero_target(id: int) -> bool:
+	return battle_mode == "siege" and siege_target_provider.is_valid() and siege_target_kind_for_enemy(id) != SiegeTargetKind.HERO
+
 func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 	if is_duel_formation_active():
 		for id in range(CAPACITY):
@@ -3824,6 +3960,11 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 			continue
 		active_count += 1
 		desired_behavior_layers[id] = EngagementLayer.ATMOSPHERE
+		# 攻城模式中，已被分配去拦截我方兵卒或攻城锤的守军拥有独立交战
+		# 通道，不和围攻英雄的全局人数上限竞争。
+		if battle_mode == "siege" and _is_siege_nonhero_target(id):
+			desired_behavior_layers[id] = EngagementLayer.ENGAGE
+			continue
 		match types[id]:
 			EnemyType.ARCHER:
 				archer_ids.append(id)
@@ -3853,13 +3994,13 @@ func _assign_desired_behavior_layers(player_position: Vector2) -> void:
 		if active[id] == 0 or tianji_lifted[id] == 1 or desired_behavior_layers[id] == EngagementLayer.ENGAGE:
 			continue
 		var pressure_radius := _desired_range(types[id]) + 205.0
-		if positions[id].distance_to(player_position) <= pressure_radius:
+		if positions[id].distance_to(_combat_target_position(id, player_position)) <= pressure_radius:
 			if types[id] in [EnemyType.SWORD, EnemyType.SHIELD, EnemyType.SPEAR, EnemyType.HALBERD, EnemyType.CAVALRY]:
 				nearby_pressure_ids.append(id)
 			else:
 				desired_behavior_layers[id] = EngagementLayer.PRESSURE
 	nearby_pressure_ids.sort_custom(func(first: int, second: int) -> bool:
-		return positions[first].distance_squared_to(player_position) < positions[second].distance_squared_to(player_position)
+		return positions[first].distance_squared_to(_combat_target_position(first, player_position)) < positions[second].distance_squared_to(_combat_target_position(second, player_position))
 	)
 	# Once the field is populated, rotate a few nearby pressure units into the
 	# frontline. This creates an encirclement without allowing every soldier to
@@ -3905,6 +4046,10 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 		attack_turn_grants[id] = 0
 		if active[id] == 0 or tianji_lifted[id] == 1 or duel_exiting[id] == 1 or behavior_layers[id] != EngagementLayer.ENGAGE or named_formation_assembling or (iron_bucket_assembling and is_iron_bucket_member(id)):
 			continue
+		# 友军与攻城锤的攻击许可由攻城专用通道分配。它们若继续占用
+		# 围攻英雄的席位，便会导致大量敌军聚在目标旁却无法出手。
+		if battle_mode == "siege" and _is_siege_nonhero_target(id):
+			continue
 		var group := _attack_group_for_type(types[id])
 		if attack_states[id] != AttackState.APPROACH:
 			# Recovery releases the attack position immediately so another soldier can rotate in.
@@ -3924,7 +4069,7 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 				else:
 					halberd_occupied += 1
 			continue
-		var within_staging_range := positions[id].distance_to(player_position) <= _attack_staging_range(types[id])
+		var within_staging_range := positions[id].distance_to(_combat_target_position(id, player_position)) <= _attack_staging_range(types[id])
 		if is_duel_formation_member(id):
 			within_staging_range = true
 		elif is_named_formation_cavalry_channel(id):
@@ -3954,10 +4099,25 @@ func _assign_attack_turns(player_position: Vector2) -> void:
 	_assign_attack_group_grants(crossbow_candidates, maxi(0, _crossbow_attack_slots() - crossbow_occupied), player_position)
 	_assign_attack_group_grants(banner_candidates, maxi(0, _banner_attack_slots() - banner_occupied), player_position)
 	_assign_attack_group_grants(cavalry_candidates, maxi(0, _cavalry_attack_slots() - cavalry_occupied), player_position)
+	_assign_siege_objective_attack_turns(player_position)
 	_limit_duel_formation_attack_turns()
 	for id in range(CAPACITY):
 		if active[id] == 1 and previous_grants[id] != attack_turn_grants[id]:
 			decision_timers[id] = 0.0
+
+func _assign_siege_objective_attack_turns(player_position: Vector2) -> void:
+	if battle_mode != "siege" or not siege_target_provider.is_valid():
+		return
+	# 每名“拦兵/拆车”守军都已在 SiegeSystem 中受目标容量约束。这里不再
+	# 套用攻击英雄的全局席位，才能让被围住的友军确实受到可见、可结算的攻击。
+	for id in range(CAPACITY):
+		if active[id] == 0 or tianji_lifted[id] == 1 or duel_exiting[id] == 1 or attack_states[id] != AttackState.APPROACH:
+			continue
+		if behavior_layers[id] != EngagementLayer.ENGAGE or not _is_siege_nonhero_target(id) or cooldowns[id] > 0.0:
+			continue
+		var target := _combat_target_position(id, player_position)
+		if positions[id].distance_to(target) <= _attack_staging_range(types[id]):
+			attack_turn_grants[id] = 1
 
 func _assign_attack_group_grants(candidates: Array[int], available_slots: int, player_position: Vector2) -> void:
 	if available_slots <= 0:
@@ -4018,7 +4178,8 @@ func _limit_duel_formation_attack_turns() -> void:
 					ranged_grants += 1
 
 func _attack_sector(id: int, player_position: Vector2) -> int:
-	var angle := (positions[id] - player_position).angle() + PI
+	var target_position := _combat_target_position(id, player_position)
+	var angle := (positions[id] - target_position).angle() + PI
 	return clampi(floori(angle / (TAU * 0.25)), 0, 3)
 
 func _attack_group_for_type(enemy_type: int) -> String:
@@ -4051,12 +4212,12 @@ func _attack_staging_range(enemy_type: int) -> float:
 
 func _assign_nearest_layer(ids: Array[int], limit: int, player_position: Vector2) -> void:
 	ids.sort_custom(func(first: int, second: int) -> bool:
-		return positions[first].distance_squared_to(player_position) < positions[second].distance_squared_to(player_position)
+		return positions[first].distance_squared_to(_combat_target_position(first, player_position)) < positions[second].distance_squared_to(_combat_target_position(second, player_position))
 	)
 	for index in range(mini(limit, ids.size())):
 		desired_behavior_layers[ids[index]] = EngagementLayer.ENGAGE
 
-func _refresh_movement_decision(id: int, player_position: Vector2) -> void:
+func _refresh_movement_decision(id: int, target_position: Vector2) -> void:
 	var layer := int(desired_behavior_layers[id])
 	behavior_layers[id] = layer
 	decision_cycles[id] += 1
@@ -4065,14 +4226,13 @@ func _refresh_movement_decision(id: int, player_position: Vector2) -> void:
 		facing_directions[id] = (duel_exit_targets[id] - positions[id]).normalized()
 		decision_timers[id] = _reaction_delay(layer, id, decision_cycles[id])
 		return
-	var target := _formation_target(id, player_position, layer)
+	var target := _formation_target(id, target_position, layer)
 	var patrol_radius := 0.0 if duel_roles[id] != DuelRole.NONE or is_named_formation_member(id) or is_iron_bucket_member(id) else _patrol_radius(layer)
 	var patrol_angle := deg_to_rad(float((id * 47 + decision_cycles[id] * 29) % 360))
 	patrol_offsets[id] = Vector2.from_angle(patrol_angle) * patrol_radius
 	movement_targets[id] = _clamp_point(target + patrol_offsets[id])
-	# Keep the outer ring visually engaged with the hero while it orbits toward
-	# its formation target, so background units do not appear to wander aimlessly.
-	var facing_target := player_position if layer != EngagementLayer.ENGAGE else player_position
+	# 每名敌人面向自己当前锁定的英雄、友军或攻城锤；非攻城模式传入的仍是英雄。
+	var facing_target := target_position
 	if duel_roles[id] != DuelRole.NONE:
 		facing_target = positions[id] + _duel_member_facing_direction(id)
 	elif is_named_formation_shield_wall(id):
@@ -4144,6 +4304,10 @@ func _formation_target(id: int, player_position: Vector2, layer: int) -> Vector2
 		return named_formation_targets[id]
 	if is_iron_bucket_member(id):
 		return iron_bucket_targets[id]
+	# 攻城锤不是静态的“点目标”。守军锁定它后应守在前方和两侧的拦截位，
+	# 而不是沿着普通包围环绕过工程车再回头，造成视觉上的“直接路过”。
+	if battle_mode == "siege" and _is_siege_nonhero_target(id) and siege_target_kind_for_enemy(id) == SiegeTargetKind.RAM:
+		return _siege_ram_intercept_target(id, player_position)
 	var enemy_type := types[id]
 	if enemy_type == EnemyType.SPEAR and layer == EngagementLayer.ENGAGE:
 		var side := -1.0 if positions[id].x < player_position.x else 1.0
@@ -4181,6 +4345,18 @@ func _formation_target(id: int, player_position: Vector2, layer: int) -> Vector2
 		radius += 178.0 + float(ring_index) * 20.0
 	return player_position + Vector2.from_angle(angle) * radius
 
+func _siege_ram_intercept_target(id: int, ram_target: Vector2) -> Vector2:
+	var enemy_type := types[id]
+	var ranged := enemy_type in [EnemyType.ARCHER, EnemyType.CROSSBOW]
+	var lane_index := posmod(id * 13, 5) - 2
+	var lane_spacing := 46.0 if ranged else 32.0
+	var attack_distance := _attack_range(enemy_type)
+	var hold_distance := clampf(attack_distance * (0.52 if ranged else 0.68), 42.0 if not ranged else 118.0, 138.0 if ranged else 112.0)
+	# 守军默认从城门侧（右侧）拦车；若已被击退到车后，则在左侧转身压回，
+	# 避免为了回到右侧再次穿过工程车。
+	var guard_side := 1.0 if positions[id].x >= ram_target.x - 56.0 else -1.0
+	return ram_target + Vector2(guard_side * hold_distance, float(lane_index) * lane_spacing)
+
 func _layer_speed_multiplier(layer: int) -> float:
 	match layer:
 		EngagementLayer.PRESSURE: return 0.78
@@ -4212,7 +4388,9 @@ func _predicted_player_position(lead_time: float) -> Vector2:
 	return _clamp_point(last_player_position + player_velocity.limit_length(280.0) * lead_time)
 
 func _attack_trigger_range(id: int, player_position: Vector2) -> float:
-	if types[id] == EnemyType.HALBERD and _player_is_rushing_toward(id, player_position):
+	# 戟兵的架枪是专门反制英雄冲刺的招式。攻城战锁定友军或攻城锤时，
+	# 不能再根据英雄的移动状态放大攻击距离。
+	if types[id] == EnemyType.HALBERD and not _is_siege_nonhero_target(id) and _player_is_rushing_toward(id, player_position):
 		return HALBERD_BRACE_MAX_DISTANCE
 	return _attack_range(types[id])
 
@@ -4258,8 +4436,14 @@ func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> 
 		return ATTACK_KIND_NAMED_SHIELD_PUSH
 	if is_iron_bucket_shield(id):
 		return ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH
+	# 友军与攻城锤不是可预判移动的玩家目标。它们的受击采用攻城玩法的
+	# 简化结算，因而只使用单次、定点的常规攻击，避免齐射与架枪逻辑把
+	# 英雄的速度、预判位置错误地带入该目标。
+	var nonhero_siege_target := _is_siege_nonhero_target(id)
 	match types[id]:
 		EnemyType.ARCHER:
+			if nonhero_siege_target:
+				return ATTACK_KIND_ARCHER_DIRECT
 			if _can_start_archer_volley():
 				archer_volley_cooldown = ARCHER_VOLLEY_ENDLESS_COOLDOWN if battle_mode == "endless" else ARCHER_VOLLEY_COOLDOWN
 				return ATTACK_KIND_ARCHER_VOLLEY
@@ -4267,7 +4451,7 @@ func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> 
 				return ATTACK_KIND_ARCHER_LEAD
 			return ATTACK_KIND_ARCHER_DIRECT
 		EnemyType.HALBERD:
-			if _player_is_rushing_toward(id, player_position):
+			if not nonhero_siege_target and _player_is_rushing_toward(id, player_position):
 				return ATTACK_KIND_HALBERD_BRACE
 			return ATTACK_KIND_HALBERD_SWEEP
 		EnemyType.SPEAR:
@@ -4282,6 +4466,8 @@ func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> 
 			spear_combo_timers[id] = 1.25
 			return ATTACK_KIND_SPEAR_THRUST_1
 		EnemyType.CROSSBOW:
+			if nonhero_siege_target:
+				return ATTACK_KIND_CROSSBOW_DIRECT
 			if _can_start_crossbow_volley():
 				crossbow_volley_cooldown = CROSSBOW_VOLLEY_ENDLESS_COOLDOWN if battle_mode == "endless" else CROSSBOW_VOLLEY_COOLDOWN
 				return ATTACK_KIND_CROSSBOW_VOLLEY
@@ -4297,6 +4483,10 @@ func _choose_attack_kind(id: int, player_position: Vector2, distance: float) -> 
 	return ATTACK_KIND_DEFAULT
 
 func _attack_target_for_kind(id: int, attack_kind: String, player_position: Vector2) -> Vector2:
+	# 攻城目标均使用锁定瞬间的位置。尤其弓弩不可调用英雄的速度预判，
+	# 否则攻击友军/攻城锤时会无端射向英雄前方。
+	if _is_siege_nonhero_target(id):
+		return player_position
 	match attack_kind:
 		ATTACK_KIND_DUEL_SHIELD_PUSH, ATTACK_KIND_NAMED_SHIELD_PUSH, ATTACK_KIND_IRON_BUCKET_SHIELD_PUSH:
 			return player_position
@@ -4521,6 +4711,14 @@ func _engage_cavalry_limit() -> int:
 	return 3 if battle_elapsed < 240.0 else 4
 
 func _frontline_attack_slots() -> int:
+	# 攻城战需要让守军真正拦截兵线。普通模式维持原有席位；攻城模式
+	# 随守城阶段逐步增加近战出手机会，避免大量敌兵围住友军却只有少数出手。
+	if battle_mode == "siege":
+		if battle_elapsed < 120.0:
+			return 6
+		if battle_elapsed < 390.0:
+			return 7
+		return 8
 	if battle_mode == "endless":
 		if battle_elapsed < 180.0:
 			return 6
@@ -4735,19 +4933,19 @@ func _request_hits_point(request: AttackRequest, point: Vector2) -> bool:
 func _stats(enemy_type: int) -> Dictionary:
 	match enemy_type:
 		EnemyType.HALBERD:
-			return {"hp": 42.0, "armor": 4.0, "speed": 85.0}
+			return {"hp": 50.0, "armor": 9.0, "speed": 85.0}
 		EnemyType.ARCHER:
 			return {"hp": 22.0, "armor": 0.0, "speed": 72.0}
 		EnemyType.SHIELD:
 			return {"hp": 55.0, "armor": 12.0, "speed": 75.0}
 		EnemyType.SPEAR:
-			return {"hp": 36.0, "armor": 3.0, "speed": 84.0}
+			return {"hp": 46.0, "armor": 6.0, "speed": 84.0}
 		EnemyType.CROSSBOW:
 			return {"hp": 26.0, "armor": 1.0, "speed": 68.0}
 		EnemyType.BANNER:
-			return {"hp": 34.0, "armor": 4.0, "speed": 78.0}
+			return {"hp": 38.0, "armor": 5.0, "speed": 78.0}
 		EnemyType.CAVALRY:
-			return {"hp": 46.0, "armor": 4.0, "speed": 166.0}
+			return {"hp": 54.0, "armor": 9.0, "speed": 166.0}
 		EnemyType.ELITE:
 			return {"hp": 260.0, "armor": 18.0, "speed": 78.0}
 		EnemyType.GUARD:
@@ -4766,8 +4964,8 @@ func _threat_armor_bonus() -> float:
 
 func _desired_range(enemy_type: int) -> float:
 	match enemy_type:
-		EnemyType.ARCHER: return 230.0
-		EnemyType.CROSSBOW: return 276.0
+		EnemyType.ARCHER: return 205.0
+		EnemyType.CROSSBOW: return 245.0
 		EnemyType.BANNER: return 232.0
 		EnemyType.CAVALRY: return 170.0
 		EnemyType.HALBERD: return 68.0
@@ -4778,8 +4976,8 @@ func _desired_range(enemy_type: int) -> float:
 
 func _attack_range(enemy_type: int) -> float:
 	match enemy_type:
-		EnemyType.ARCHER: return 280.0
-		EnemyType.CROSSBOW: return 340.0
+		EnemyType.ARCHER: return 240.0
+		EnemyType.CROSSBOW: return 285.0
 		EnemyType.BANNER: return 252.0
 		EnemyType.CAVALRY: return 252.0
 		EnemyType.HALBERD: return 68.0

@@ -39,6 +39,15 @@ const FOURTH_STRIKE_DASH_SPEED := 420.0
 const FOURTH_STRIKE_DASH_FRONT_REACH := 14.0
 const FOURTH_STRIKE_WAVE_RANGE := 220.0
 const WUSHENG_DRAG_PULSE_RADIUS := 132.0
+const DRAG_WAVE_KNOCKBACK := 280.0
+const DRAG_WAVE_FORCED_DISPLACEMENT := 34.0
+const DRAG_WAVE_SLOW_MULTIPLIER := 0.75
+const DRAG_WAVE_SLOW_DURATION := 0.85
+const WUSHENG_DRAG_PULSE_KNOCKBACK := 260.0
+const WUSHENG_DRAG_PULSE_FORCED_DISPLACEMENT := 32.0
+const DRAG_CHASE_DELAY := 0.12
+const DRAG_CHASE_DISTANCE := 68.0
+const DRAG_CHASE_SPEED := 360.0
 const PROJECTILE_GUARD_SMALL_HALF_ANGLE := deg_to_rad(55.0)
 const PROJECTILE_GUARD_LARGE_HALF_ANGLE := deg_to_rad(80.0)
 const PROJECTILE_GUARD_SMALL_BLOCK_LIMIT := 3
@@ -121,6 +130,7 @@ var ultimate_damage_bonus := 0.0
 var ultimate_stance_bonus := 0.0
 var ultimate_energy_gain_multiplier := 1.0
 var wusheng_duration_bonus := 0.0
+var wusheng_armor_ignore_bonus := 0.0
 var wusheng_pulse_range_bonus := 0.0
 var wusheng_pulse_knockback_bonus := 0.0
 var named_mark_duration_bonus := 0.0
@@ -129,6 +139,9 @@ var named_mark_cap := 5
 var projectile_guard_level := 0
 var projectile_guard_blocks_remaining := 0
 var blade_waves: Array[Dictionary] = []
+var drag_chase_delay_remaining := 0.0
+var drag_chase_distance_remaining := 0.0
+var drag_chase_direction := Vector2.RIGHT
 
 func _ready() -> void:
 	health_component = %HealthComponent
@@ -153,6 +166,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	position = Vector2(bounds.get_center().x, bounds.end.y - 70.0)
 	base_attack = float(base_stats.get("attack", 20.0))
 	base_defense = float(base_stats.get("defense", 16.0))
+	armor_ignore_ratio = float(base_stats.get("armor_ignore_ratio", 0.0))
 	attack_bonus = 0.0
 	defense_bonus = 0.0
 	defense_ratio_bonus = 0.0
@@ -239,6 +253,7 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	ultimate_stance_bonus = 0.0
 	ultimate_energy_gain_multiplier = 1.0
 	wusheng_duration_bonus = 0.0
+	wusheng_armor_ignore_bonus = 0.0
 	wusheng_pulse_range_bonus = 0.0
 	wusheng_pulse_knockback_bonus = 0.0
 	named_mark_duration_bonus = 0.0
@@ -247,12 +262,17 @@ func reset_for_run(world_bounds: Rect2) -> void:
 	projectile_guard_level = 0
 	projectile_guard_blocks_remaining = 0
 	blade_waves.clear()
+	drag_chase_delay_remaining = 0.0
+	drag_chase_distance_remaining = 0.0
+	drag_chase_direction = Vector2.RIGHT
 	health_component.reset(float(base_stats.get("health", 145.0)))
 
 func tick(delta: float, move_direction: Vector2) -> void:
 	if is_defeated():
 		return
 	tick_movement_slow(delta)
+	tick_revive_surge(delta)
+	tick_battle_souls(delta)
 	current_move_direction = move_direction
 	_update_buffered_basic_direction()
 	tick_active_charge_recovery(delta, _active_cooldown_for_current_state())
@@ -269,15 +289,17 @@ func tick(delta: float, move_direction: Vector2) -> void:
 		_update_facing_from_movement(move_direction)
 		_move(move_direction, speed * _drag_move_multiplier() * movement_speed_multiplier() * delta)
 		return
+	var basic_action_speed := attack_speed_multiplier() if current_action == "basic" else 1.0
 	if not current_action.is_empty():
-		action_elapsed += delta
+		action_elapsed += delta * basic_action_speed
 	var was_locked := attack_lock_remaining > 0.0
-	attack_lock_remaining = maxf(0.0, attack_lock_remaining - delta)
+	attack_lock_remaining = maxf(0.0, attack_lock_remaining - delta * basic_action_speed)
 	var was_waiting_for_hit := hit_delay_remaining > 0.0
-	hit_delay_remaining = maxf(0.0, hit_delay_remaining - delta)
+	hit_delay_remaining = maxf(0.0, hit_delay_remaining - delta * basic_action_speed)
 	_tick_active_slide(delta)
 	active_invulnerability_remaining = maxf(0.0, active_invulnerability_remaining - delta)
 	_tick_fourth_dash(delta)
+	_tick_drag_chase(delta)
 	# Keep the active strike's stage through its final frame so a buffered press
 	# advances from that stage. An unbuffered strike is reset in _finish_action.
 	if combo_window <= 0.0 and current_action != "basic":
@@ -504,6 +526,8 @@ func apply_upgrade(upgrade_id: String) -> void:
 			add_ultimate_energy(12.0)
 		"guan_saintly_duration":
 			wusheng_duration_bonus += 2.0
+		"guan_saintly_armor_pierce":
+			wusheng_armor_ignore_bonus = minf(0.30, wusheng_armor_ignore_bonus + 0.10)
 		"guan_saintly_warfront":
 			wusheng_pulse_range_bonus += 24.0
 			wusheng_pulse_knockback_bonus += 120.0
@@ -524,6 +548,7 @@ func apply_level_up_benefits() -> void:
 
 func apply_account_progress(profile: Dictionary) -> void:
 	_apply_military_strategy(profile)
+	_apply_battle_soul_armory(profile)
 	active_cooldown_duration = maxf(4.8, active_cooldown_duration - military_active_cooldown_reduction)
 	reset_active_charges()
 	_basic_pierce_bonus_from_military()
@@ -553,6 +578,9 @@ func force_idle_state() -> void:
 	active_slide_remaining = 0.0
 	active_invulnerability_remaining = 0.0
 	active_slide_attack = null
+	drag_chase_delay_remaining = 0.0
+	drag_chase_distance_remaining = 0.0
+	drag_chase_direction = Vector2.RIGHT
 	fourth_dash_remaining = 0.0
 	fourth_dash_attack = null
 	ultimate_state = UltimateState.INACTIVE
@@ -562,6 +590,7 @@ func force_idle_state() -> void:
 func current_stats() -> Dictionary:
 	return {
 		"attack": total_attack(),
+		"armor_ignore_ratio": armor_ignore_ratio,
 		"defense": total_defense(),
 		"health": health_component.current,
 		"max_health": health_component.maximum,
@@ -593,6 +622,9 @@ func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
 	active_invulnerability_remaining = 0.0
 	active_slide_direction = Vector2.RIGHT
 	active_slide_attack = null
+	drag_chase_delay_remaining = 0.0
+	drag_chase_distance_remaining = 0.0
+	drag_chase_direction = Vector2.RIGHT
 	fourth_dash_remaining = 0.0
 	fourth_dash_direction = Vector2.RIGHT
 	fourth_dash_attack = null
@@ -636,6 +668,10 @@ func nearby_enemy_radius() -> float:
 
 func is_wusheng_active() -> bool:
 	return ultimate_state == UltimateState.EMPOWERED and ultimate_time > 0.0
+
+func armor_ignore_ratio_for_request(_request: AttackRequest) -> float:
+	var wusheng_bonus := wusheng_armor_ignore_bonus if is_wusheng_active() else 0.0
+	return clampf(armor_ignore_ratio + wusheng_bonus, 0.0, 1.0)
 
 func try_block_frontal_projectile(origin: Vector2) -> bool:
 	if projectile_guard_level <= 0 or current_action not in ["basic", "active", "drag_release"] or attack_lock_remaining <= 0.0:
@@ -695,7 +731,10 @@ func receive_damage(amount: float, _source: String, _attack_origin: Vector2 = Ve
 	if is_defeated() or active_invulnerability_remaining > 0.0:
 		return 0.0
 	var reduced_amount := CombatMath.mitigate_damage(amount, total_defense()) * incoming_damage_multiplier(_attack_origin)
+	var pre_surge_amount := reduced_amount
 	reduced_amount *= 1.0 - battlefield_damage_reduction
+	reduced_amount = apply_battle_soul_damage_reduction(reduced_amount)
+	reduced_amount = apply_revive_surge_damage_reduction(reduced_amount, pre_surge_amount)
 	var applied_damage := health_component.take_damage(reduced_amount)
 	if applied_damage > 0.0:
 		damaged.emit(applied_damage)
@@ -730,6 +769,10 @@ func record_named_target_combat_hit(_target_kind: int, target_key: String, _requ
 
 func hud_status_effects() -> Array[Dictionary]:
 	var effects: Array[Dictionary] = []
+	effects.append_array(battle_soul_hud_effects())
+	var revive_effect := revive_surge_hud_effect()
+	if not revive_effect.is_empty():
+		effects.append(revive_effect)
 	var slow_effect := movement_slow_hud_effect()
 	if not slow_effect.is_empty():
 		effects.append(slow_effect)
@@ -857,6 +900,11 @@ func _begin_drag_release() -> void:
 	swing.forced_displacement_duration = 0.20
 	swing.fan_knockback = true
 	attack_requested.emit(swing)
+	# The release remains the big, enemy-scattering hit. If it actually lands,
+	# close part of that distance during recovery so the next basic attack can
+	# keep the pressure instead of forcing the player to chase.
+	if swing.total_hits > 0:
+		_queue_drag_chase()
 	_emit_back_guard(165.0, 30.0, 0.17)
 	if is_wusheng_active():
 		_emit_wusheng_drag_assault()
@@ -903,13 +951,17 @@ func _back_guard_distance_for_label(label: String) -> float:
 
 func _emit_drag_waves() -> void:
 	var direction := basic_attack_direction
-	var wave := AttackRequest.line(_knife_wave_origin(), direction, 300.0 + drag_wave_range_bonus, BLADE_WAVE_HIT_WIDTH, 2.16 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce() + 5, "拖刀刀浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), direction, 300.0 + drag_wave_range_bonus, BLADE_WAVE_HIT_WIDTH, 2.35 + basic_damage_bonus + _wusheng_damage_bonus(), _current_pierce() + 5, "拖刀刀浪")
 	wave.action_kind = AttackRequest.ActionKind.BASIC
 	wave.clash_kind = Telegraph.ClashKind.BASIC
 	wave.stance_damage = _stance_damage(38.0)
-	wave.knockback = 520.0 + basic_knockback_bonus + _wusheng_knockback_bonus()
-	wave.forced_displacement = 72.0 + basic_displacement_bonus
+	# The follow-up wave sustains the opening rather than sending the same
+	# targets away a second time. Its slow keeps the enemy line catchable.
+	wave.knockback = DRAG_WAVE_KNOCKBACK + basic_knockback_bonus * 0.35
+	wave.forced_displacement = DRAG_WAVE_FORCED_DISPLACEMENT + basic_displacement_bonus * 0.35
 	wave.forced_displacement_duration = 0.14
+	wave.slow_multiplier = DRAG_WAVE_SLOW_MULTIPLIER
+	wave.slow_duration = DRAG_WAVE_SLOW_DURATION
 	_launch_blade_wave(wave, "guan_drag_wave", 300.0 + drag_wave_range_bonus)
 
 func _emit_active_waves() -> void:
@@ -931,11 +983,18 @@ func _emit_wusheng_waves(infinite_range: bool = false) -> void:
 func _emit_wusheng_waves_with_mode(infinite_range: bool, empowered_drag: bool) -> void:
 	var direction := basic_attack_direction
 	var travel_distance := 388.0 + active_range_bonus * 0.55
-	var wave := AttackRequest.line(_knife_wave_origin(), direction, travel_distance, BLADE_WAVE_HIT_WIDTH, 1.18 + basic_damage_bonus * 0.45 + ultimate_damage_bonus, _current_pierce() + 5, "武圣刀浪")
+	var wave := AttackRequest.line(_knife_wave_origin(), direction, travel_distance, BLADE_WAVE_HIT_WIDTH, 2.42 + basic_damage_bonus * 0.45 + ultimate_damage_bonus, _current_pierce() + 5, "武圣刀浪")
 	wave.action_kind = AttackRequest.ActionKind.ULTIMATE
 	wave.stance_damage = _stance_damage(34.0, true)
-	wave.knockback = 610.0 + basic_knockback_bonus
-	wave.forced_displacement = 80.0 + basic_displacement_bonus
+	if empowered_drag:
+		# 武圣拖刀同样只保留一次重推（本体）；无限刀浪负责追压和缓敌。
+		wave.knockback = DRAG_WAVE_KNOCKBACK + basic_knockback_bonus * 0.35
+		wave.forced_displacement = DRAG_WAVE_FORCED_DISPLACEMENT + basic_displacement_bonus * 0.35
+		wave.slow_multiplier = DRAG_WAVE_SLOW_MULTIPLIER
+		wave.slow_duration = DRAG_WAVE_SLOW_DURATION
+	else:
+		wave.knockback = 610.0 + basic_knockback_bonus
+		wave.forced_displacement = 80.0 + basic_displacement_bonus
 	wave.forced_displacement_duration = 0.15
 	wave.grants_boss_ultimate_energy = false
 	_launch_blade_wave(wave, "guan_wusheng_wave", travel_distance, infinite_range, empowered_drag)
@@ -1105,6 +1164,31 @@ func _tick_fourth_dash(delta: float) -> void:
 		fourth_dash_attack = null
 		_emit_fourth_strike_wave()
 
+func _queue_drag_chase() -> void:
+	drag_chase_delay_remaining = DRAG_CHASE_DELAY
+	drag_chase_distance_remaining = DRAG_CHASE_DISTANCE
+	drag_chase_direction = basic_attack_direction.normalized()
+	if drag_chase_direction.length_squared() <= 0.01:
+		drag_chase_direction = last_attack_direction.normalized()
+	if drag_chase_direction.length_squared() <= 0.01:
+		drag_chase_direction = Vector2.RIGHT
+
+func _tick_drag_chase(delta: float) -> void:
+	if drag_chase_distance_remaining <= 0.0:
+		return
+	# This is recovery movement, not a dash. It cannot continue through a
+	# cancelled action or turn into an extra movement tool.
+	if current_action != "drag_release" or is_guard_active():
+		drag_chase_delay_remaining = 0.0
+		drag_chase_distance_remaining = 0.0
+		return
+	if drag_chase_delay_remaining > 0.0:
+		drag_chase_delay_remaining = maxf(0.0, drag_chase_delay_remaining - delta)
+		return
+	var distance := minf(drag_chase_distance_remaining, DRAG_CHASE_SPEED * delta)
+	_move(drag_chase_direction, distance)
+	drag_chase_distance_remaining = maxf(0.0, drag_chase_distance_remaining - distance)
+
 func _projectile_guard_block_limit() -> int:
 	if projectile_guard_level >= 2:
 		return PROJECTILE_GUARD_LARGE_BLOCK_LIMIT
@@ -1162,9 +1246,13 @@ func _emit_wusheng_drag_pulse() -> void:
 	var pulse := AttackRequest.circle(position, WUSHENG_DRAG_PULSE_RADIUS, 0.85 + ultimate_damage_bonus * 0.35, 400, "武圣拖刀震阵")
 	pulse.action_kind = AttackRequest.ActionKind.ULTIMATE
 	pulse.stance_damage = _stance_damage(26.0, true)
-	pulse.knockback = 520.0 + basic_knockback_bonus * 0.45
-	pulse.forced_displacement = 72.0 + basic_displacement_bonus * 0.55
+	# Do not let the 武圣拖刀附加震阵 turn the follow-through into a third
+	# long knockback. It reinforces pressure with a short push and slow.
+	pulse.knockback = WUSHENG_DRAG_PULSE_KNOCKBACK + basic_knockback_bonus * 0.28
+	pulse.forced_displacement = WUSHENG_DRAG_PULSE_FORCED_DISPLACEMENT + basic_displacement_bonus * 0.30
 	pulse.forced_displacement_duration = 0.13
+	pulse.slow_multiplier = DRAG_WAVE_SLOW_MULTIPLIER
+	pulse.slow_duration = DRAG_WAVE_SLOW_DURATION
 	pulse.grants_boss_ultimate_energy = false
 	pulse.clears_projectiles = true
 	attack_requested.emit(pulse)

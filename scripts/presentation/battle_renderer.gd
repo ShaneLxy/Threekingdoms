@@ -303,6 +303,58 @@ const GUAN_YU_WUSHUANG_GROUND_EFFECT_TEXTURES: Array[Texture2D] = [
 ]
 const ZHANG_FEI_SPRITE_SCALE := 1.0
 const ZHANG_FEI_WORLD_FOOT_OFFSET := Vector2(0, 15)
+const MA_CHAO_SPRITE_SCALE := 1.0
+const MA_CHAO_WORLD_FOOT_OFFSET := Vector2(0, 15)
+const MA_CHAO_SOURCE_FOOT_ANCHOR := Vector2(64, 84)
+const MA_CHAO_IDLE_FRAME_DURATION := 0.16
+const MA_CHAO_WALK_FRAME_DURATION := 0.11
+const MA_CHAO_DEATH_FRAME_DURATIONS: Array[float] = [0.12, 0.14, 0.20, 0.30, 0.54]
+const MA_CHAO_ATTACK_03_FOOT_ANCHORS := [
+	Vector2(64, 84), Vector2(64, 84), Vector2(64, 116), Vector2(64, 102),
+	Vector2(64, 94), Vector2(64, 81), Vector2(64, 82),
+]
+const MA_CHAO_IDLE_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/stay1/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/stay1/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/stay1/3.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/stay1/4.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/stay1/5.png"),
+]
+const MA_CHAO_WALK_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/move1/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/move1/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/move1/3.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/move1/4.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/move1/5.png"),
+]
+const MA_CHAO_ATTACK_01_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/attack_1/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_1/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_1/4.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_1/5.png"),
+]
+const MA_CHAO_ATTACK_02_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/attack_2/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_2/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_2/3.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_2/4.png"),
+]
+const MA_CHAO_ATTACK_03_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/3.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/4.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/5.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/6.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/attack_3/7.png"),
+]
+const MA_CHAO_DEATH_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/characters/ma_chao/sprites/dead1/1.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/dead1/2.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/dead1/3.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/dead1/4.png"),
+	preload("res://assets/art/characters/ma_chao/sprites/dead1/5.png"),
+]
 const ZHANG_FEI_IDLE_FRAME_DURATION := 0.14
 const ZHANG_FEI_WALK_ENTRY_DURATION := 0.09
 const ZHANG_FEI_WALK_LOOP_FRAME_DURATION := 0.10
@@ -1178,6 +1230,9 @@ var bounds := Rect2(0, 0, 2560, 1440)
 var enemies: EnemySimulation
 var player: HeroActor
 var boss: BossActor
+var battle_soul_system: BattleSoulSystem
+var siege_system: SiegeSystem
+var siege_companion: HeroActor
 var battle_camera: Camera2D
 var elites: Array[EliteActor] = []
 var telegraphs: Array[Telegraph] = []
@@ -1204,6 +1259,10 @@ var archer_impact_marks: Array[Dictionary] = []
 var crossbow_bolts: Array[Dictionary] = []
 var crossbow_impact_marks: Array[Dictionary] = []
 var banner_command_marks: Array[Dictionary] = []
+var battle_soul_proc_marks: Array[Dictionary] = []
+var battle_soul_pickup_marks: Array[Dictionary] = []
+var damage_numbers_enabled := true
+var damage_number_marks: Array[Dictionary] = []
 var firewheel_rings: Array[Dictionary] = []
 var guan_blade_waves: Array[Dictionary] = []
 var guan_knife_wave_frames: Dictionary = {}
@@ -1271,6 +1330,8 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	enemies = enemy_simulation
 	player = player_actor
 	boss = boss_actor
+	siege_system = null
+	siege_companion = null
 	elites = elite_actors
 	telegraphs = active_telegraphs
 	loot = loot_system
@@ -1337,6 +1398,9 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 	crossbow_bolts.clear()
 	crossbow_impact_marks.clear()
 	banner_command_marks.clear()
+	battle_soul_proc_marks.clear()
+	battle_soul_pickup_marks.clear()
+	damage_number_marks.clear()
 	firewheel_rings.clear()
 	guan_blade_waves.clear()
 	elite_corpses.clear()
@@ -1359,6 +1423,41 @@ func configure(world_bounds: Rect2, enemy_simulation: EnemySimulation, player_ac
 
 func set_elites(elite_actors: Array[EliteActor]) -> void:
 	elites = elite_actors
+	queue_redraw()
+
+func set_battle_soul_system(system: BattleSoulSystem) -> void:
+	battle_soul_system = system
+	battle_soul_proc_marks.clear()
+	battle_soul_pickup_marks.clear()
+	queue_redraw()
+
+func set_siege_system(system: SiegeSystem) -> void:
+	# Siege simulation owns the rules; the renderer only keeps the reference so
+	# future siege visuals can read the same state without duplicating gameplay.
+	siege_system = system
+	queue_redraw()
+
+func set_siege_companion(companion: HeroActor) -> void:
+	siege_companion = companion
+	queue_redraw()
+
+func set_damage_numbers_enabled(value: bool) -> void:
+	damage_numbers_enabled = value
+	if not damage_numbers_enabled:
+		damage_number_marks.clear()
+	queue_redraw()
+
+func add_damage_number(source_id: String, at: Vector2, amount: float, style: String = "normal") -> void:
+	if not damage_numbers_enabled:
+		return
+	damage_number_marks.append({
+		"source_id": source_id,
+		"position": at,
+		"amount": amount,
+		"style": style,
+		"elapsed": 0.0,
+		"remaining": 0.75,
+	})
 	queue_redraw()
 
 func set_battle_camera(camera: Camera2D) -> void:
@@ -1415,6 +1514,8 @@ func begin_player_death_cinematic(hero_id: String) -> void:
 	crossbow_bolts.clear()
 	crossbow_impact_marks.clear()
 	banner_command_marks.clear()
+	battle_soul_proc_marks.clear()
+	battle_soul_pickup_marks.clear()
 	firewheel_rings.clear()
 	guan_blade_waves.clear()
 	for id in range(enemy_is_moving.size()):
@@ -1442,6 +1543,14 @@ func end_player_death_cinematic() -> void:
 func add_flash(request: AttackRequest) -> void:
 	if request.label == "穿阵挑刺":
 		return
+	# The third Ma Chao strike uses the same thrust-style flash as the path attack.
+	# When a held basic button immediately wraps back to stage one, that old flash
+	# can otherwise remain on screen and make the new fan sweep look like a thrust.
+	if request.label == "银枪横扫":
+		for index in range(flashes.size() - 1, -1, -1):
+			var previous_request: AttackRequest = flashes[index].get("request", null) as AttackRequest
+			if previous_request != null and previous_request.label.begins_with("踏阵突刺"):
+				flashes.remove_at(index)
 	# Keep a small visual seed on creation so the wind shape does not visibly reshuffle every frame.
 	var duration := _flash_duration_for_request(request)
 	flashes.append({"request": _copy_request_for_visual(request), "remaining": duration, "duration": duration, "variant": randi_range(0, 5)})
@@ -1458,12 +1567,35 @@ func _flash_duration_for_request(request: AttackRequest) -> float:
 		return WUSHUANG_IMPACT_FRAME_DURATION * float(WUSHUANG_IMPACT_TEXTURES.size())
 	if request.label in ["拖刀刀浪", "青龙断浪", "武圣刀浪"]:
 		return 0.34
+	if request.label == "银枪横扫":
+		return 0.22
 	if request.label.begins_with("威震华夏"):
 		return 0.24
 	return FLASH_DURATION
 
 func add_pickup(at: Vector2) -> void:
 	pickup_marks.append({"position": at, "remaining": 0.45})
+
+func add_battle_soul_proc(soul_id: String, at: Vector2) -> void:
+	const duration := 0.36
+	battle_soul_proc_marks.append({
+		"id": soul_id,
+		"position": at,
+		"remaining": duration,
+		"duration": duration,
+		"seed": randi_range(0, 1000),
+	})
+	queue_redraw()
+
+func add_battle_soul_pickup(soul_id: String, at: Vector2) -> void:
+	const duration := 0.52
+	battle_soul_pickup_marks.append({
+		"id": soul_id,
+		"position": at,
+		"remaining": duration,
+		"duration": duration,
+	})
+	queue_redraw()
 
 func add_impact(at: Vector2, attack_label: String, hit_count: int) -> void:
 	var heavy_hit: bool = attack_label in ["穿阵挑刺", "破军", "破军收势", "七进七出", "七进七出·收势", "哪吒火轮", "风火贯阵·旋枪", "拖刀断阵", "青龙断浪", "威震华夏·横江", "威震华夏·断岳", "威震华夏·斩将", "丈八跃砸", "据水断桥·跃砸", "万夫莫开·怒喝震阵"]
@@ -1938,6 +2070,14 @@ func tick_visuals(delta: float) -> void:
 		pickup_marks[index].remaining -= delta
 		if pickup_marks[index].remaining <= 0.0:
 			pickup_marks.remove_at(index)
+	for index in range(battle_soul_proc_marks.size() - 1, -1, -1):
+		battle_soul_proc_marks[index].remaining -= delta
+		if battle_soul_proc_marks[index].remaining <= 0.0:
+			battle_soul_proc_marks.remove_at(index)
+	for index in range(battle_soul_pickup_marks.size() - 1, -1, -1):
+		battle_soul_pickup_marks[index].remaining -= delta
+		if battle_soul_pickup_marks[index].remaining <= 0.0:
+			battle_soul_pickup_marks.remove_at(index)
 	for index in range(impact_marks.size() - 1, -1, -1):
 		impact_marks[index].remaining -= delta
 		if impact_marks[index].remaining <= 0.0:
@@ -2097,6 +2237,14 @@ func tick_visuals(delta: float) -> void:
 			continue
 		wave["elapsed"] = elapsed
 		guan_blade_waves[index] = wave
+	for index in range(damage_number_marks.size() - 1, -1, -1):
+		var mark: Dictionary = damage_number_marks[index]
+		mark["elapsed"] = float(mark.get("elapsed", 0.0)) + delta
+		mark["remaining"] = float(mark.get("remaining", 0.0)) - delta
+		if float(mark.get("remaining", 0.0)) <= 0.0:
+			damage_number_marks.remove_at(index)
+		else:
+			damage_number_marks[index] = mark
 	shake_remaining = maxf(0.0, shake_remaining - delta)
 	if shake_remaining > 0.0:
 		position = Vector2(randf_range(-shake_strength, shake_strength), randf_range(-shake_strength, shake_strength))
@@ -2218,6 +2366,8 @@ func _draw() -> void:
 	_draw_ultimate_waves()
 	_draw_boss()
 	_draw_player()
+	_draw_damage_numbers()
+	_draw_battle_soul_feedback()
 	_draw_zhao_yun_ultimate_effects()
 	_draw_lv_bu_rush_effects()
 	_draw_firewheel_rings()
@@ -3201,29 +3351,55 @@ func _draw_ma_chao_afterimages(at: Vector2) -> void:
 		draw_circle(dust, 4.0 + float(index), Color(0.72, 0.74, 0.70, 0.10 + momentum * 0.12))
 
 func _draw_ma_chao_body(at: Vector2, alpha: float) -> void:
-	var flash_ratio := _player_hit_flash_ratio() * player_hit_flash_strength if player_hit_flash_remaining > 0.0 and alpha > 0.99 else 0.0
-	var facing := _prototype_facing_direction()
-	var side := Vector2(-facing.y, facing.x)
-	var armor := Color("d7dde2").lerp(Color.WHITE, flash_ratio)
-	var cloak := Color("6d7c9b").lerp(Color.WHITE, flash_ratio)
-	var skin := Color("d1aa83").lerp(Color.WHITE, flash_ratio)
-	var body := PackedVector2Array([
-		at - side * 16.0 + Vector2(0, 13), at - side * 14.0 + Vector2(0, -15),
-		at + side * 14.0 + Vector2(0, -15), at + side * 17.0 + Vector2(0, 13),
-	])
-	draw_colored_polygon(body, Color(armor.r, armor.g, armor.b, alpha))
-	draw_colored_polygon(PackedVector2Array([at - side * 15.0 + Vector2(0, -4), at - side * 29.0 + Vector2(0, 15), at + Vector2(0, 17), at + side * 13.0 + Vector2(0, -4)]), Color(cloak.r, cloak.g, cloak.b, alpha * 0.88))
-	draw_circle(at + Vector2(0, -28), 9.5, Color(skin.r, skin.g, skin.b, alpha))
-	draw_rect(Rect2(at + Vector2(-11, -38), Vector2(22, 6)), Color(0.22, 0.25, 0.31, alpha))
-	draw_line(at + Vector2(-12, 13), at + Vector2(-6, 21), Color(0.18, 0.22, 0.28, alpha), 5.2)
-	draw_line(at + Vector2(12, 13), at + Vector2(6, 21), Color(0.18, 0.22, 0.28, alpha), 5.2)
-	var action_progress := float(player.call("visual_action_progress")) if player.has_method("visual_action_progress") else 0.0
-	var spear_direction := facing.rotated(lerpf(0.48, -0.40, action_progress))
-	var hand := at + Vector2(0, -8)
-	draw_line(hand - spear_direction * 42.0, hand + spear_direction * 86.0, Color(0.55, 0.34, 0.19, alpha), 3.6)
-	var tip := hand + spear_direction * 92.0
-	var head := PackedVector2Array([tip, tip - spear_direction * 16.0 + Vector2(-spear_direction.y, spear_direction.x) * 5.0, tip - spear_direction * 16.0 - Vector2(-spear_direction.y, spear_direction.x) * 5.0])
-	draw_colored_polygon(head, Color(0.86, 0.94, 0.98, alpha))
+	var texture := _current_ma_chao_texture()
+	if texture == null:
+		return
+	var source_anchor := _current_ma_chao_source_foot_anchor()
+	var horizontal_scale := -MA_CHAO_SPRITE_SCALE if player_faces_left else MA_CHAO_SPRITE_SCALE
+	draw_set_transform(at + MA_CHAO_WORLD_FOOT_OFFSET, 0.0, Vector2(horizontal_scale, MA_CHAO_SPRITE_SCALE))
+	draw_texture(texture, -source_anchor, Color(1.0, 1.0, 1.0, alpha))
+	if player_hit_flash_remaining > 0.0 and alpha > 0.99:
+		var flash_texture := _player_white_flash_texture(texture)
+		var flash_ratio := _player_hit_flash_ratio() * player_hit_flash_strength
+		draw_texture(flash_texture, -source_anchor, Color(1.0, 1.0, 1.0, flash_ratio))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _current_ma_chao_texture() -> Texture2D:
+	if player.current_action == "basic":
+		var action_textures: Array[Texture2D]
+		match player.combo_stage:
+			1:
+				action_textures = MA_CHAO_ATTACK_01_TEXTURES
+			2:
+				action_textures = MA_CHAO_ATTACK_02_TEXTURES
+			_:
+				action_textures = MA_CHAO_ATTACK_03_TEXTURES
+		return action_textures[_ma_chao_action_frame_index(action_textures.size())]
+	if player.current_action in ["active", "ultimate"]:
+		return MA_CHAO_ATTACK_03_TEXTURES[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
+	if player_is_moving:
+		return MA_CHAO_WALK_TEXTURES[int(player_walk_time / MA_CHAO_WALK_FRAME_DURATION) % MA_CHAO_WALK_TEXTURES.size()]
+	var idle_index := int(player_idle_time / MA_CHAO_IDLE_FRAME_DURATION) % MA_CHAO_IDLE_TEXTURES.size()
+	return MA_CHAO_IDLE_TEXTURES[idle_index]
+
+func _ma_chao_action_frame_index(frame_count: int) -> int:
+	var progress := float(player.call("visual_action_progress")) if player.has_method("visual_action_progress") else 0.0
+	if player.current_action == "basic" and player.combo_stage == 3 and frame_count == MA_CHAO_ATTACK_03_TEXTURES.size():
+		# Keep the first pose long enough to read as a wind-up, then snap through
+		# the remaining poses so the third strike feels decisive rather than soft.
+		var frame_boundaries := [0.27, 0.42, 0.55, 0.67, 0.78, 0.89, 1.0]
+		for index in range(frame_boundaries.size()):
+			if progress < frame_boundaries[index]:
+				return mini(index, frame_count - 1)
+		return frame_count - 1
+	return mini(int(progress * float(frame_count)), frame_count - 1)
+
+func _current_ma_chao_source_foot_anchor() -> Vector2:
+	if player.current_action == "basic" and player.combo_stage == 3:
+		return MA_CHAO_ATTACK_03_FOOT_ANCHORS[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
+	if player.current_action in ["active", "ultimate"]:
+		return MA_CHAO_ATTACK_03_FOOT_ANCHORS[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
+	return MA_CHAO_SOURCE_FOOT_ANCHOR
 
 func _draw_huang_zhong_body(at: Vector2) -> void:
 	var flash_ratio := _player_hit_flash_ratio() * player_hit_flash_strength if player_hit_flash_remaining > 0.0 else 0.0
@@ -3547,6 +3723,13 @@ func _draw_player_death(at: Vector2) -> void:
 		var zhang_horizontal_scale := -ZHANG_FEI_SPRITE_SCALE if player_death_faces_left else ZHANG_FEI_SPRITE_SCALE
 		draw_set_transform(at + ZHANG_FEI_WORLD_FOOT_OFFSET, 0.0, Vector2(zhang_horizontal_scale, ZHANG_FEI_SPRITE_SCALE))
 		draw_texture(ZHANG_FEI_DEATH_TEXTURES[frame_index], -ZHANG_FEI_DEATH_FOOT_ANCHORS[frame_index])
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	if player_death_hero_id == "ma_chao":
+		var ma_chao_frame_index := _ma_chao_death_frame_index()
+		var ma_chao_horizontal_scale := -MA_CHAO_SPRITE_SCALE if player_death_faces_left else MA_CHAO_SPRITE_SCALE
+		draw_set_transform(at + MA_CHAO_WORLD_FOOT_OFFSET, 0.0, Vector2(ma_chao_horizontal_scale, MA_CHAO_SPRITE_SCALE))
+		draw_texture(MA_CHAO_DEATH_TEXTURES[ma_chao_frame_index], -MA_CHAO_SOURCE_FOOT_ANCHOR)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if player.presentation_id() != "zhao_yun":
@@ -3896,6 +4079,9 @@ func _copy_request_for_visual(source: AttackRequest) -> AttackRequest:
 	copy.launch_collision_max_targets = source.launch_collision_max_targets
 	copy.launch_relay_count = source.launch_relay_count
 	copy.launch_target_limit = source.launch_target_limit
+	copy.launch_landing_damage = source.launch_landing_damage
+	copy.launch_landing_knockback = source.launch_landing_knockback
+	copy.launch_hold_until_duration = source.launch_hold_until_duration
 	copy.grants_special_target_dragon_progress = source.grants_special_target_dragon_progress
 	return copy
 
@@ -3970,6 +4156,14 @@ func _player_death_frame_index() -> int:
 	if player_death_elapsed < PLAYER_DEATH_FRAME_01_DURATION + PLAYER_DEATH_FRAME_02_DURATION + PLAYER_DEATH_FRAME_03_DURATION:
 		return 2
 	return 3
+
+func _ma_chao_death_frame_index() -> int:
+	var elapsed := player_death_elapsed
+	for index in range(MA_CHAO_DEATH_FRAME_DURATIONS.size()):
+		elapsed -= MA_CHAO_DEATH_FRAME_DURATIONS[index]
+		if elapsed < 0.0:
+			return index
+	return MA_CHAO_DEATH_FRAME_DURATIONS.size() - 1
 
 func _draw_boss() -> void:
 	if boss == null or (not boss.active and not boss.is_dying()):
@@ -5259,8 +5453,12 @@ func _draw_flashes() -> void:
 				_draw_guan_blade_sweep(request, alpha, progress, variant, Color(1.0, 0.66, 0.24, 0.96), 25.0, 5)
 			"万夫莫开·掀阵", "万夫莫开·断阵":
 				_draw_thrust_flash(request, alpha, progress, variant, 12.0, Color(1.0, 0.66, 0.24, 0.94))
+			"银枪横扫":
+				_draw_ma_chao_fan_sweep(request, alpha, progress, variant)
 			"银枪点阵", "踏阵突刺", "西凉破阵", "银枪奔雷":
 				_draw_thrust_flash(request, alpha, progress, variant, 6.0, Color(0.74, 0.90, 1.0, 0.66))
+			"银枪突刺":
+				_draw_thrust_flash(request, alpha, progress, variant, 8.0, Color(0.74, 0.90, 1.0, 0.70), Vector2(0.0, -16.0), 1.55)
 			"流星横挑":
 				_draw_sweep_flash(request, alpha, progress, variant, Color(0.72, 0.90, 1.0, 0.90))
 			"连珠箭", "蓄力穿云", "贯星矢", "定军连珠":
@@ -5289,6 +5487,19 @@ func _draw_flashes() -> void:
 				_draw_thrust_flash(request, alpha, progress, variant, 4.0, Color(0.70, 0.95, 1.0, 0.44))
 		if request.empowered_knockback_active:
 			_draw_breakout_gust(request, alpha, progress)
+
+func _draw_ma_chao_fan_sweep(request: AttackRequest, alpha: float, progress: float, variant: int) -> void:
+	# Match Guan Yu's range cue: show only a broken outer arc band.  The actual
+	# hit shape remains AttackRequest.Shape.FAN; this is presentation only.
+	_draw_guan_blade_sweep(
+		request,
+		alpha,
+		progress,
+		variant,
+		Color(0.52, 0.86, 1.0, 0.92),
+		13.0,
+		3
+	)
 
 func _draw_guan_blade_sweep(request: AttackRequest, alpha: float, progress: float, variant: int, color: Color, thickness: float, segments: int) -> void:
 	var start_angle := request.direction.angle() - request.half_angle
@@ -5537,17 +5748,17 @@ func _draw_breakout_gust(request: AttackRequest, alpha: float, progress: float) 
 		])
 		draw_colored_polygon(gust, Color(0.76, 0.96, 1.0, alpha * 0.34))
 
-func _draw_thrust_flash(request: AttackRequest, alpha: float, progress: float, variant: int, half_width: float, outer_color: Color) -> void:
+func _draw_thrust_flash(request: AttackRequest, alpha: float, progress: float, variant: int, half_width: float, outer_color: Color, origin_offset: Vector2 = Vector2.ZERO, width_scale: float = 1.0) -> void:
 	var direction := request.direction
 	var perpendicular := Vector2(-direction.y, direction.x)
 	var burst := clampf(progress / 0.28, 0.0, 1.0)
 	var length := maxf(10.0, request.range * lerpf(0.40, 0.93, burst) - 7.0)
-	var root := request.origin + direction * 7.0
+	var root := request.origin + origin_offset + direction * 7.0
 	var tip := root + direction * length
 	var side := -1.0 if variant % 2 == 0 else 1.0
 	var collision_half_width := request.width * 0.5
 	var effect_half_width := maxf(half_width, collision_half_width * 0.32) if request.label in ["点刺", "穿阵挑刺"] else half_width
-	var width := effect_half_width * (1.55 + 0.08 * float(variant % 3))
+	var width := effect_half_width * width_scale * (1.55 + 0.08 * float(variant % 3))
 	var outer := PackedVector2Array([
 		root - perpendicular * (width * 1.20),
 		root + direction * (length * 0.21) - perpendicular * (width * 1.62),
@@ -5688,6 +5899,7 @@ func _draw_ultimate_shock_ring(center: Vector2, direction: Vector2, alpha: float
 		draw_colored_polygon(points, Color(0.64, 0.94, 1.0, alpha * (0.30 - float(segment) * 0.05)))
 
 func _draw_pickups() -> void:
+	_draw_battle_soul_drops()
 	if loot != null:
 		for drop in loot.drops:
 			var at: Vector2 = drop.get("position", Vector2.ZERO)
@@ -5699,6 +5911,100 @@ func _draw_pickups() -> void:
 	for pickup in pickup_marks:
 		var alpha := clampf(pickup.remaining / 0.45, 0.0, 1.0)
 		draw_circle(pickup.position, 6.0, Color(0.95, 0.78, 0.26, alpha))
+
+func _battle_soul_color(soul_id: String) -> Color:
+	if battle_soul_system != null:
+		return battle_soul_system.color_for(soul_id)
+	match soul_id:
+		"gale": return Color("75d9a6")
+		"thunder": return Color("79baff")
+		"flame": return Color("f28a48")
+		"iron": return Color("e1c26a")
+		_: return Color("d8e7ef")
+
+func _battle_soul_icon(soul_id: String) -> String:
+	if battle_soul_system != null:
+		return battle_soul_system.icon_for(soul_id)
+	match soul_id:
+		"gale": return "G"
+		"thunder": return "T"
+		"flame": return "F"
+		"iron": return "I"
+		_: return "S"
+
+func _draw_battle_soul_drops() -> void:
+	if battle_soul_system == null:
+		return
+	for drop in battle_soul_system.drops:
+		var soul_id := str(drop.get("id", "gale"))
+		var at: Vector2 = drop.get("position", Vector2.ZERO)
+		var remaining := maxf(0.0, float(drop.get("remaining", BattleSoulSystem.GROUND_LIFETIME)))
+		var color := _battle_soul_color(soul_id)
+		var pulse := 0.82 + 0.18 * (sin(visual_time * 5.5 + at.x * 0.025 + at.y * 0.017) + 1.0) * 0.5
+		var blink := 1.0
+		if remaining <= 3.0:
+			blink = 0.42 + 0.58 * (sin(visual_time * 18.0) + 1.0) * 0.5
+		var alpha := pulse * blink
+		var ground_center := at + Vector2(0.0, 7.0)
+		var ring_radius := 20.0 + pulse * 3.0
+		draw_circle(ground_center, ring_radius * 0.72, Color(color.r, color.g, color.b, alpha * 0.10))
+		draw_arc(ground_center, ring_radius, 0.0, TAU, 24, Color(color.r, color.g, color.b, alpha * 0.62), 2.0, true)
+		draw_arc(ground_center, ring_radius * 0.64, -visual_time * 0.8, -visual_time * 0.8 + TAU * 0.68, 16, Color(1.0, 0.96, 0.78, alpha * 0.72), 1.4, true)
+		var beam_height := 30.0 + pulse * 7.0
+		draw_line(at + Vector2(0.0, 3.0), at - Vector2(0.0, beam_height), Color(color.r, color.g, color.b, alpha * 0.22), 2.0, true)
+		draw_circle(at - Vector2(0.0, 8.0), 11.0 + pulse * 2.0, Color(color.r, color.g, color.b, alpha * 0.28))
+		draw_circle(at - Vector2(0.0, 8.0), 8.0, Color(0.08, 0.10, 0.14, alpha * 0.90))
+		draw_arc(at - Vector2(0.0, 8.0), 9.5, 0.0, TAU, 18, Color(color.r, color.g, color.b, alpha * 0.92), 1.6, true)
+		draw_string(ThemeDB.fallback_font, at + Vector2(-8.0, -3.0), _battle_soul_icon(soul_id), HORIZONTAL_ALIGNMENT_CENTER, 16.0, 13, Color(1.0, 0.94, 0.72, alpha))
+
+func _draw_damage_numbers() -> void:
+	if not damage_numbers_enabled:
+		return
+	for mark in damage_number_marks:
+		var duration := 0.75
+		var remaining := maxf(0.0, float(mark.get("remaining", 0.0)))
+		var elapsed := float(mark.get("elapsed", 0.0))
+		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		var alpha := clampf(remaining / 0.20, 0.0, 1.0)
+		var at: Vector2 = mark.get("position", Vector2.ZERO)
+		at -= Vector2(0.0, 26.0 + progress * 28.0)
+		var amount := float(mark.get("amount", 0.0))
+		var text := "-%.0f" % amount
+		var color := Color("fff0c2")
+		var shadow_color := Color(0.08, 0.04, 0.02, alpha * 0.88)
+		draw_string(ThemeDB.fallback_font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_CENTER, 46.0, 16, shadow_color)
+		draw_string(ThemeDB.fallback_font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 46.0, 16, Color(color.r, color.g, color.b, alpha))
+
+func _draw_battle_soul_feedback() -> void:
+	for mark in battle_soul_proc_marks:
+		var duration := maxf(0.01, float(mark.get("duration", 0.36)))
+		var remaining := maxf(0.0, float(mark.get("remaining", 0.0)))
+		var progress := clampf(1.0 - remaining / duration, 0.0, 1.0)
+		var fade := 1.0 - progress
+		var at: Vector2 = mark.get("position", Vector2.ZERO)
+		var soul_id := str(mark.get("id", "gale"))
+		var color := _battle_soul_color(soul_id)
+		var radius := 8.0 + progress * 31.0
+		draw_circle(at, radius * 0.28, Color(color.r, color.g, color.b, fade * 0.20))
+		draw_arc(at, radius, 0.0, TAU, 24, Color(color.r, color.g, color.b, fade * 0.84), 2.6, true)
+		draw_arc(at, radius * 0.62, visual_time * 2.2, visual_time * 2.2 + TAU * 0.70, 16, Color(1.0, 0.94, 0.72, fade * 0.72), 1.5, true)
+		for shard_index in range(4):
+			var angle := TAU * float(shard_index) / 4.0 + float(mark.get("seed", 0)) * 0.01
+			var direction := Vector2.from_angle(angle)
+			draw_line(at + direction * (radius * 0.42), at + direction * (radius + 7.0), Color(color.r, color.g, color.b, fade * 0.72), 2.2, true)
+
+	for mark in battle_soul_pickup_marks:
+		var duration := maxf(0.01, float(mark.get("duration", 0.52)))
+		var remaining := maxf(0.0, float(mark.get("remaining", 0.0)))
+		var progress := clampf(1.0 - remaining / duration, 0.0, 1.0)
+		var fade := 1.0 - progress
+		var at: Vector2 = mark.get("position", Vector2.ZERO) - Vector2(0.0, progress * 28.0)
+		var soul_id := str(mark.get("id", "gale"))
+		var color := _battle_soul_color(soul_id)
+		var radius := 8.0 + progress * 17.0
+		draw_circle(at, radius * 0.48, Color(color.r, color.g, color.b, fade * 0.20))
+		draw_arc(at, radius, 0.0, TAU, 20, Color(color.r, color.g, color.b, fade * 0.86), 2.2, true)
+		draw_string(ThemeDB.fallback_font, at + Vector2(-8.0, 5.0), _battle_soul_icon(soul_id), HORIZONTAL_ALIGNMENT_CENTER, 16.0, 13, Color(1.0, 0.96, 0.78, fade))
 
 func _draw_tianji_marks() -> void:
 	for mark in tianji_marks:

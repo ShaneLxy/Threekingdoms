@@ -21,6 +21,7 @@ const HEROES := {
 			"move_speed": 98.0,
 			"basic_range": 164.0,
 			"basic_pierce": 5,
+			"armor_ignore_ratio": 0.10,
 			"active_cooldown": 7.5,
 			"ultimate_cost": 70.0,
 		},
@@ -34,7 +35,7 @@ const HEROES := {
 			{"title": "偃月 / 拖刀", "core_title": "基础偃月", "core_summary": "默认三段横扫；拖刀与追锋需先在商城购买，再于局内获取。", "nodes": [{"id": "guan_broad_edge", "summary": "横扫范围", "is_core": true}, {"id": "guan_heavy_blade", "summary": "沉重斩击", "is_core": true}, {"id": "guan_drag_blade", "cost": 450, "summary": "长按拖刀"}, {"id": "guan_drag_steadiness", "cost": 500, "summary": "减速降低"}, {"id": "guan_drag_charge", "cost": 500, "summary": "蓄力缩短"}, {"id": "guan_drag_waves", "summary": "刀浪尺寸", "is_run_upgrade": true}, {"id": "guan_drag_reach", "cost": 650, "summary": "长风拖刀"}, {"id": "guan_fourth_strike", "cost": 500, "summary": "第四段普攻"}, {"id": "guan_fourth_dash", "summary": "突进加距", "is_run_upgrade": true}, {"id": "guan_fourth_collision", "cost": 700, "summary": "断阵冲势"}, {"id": "guan_fourth_wave", "cost": 600, "summary": "刀浪增幅"}, {"id": "guan_fourth_execution", "cost": 2200, "summary": "斩将追锋"}, {"id": "guan_sweeping_guard", "cost": 450, "summary": "正面拦矢"}, {"id": "guan_sweeping_guard_large", "cost": 700, "summary": "扩大拦截"}]},
 			{"title": "兵势 / 斩将", "core_title": "基础兵势", "core_summary": "近敌增益与高级目标易伤默认开放。", "nodes": [{"id": "guan_martial_pressure", "summary": "近敌攻防", "is_core": true}, {"id": "guan_battlefield_radius", "cost": 550, "summary": "扩大判定"}, {"id": "guan_pressure_recovery", "cost": 600, "summary": "兵势回血"}, {"id": "guan_iron_guard", "summary": "斩将易伤", "is_core": true}, {"id": "guan_mark_hunt", "cost": 700, "summary": "斩将增幅"}]},
 			{"title": "断浪", "core_title": "基础断浪", "core_summary": "滑步巨型刀浪默认开放。", "nodes": [{"id": "guan_breaking_wave", "summary": "刀浪距离", "is_core": true}, {"id": "guan_rending_tide", "summary": "减速击退", "is_core": true}, {"id": "guan_wave_count", "summary": "刀浪尺寸", "is_core": true}, {"id": "guan_breaking_step", "cost": 650, "summary": "滑步撞阵"}, {"id": "guan_river_cleaver", "cost": 1000, "summary": "横江断流"}]},
-			{"title": "武圣", "core_title": "基础武圣", "core_summary": "15秒压阵状态默认开放。", "nodes": [{"id": "guan_saintly_wrath", "summary": "武圣强化", "is_core": true}, {"id": "guan_war_banner", "summary": "军威充能", "is_core": true}, {"id": "guan_saintly_duration", "cost": 700, "summary": "武圣延时"}, {"id": "guan_saintly_warfront", "cost": 1100, "summary": "震阵增幅"}]},
+			{"title": "武圣", "core_title": "基础武圣", "core_summary": "15秒压阵状态默认开放。", "nodes": [{"id": "guan_saintly_wrath", "summary": "武圣强化", "is_core": true}, {"id": "guan_war_banner", "summary": "军威充能", "is_core": true}, {"id": "guan_saintly_armor_pierce", "cost": 650, "summary": "武圣破甲"}, {"id": "guan_saintly_duration", "cost": 700, "summary": "武圣延时"}, {"id": "guan_saintly_warfront", "cost": 1100, "summary": "震阵增幅"}]},
 		],
 	},
 	"zhang_fei": {
@@ -54,6 +55,7 @@ const HEROES := {
 			"move_speed": 92.0,
 			"basic_range": 158.0,
 			"basic_pierce": 7,
+			"armor_ignore_ratio": 0.10,
 			"active_cooldown": 7.6,
 			"ultimate_cost": 60.0,
 		},
@@ -61,13 +63,13 @@ const HEROES := {
 			{"name": "普攻·丈八掷阵", "type": "普攻", "description": "前两式扫阵挑飞；第三式以扩大砸地范围为中心，并向正面推出低伤害余震。解锁撼地后，怒势期间可接第四段，连续推出四段震地波。购买裂地后，地波沿攻击方向加长。"},
 			{"name": "被动·燕人怒势", "type": "被动", "description": "击杀 +1、格挡 +3、完美格挡 +4；累计 15 点获得怒势，最多 4 层。每层攻速 +4%，侧后受击减伤 18%。"},
 			{"name": "主动·据水断桥", "type": "主动", "description": "短按近距离跃砸；长按蓄力，松开时按蓄力时长决定跳跃距离。"},
-			{"name": "无双·万夫莫开", "type": "无双", "description": "消耗 60 能量，怒喝震阵后进入 10 秒万夫状态；攻击力提高 30%，自身减伤，飞兵撞击与连锁强化，第三式跃砸范围与冲量提升，期间支持格挡。"},
+			{"name": "无双·万夫莫开", "type": "无双", "description": "消耗 60 能量，怒喝震阵后进入 15 秒万夫状态；攻击力提高 30%，自身减伤，飞兵撞击与连锁强化，第三式跃砸范围与冲量提升，期间支持格挡。"},
 		],
 		"talent_tree": [
 			{"title": "掷阵 / 跃砸", "core_title": "基础掷阵", "core_summary": "前两式扫阵挑飞；第三式通过两阶战法获得质变。", "nodes": [{"id": "zhang_heavy_roar", "summary": "飞兵冲量", "is_core": true}, {"id": "zhang_fourth_strike", "cost": 900, "summary": "怒势撼地"}, {"id": "zhang_fourth_wave_expand", "cost": 1200, "summary": "地波裂地"}, {"id": "zhang_slam_leap", "cost": 600, "summary": "短距前跳"}, {"id": "zhang_slam_mastery", "cost": 1400, "summary": "方向跃砸"}]},
 		{"title": "怒势", "core_title": "基础怒势", "core_summary": "击杀或格挡积累怒势，强化飞兵碰撞。", "nodes": [{"id": "zhang_rage", "summary": "怒势增伤", "is_core": true}, {"id": "zhang_rage_hunt", "cost": 500, "summary": "更快触发"}, {"id": "zhang_rage_fervor", "cost": 700, "summary": "怒势疾行"}, {"id": "zhang_rage_overwhelm", "cost": 1800, "summary": "飞兵破军"}]},
 			{"title": "断桥", "core_title": "基础断桥", "core_summary": "跃砸、蓄力控制与范围震退默认开放。", "nodes": [{"id": "zhang_iron_hide", "summary": "铁躯震地", "is_core": true}, {"id": "zhang_active_charge", "cost": 650, "summary": "蓄势强化"}, {"id": "zhang_bridge_breaker", "cost": 500, "summary": "落点扩域"}, {"id": "zhang_bridge_repel", "cost": 700, "summary": "震退硬直"}, {"id": "zhang_bridge_shockwave", "cost": 1800, "summary": "中心重击"}]},
-			{"title": "无双", "core_title": "基础万夫莫开", "core_summary": "万夫莫开默认开放。", "nodes": [{"id": "zhang_earthshaker", "summary": "飞兵贯阵", "is_core": true}, {"id": "zhang_immovable", "cost": 600, "summary": "万夫减伤"}, {"id": "zhang_battle_cry", "cost": 750, "summary": "怒喝久战"}, {"id": "zhang_war_stomp", "cost": 2200, "summary": "裂地余威"}]},
+			{"title": "无双", "core_title": "基础万夫莫开", "core_summary": "万夫莫开默认开放。", "nodes": [{"id": "zhang_earthshaker", "summary": "飞兵贯阵", "is_core": true}, {"id": "zhang_ultimate_armor_pierce", "cost": 650, "summary": "万夫裂甲"}, {"id": "zhang_immovable", "cost": 600, "summary": "万夫减伤"}, {"id": "zhang_battle_cry", "cost": 750, "summary": "怒喝久战"}, {"id": "zhang_war_stomp", "cost": 2200, "summary": "裂地余威"}]},
 		],
 	},
 	"zhao_yun": {
@@ -87,6 +89,7 @@ const HEROES := {
 			"move_speed": 125.0,
 			"basic_range": 144.0,
 			"basic_pierce": 6,
+			"armor_ignore_ratio": 0.05,
 			"active_cooldown": 6.5,
 			"ultimate_cost": 60.0,
 		},
@@ -143,6 +146,7 @@ const HEROES := {
 				"core_title": "基础无双",
 				"core_summary": "七进七出为赵云固有无双。",
 				"nodes": [
+				{"id": "zhao_ultimate_armor_pierce", "cost": 650, "summary": "七进穿云"},
 				{"id": "white_dragon", "cost": 600, "summary": "突进与能量提升"},
 				{"id": "returning_spear", "cost": 650, "summary": "穿阵伤害提高"},
 				{"id": "triumph", "cost": 1500, "summary": "充能与精英奖励"},
@@ -244,6 +248,14 @@ static func hud_name_for(hero_id: String) -> String:
 
 static func ultimate_cutin_for(hero_id: String) -> String:
 	return str(definition_for(hero_id).get("ultimate_cutin", ""))
+
+static func new_portrait_for(hero_id: String) -> String:
+	return {
+		"guan_yu": "res://assets/art/characters/hero_new/guanyu.png",
+		"zhang_fei": "res://assets/art/characters/hero_new/zhangfei.png",
+		"zhao_yun": "res://assets/art/characters/hero_new/zhaoyun.png",
+		"ma_chao": "res://assets/art/characters/hero_new/maochao.png",
+	}.get(hero_id, "")
 
 static func display_stats_for(hero_id: String, profile: Dictionary) -> Dictionary:
 	var definition := definition_for(hero_id)

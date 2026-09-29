@@ -35,6 +35,7 @@ var suspended_basic_touch := false
 var suspended_basic_release_pending := false
 var combo_enabled := true
 var basic_button_held := false
+var pause_request_pending := false
 
 const MOVE_MAX_DISTANCE := 110.0
 const MOVE_DEAD_ZONE := 10.0
@@ -242,6 +243,13 @@ func movement_direction() -> Vector2:
 	return direction.normalized() if direction.length() > 1.0 else direction
 
 func _input(event: InputEvent) -> void:
+	# Pause must be resolved before GUI controls. Android can emit both a touch
+	# event and an emulated mouse event for one finger, so defer the request and
+	# merge both events into one pause action before a modal can consume either.
+	if _is_pause_press(event):
+		_queue_pause_request()
+		get_viewport().set_input_as_handled()
+		return
 	# Capture release events before modal upgrade controls consume them. This is
 	# deliberately limited to an already-held attack, so menu clicks do not
 	# affect normal input.
@@ -251,6 +259,29 @@ func _input(event: InputEvent) -> void:
 		suspended_basic_release_pending = true
 	elif event is InputEventScreenTouch and not event.pressed and suspended_basic_touch:
 		suspended_basic_release_pending = true
+
+func _is_pause_press(event: InputEvent) -> bool:
+	if player == null or hud == null or not enabled or hud.modal_active:
+		return false
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		return mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and hud.is_pause_hit(mouse_event.position)
+	if event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		return touch_event.pressed and hud.is_pause_hit(touch_event.position)
+	return false
+
+func _queue_pause_request() -> void:
+	if pause_request_pending:
+		return
+	pause_request_pending = true
+	call_deferred("_emit_queued_pause_request")
+
+func _emit_queued_pause_request() -> void:
+	pause_request_pending = false
+	if player == null or hud == null or not enabled or hud.modal_active:
+		return
+	pause_requested.emit()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if player == null or hud == null:
@@ -291,31 +322,32 @@ func _unhandled_input(event: InputEvent) -> void:
 				mouse_active_held = false
 				_end_active_press(movement_direction())
 			return
-		if event.button_index == MOUSE_BUTTON_LEFT and hud.is_pause_hit(event.position):
-			pause_requested.emit()
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
 			mouse_active_held = _begin_active_press(movement_direction())
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
 			hud.set_control_pressed("ultimate", true)
 			ultimate_requested.emit(Vector2.ZERO)
-		elif hud.is_weapon_stance_hit(event.position):
-			weapon_stance_requested.emit()
-		elif hud.is_guard_hit(event.position):
-			_emit_guard_request(movement_direction())
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.position.distance_to(hud.move_center()) <= hud.move_capture_radius():
 				return
-		elif event.position.distance_to(hud.active_center()) < 65.0:
-			mouse_active_held = _begin_active_press(movement_direction())
-		elif event.position.distance_to(hud.ultimate_center()) < 65.0:
-			hud.set_control_pressed("ultimate", true)
-			ultimate_requested.emit(Vector2.ZERO)
-		elif hud.is_guan_drag_split() and event.position.distance_to(hud.guan_drag_center()) <= 52.0:
-			mouse_drag_held = true
-			_begin_drag_press(Vector2.ZERO)
-		else:
-			mouse_attack_held = true
-			_begin_basic_press(Vector2.ZERO)
+			if hud.is_pause_hit(event.position):
+				pause_requested.emit()
+			elif hud.is_weapon_stance_hit(event.position):
+				weapon_stance_requested.emit()
+			elif hud.is_guard_hit(event.position):
+				_emit_guard_request(movement_direction())
+			elif event.position.distance_to(hud.active_center()) < 65.0:
+				mouse_active_held = _begin_active_press(movement_direction())
+			elif event.position.distance_to(hud.ultimate_center()) < 65.0:
+				hud.set_control_pressed("ultimate", true)
+				ultimate_requested.emit(Vector2.ZERO)
+			elif hud.is_guan_drag_split() and event.position.distance_to(hud.guan_drag_center()) <= 52.0:
+				mouse_drag_held = true
+				_begin_drag_press(Vector2.ZERO)
+			else:
+				# 左键点击普攻图标或非功能区均按普攻处理，保持原 PC 操作习惯。
+				mouse_attack_held = true
+				_begin_basic_press(Vector2.ZERO)
 	elif event is InputEventScreenTouch:
 		_handle_touch(event)
 	elif event is InputEventScreenDrag:

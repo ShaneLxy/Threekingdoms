@@ -12,6 +12,7 @@ var inner_radius := 0.0
 var width := 0.0
 var half_angle := 0.0
 var multiplier := 1.0
+var armor_ignore_ratio := 0.0
 var center_damage_radius := 0.0
 var center_damage_multiplier := 1.0
 var pierce := 1
@@ -63,6 +64,9 @@ var launch_collision_knockback := 0.0
 var launch_collision_max_targets := 0
 var launch_relay_count := 0
 var launch_target_limit := 0
+var launch_landing_damage := 0.0
+var launch_landing_knockback := 0.0
+var launch_hold_until_duration := false
 
 static func line(at: Vector2, toward: Vector2, length: float, line_width: float, damage_multiplier: float, max_targets: int, name: String) -> AttackRequest:
 	var request := AttackRequest.new()

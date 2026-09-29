@@ -19,6 +19,7 @@ const BUTTON_PRESSED_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/b
 const BUTTON_DISABLED_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/button_disabled_2x.png")
 const HUD_BAR_FRAME_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/hud_bar_frame_2x.png")
 const TITLE_DIVIDER_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/title_divider_2x.png")
+const KAITI_FONT: Font = preload("res://assets/fonts/kaiti.ttf")
 
 static var _panel_style: StyleBoxTexture
 static var _hud_bar_style: StyleBoxTexture
@@ -40,6 +41,9 @@ static func install(root: Control) -> Theme:
 	return theme
 
 static func default_font() -> Font:
+	return KAITI_FONT
+	# Keep the original fallback list below for recovery if the bundled font is
+	# deliberately replaced during a future asset migration.
 	for path in [
 		"res://assets/fonts/ui-title.ttf",
 		"res://assets/fonts/ui-title.otf",

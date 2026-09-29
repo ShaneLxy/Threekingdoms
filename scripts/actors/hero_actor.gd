@@ -2,6 +2,7 @@ class_name HeroActor
 extends Node2D
 
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
+const BATTLE_SOUL_ARMORY = preload("res://scripts/domain/battle_soul_armory.gd")
 const COMMON_ATTACK_BONUS := 5.0
 const COMMON_DEFENSE_BONUS := 3.0
 const COMMON_SPEED_BONUS := 8.0
@@ -14,6 +15,16 @@ const GUARD_FRONT_HALF_ANGLE := deg_to_rad(90.0)
 const GUARD_TIME_EPSILON := 0.00001
 const DAMAGE_FALLOFF_START_DISTANCE := 180.0
 const DAMAGE_FALLOFF_END_DISTANCE := 720.0
+const REVIVE_SURGE_DURATION := 10.0
+const REVIVE_SURGE_ATTACK_RATIO := 0.30
+const REVIVE_SURGE_MOVE_SPEED_RATIO := 0.30
+const REVIVE_SURGE_DAMAGE_REDUCTION := 0.70
+const REVIVE_SURGE_ULTIMATE_ENERGY := 50.0
+const REVIVE_SURGE_RANGE := 220.0
+const REVIVE_SURGE_KNOCKBACK := 820.0
+const REVIVE_SURGE_DISPLACEMENT := 96.0
+const BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO := 0.30
+const BATTLE_SOUL_IRON_DAMAGE_REDUCTION := 0.30
 
 # Shared contract for every playable hero. Individual heroes own their combo,
 # passive, skill state, and presentation while the battle scene consumes this API.
@@ -37,6 +48,7 @@ var hero_id := ""
 var base_attack := 0.0
 var base_defense := 0.0
 var attack_bonus := 0.0
+var armor_ignore_ratio := 0.0
 var defense_bonus := 0.0
 var defense_ratio_bonus := 0.0
 var speed := 0.0
@@ -68,6 +80,13 @@ var guard_cooldown_refresh_pending := false
 var movement_slow_remaining := 0.0
 var movement_slow_multiplier := 1.0
 var movement_slow_duration := 0.0
+var revive_surge_remaining := 0.0
+var battle_soul_remaining: Dictionary = {}
+var battle_soul_gale_attack_speed_ratio := BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO
+var battle_soul_iron_damage_reduction := BATTLE_SOUL_IRON_DAMAGE_REDUCTION
+var battle_soul_thunder_chain_targets := 3
+var battle_soul_flame_radius_multiplier := 1.0
+var battle_soul_flame_target_count := 10
 
 func configure_hero(selected_hero_id: String) -> void:
 	hero_id = selected_hero_id
@@ -82,6 +101,41 @@ func reset_guard_state() -> void:
 	guard_cooldown_refresh_pending = false
 	reset_movement_slow_state()
 
+func clear_battle_souls() -> void:
+	battle_soul_remaining.clear()
+
+func activate_battle_soul(soul_id: String, duration: float) -> void:
+	if soul_id.is_empty() or duration <= 0.0:
+		return
+	battle_soul_remaining[soul_id] = maxf(float(battle_soul_remaining.get(soul_id, 0.0)), duration)
+
+func tick_battle_souls(delta: float) -> void:
+	for soul_id_value in battle_soul_remaining.keys():
+		var soul_id := str(soul_id_value)
+		var next_remaining := maxf(0.0, float(battle_soul_remaining.get(soul_id, 0.0)) - delta)
+		if next_remaining <= 0.0:
+			battle_soul_remaining.erase(soul_id)
+		else:
+			battle_soul_remaining[soul_id] = next_remaining
+
+func has_battle_soul(soul_id: String) -> bool:
+	return float(battle_soul_remaining.get(soul_id, 0.0)) > 0.0
+
+func attack_speed_multiplier() -> float:
+	return 1.0 + battle_soul_gale_attack_speed_ratio if has_battle_soul("gale") else 1.0
+
+func apply_battle_soul_damage_reduction(amount: float) -> float:
+	return amount * (1.0 - battle_soul_iron_damage_reduction) if has_battle_soul("iron") else amount
+
+func battle_soul_thunder_chain_count() -> int:
+	return maxi(1, battle_soul_thunder_chain_targets)
+
+func battle_soul_flame_radius() -> float:
+	return 78.0 * battle_soul_flame_radius_multiplier
+
+func battle_soul_flame_target_count_for_attack() -> int:
+	return maxi(1, battle_soul_flame_target_count)
+
 func reset_movement_slow_state() -> void:
 	movement_slow_remaining = 0.0
 	movement_slow_multiplier = 1.0
@@ -92,6 +146,28 @@ func tick_movement_slow(delta: float) -> void:
 	if movement_slow_remaining <= 0.0:
 		movement_slow_multiplier = 1.0
 		movement_slow_duration = 0.0
+
+func tick_revive_surge(delta: float) -> void:
+	revive_surge_remaining = maxf(0.0, revive_surge_remaining - delta)
+
+func is_revive_surge_active() -> bool:
+	return revive_surge_remaining > 0.0
+
+func revive_surge_attack_multiplier() -> float:
+	return 1.0 + REVIVE_SURGE_ATTACK_RATIO if is_revive_surge_active() else 1.0
+
+func revive_surge_move_speed_multiplier() -> float:
+	return 1.0 + REVIVE_SURGE_MOVE_SPEED_RATIO if is_revive_surge_active() else 1.0
+
+func revive_surge_damage_multiplier() -> float:
+	return 1.0 - REVIVE_SURGE_DAMAGE_REDUCTION if is_revive_surge_active() else 1.0
+
+func apply_revive_surge_damage_reduction(reduced_amount: float, pre_surge_amount: float) -> float:
+	if not is_revive_surge_active():
+		return reduced_amount
+	# Existing hero-specific mitigation can coexist with the revive window, but
+	# the combined bonus reduction must never exceed 80% after armor mitigation.
+	return maxf(reduced_amount * revive_surge_damage_multiplier(), pre_surge_amount * 0.20)
 
 func apply_movement_slow(multiplier: float, duration: float) -> void:
 	if duration <= 0.0:
@@ -274,7 +350,7 @@ func tick_basic_attack_movement(delta: float, _move_direction: Vector2) -> void:
 	basic_attack_movement_remaining = maxf(0.0, basic_attack_movement_remaining - travel_distance)
 
 func effective_move_speed() -> float:
-	return speed * movement_speed_multiplier()
+	return speed * movement_speed_multiplier() * revive_surge_move_speed_multiplier()
 
 func apply_duel_push(direction: Vector2, distance: float) -> void:
 	if direction.length_squared() <= 0.01 or distance <= 0.0:
@@ -311,6 +387,15 @@ func apply_level_up_benefits() -> void:
 
 func apply_account_progress(profile: Dictionary) -> void:
 	_apply_military_strategy(profile)
+	_apply_battle_soul_armory(profile)
+
+func _apply_battle_soul_armory(profile: Dictionary) -> void:
+	var effects := BATTLE_SOUL_ARMORY.effects_for_profile(profile)
+	battle_soul_gale_attack_speed_ratio = float(effects.get("gale_attack_speed_ratio", BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO))
+	battle_soul_iron_damage_reduction = clampf(float(effects.get("iron_damage_reduction", BATTLE_SOUL_IRON_DAMAGE_REDUCTION)), 0.0, 0.95)
+	battle_soul_thunder_chain_targets = maxi(1, int(effects.get("thunder_chain_targets", 3)))
+	battle_soul_flame_radius_multiplier = maxf(0.1, float(effects.get("flame_radius_multiplier", 1.0)))
+	battle_soul_flame_target_count = maxi(1, int(effects.get("flame_target_count", 10)))
 
 func _apply_military_strategy(profile: Dictionary) -> void:
 	var effects := MILITARY_STRATEGY.effects_for_profile(profile)
@@ -385,6 +470,8 @@ func apply_common_upgrade(upgrade_id: String) -> bool:
 			defense_bonus += COMMON_DEFENSE_BONUS
 		"common_speed":
 			speed += COMMON_SPEED_BONUS
+		"common_armor_ignore":
+			armor_ignore_ratio = minf(1.0, armor_ignore_ratio + 0.03)
 		"common_heal":
 			if health_component == null:
 				return true
@@ -399,14 +486,18 @@ func apply_common_upgrade(upgrade_id: String) -> bool:
 	return true
 
 func total_attack() -> float:
-	return base_attack * (1.0 + attack_bonus)
+	return base_attack * (1.0 + attack_bonus) * revive_surge_attack_multiplier()
 
 func total_defense() -> float:
 	return base_defense * (1.0 + defense_ratio_bonus) + defense_bonus
 
+func armor_ignore_ratio_for_request(_request: AttackRequest) -> float:
+	return clampf(armor_ignore_ratio, 0.0, 1.0)
+
 func current_stats() -> Dictionary:
 	return {
 		"attack": total_attack(),
+		"armor_ignore_ratio": armor_ignore_ratio,
 		"defense": total_defense(),
 		"health": health_component.current if health_component != null else 0.0,
 		"max_health": health_component.maximum if health_component != null else 0.0,
@@ -443,6 +534,10 @@ func force_idle_state() -> void:
 func on_named_target_hit(_target_kind: int, _request: AttackRequest, _damage: float) -> void:
 	pass
 
+## 每次攻击请求完成结算后调用一次。子类可按真实命中数实现英雄被动。
+func on_attack_resolved(_request: AttackRequest, _hit_count: int) -> void:
+	pass
+
 func modify_named_target_damage(_target_kind: int, _target_key: String, _request: AttackRequest, damage: float) -> float:
 	return damage * (1.0 + military_named_damage_ratio)
 
@@ -469,6 +564,22 @@ func revive_from_rewarded_ad(health_ratio: float = 0.35) -> void:
 	ultimate_time = 0.0
 	ultimate_segment_index = 0
 	reset_guard_state()
+	revive_surge_remaining = REVIVE_SURGE_DURATION
+	var was_ultimate_ready := is_ultimate_ready()
+	ultimate_energy = clampf(ultimate_energy + REVIVE_SURGE_ULTIMATE_ENERGY, 0.0, 100.0)
+	if not was_ultimate_ready and is_ultimate_ready():
+		ultimate_ready.emit()
+	var surge := AttackRequest.circle(position, REVIVE_SURGE_RANGE, 0.0, 999, "万夫莫开·怒喝震阵")
+	surge.action_kind = AttackRequest.ActionKind.PASSIVE
+	surge.displacement_only = true
+	surge.fan_knockback = true
+	surge.knockback = REVIVE_SURGE_KNOCKBACK
+	surge.forced_displacement = REVIVE_SURGE_DISPLACEMENT
+	surge.forced_displacement_duration = 0.18
+	surge.grants_boss_ultimate_energy = false
+	surge.grants_special_target_dragon_progress = false
+	attack_requested.emit(surge)
+	camera_shake_requested.emit(9.0)
 
 func ultimate_cost() -> float:
 	return 0.0
@@ -628,6 +739,43 @@ func movement_slow_hud_effect() -> Dictionary:
 		"duration": maxf(0.1, movement_slow_duration),
 		"color": Color("d47b62"),
 	}
+
+func revive_surge_hud_effect() -> Dictionary:
+	if not is_revive_surge_active():
+		return {}
+	return {
+		"id": "revive_surge",
+		"icon": "燃",
+		"label": "背水",
+		"stacks": 0,
+		"stack_text": "攻移+30% 免伤70%",
+		"remaining": revive_surge_remaining,
+		"duration": REVIVE_SURGE_DURATION,
+		"color": Color("ef8d45"),
+	}
+
+func battle_soul_hud_effects() -> Array[Dictionary]:
+	var effects: Array[Dictionary] = []
+	for soul_id in ["gale", "thunder", "flame", "iron"]:
+		var remaining := float(battle_soul_remaining.get(soul_id, 0.0))
+		if remaining <= 0.0:
+			continue
+		var effect: Dictionary = {
+			"remaining": remaining,
+			"duration": 20.0,
+			"stacks": 1,
+		}
+		match soul_id:
+			"gale":
+				effect.merge({"id": "battle_soul_gale", "icon": "风", "label": "罡风", "stack_text": "攻速+%d%%" % int(round(battle_soul_gale_attack_speed_ratio * 100.0)), "color": Color("75d9a6")})
+			"thunder":
+				effect.merge({"id": "battle_soul_thunder", "icon": "雷", "label": "雷霆", "stack_text": "连锁%d目标" % battle_soul_thunder_chain_count(), "color": Color("79baff")})
+			"flame":
+				effect.merge({"id": "battle_soul_flame", "icon": "炎", "label": "爆炎", "stack_text": "范围+%d%%" % int(round((battle_soul_flame_radius_multiplier - 1.0) * 100.0)), "color": Color("f28a48")})
+			"iron":
+				effect.merge({"id": "battle_soul_iron", "icon": "甲", "label": "玄甲", "stack_text": "免伤%d%%" % int(round(battle_soul_iron_damage_reduction * 100.0)), "color": Color("e1c26a")})
+		effects.append(effect)
+	return effects
 
 func is_ultimate_dashing() -> bool:
 	return false

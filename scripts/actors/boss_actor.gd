@@ -7,6 +7,7 @@ signal phase_changed(phase: int)
 signal skill_impact_requested(strength: float)
 signal rush_started(at: Vector2, direction: Vector2, segment: int)
 signal defeated()
+signal damage_received(at: Vector2, damage: float, stance_broken: bool)
 signal attack_effect_requested(effect_type: String, at: Vector2, scale_multiplier: float)
 signal attack_sound_requested(sound_type: String)
 
@@ -35,7 +36,9 @@ const STANCE_BREAK_DAMAGE_MULTIPLIER := 1.40
 const STANCE_BREAK_MAX_HIT_KNOCKBACK := 32.0
 const STANCE_BREAK_RECOIL_DURATION := 0.20
 const GUARD_REACTION_DISTANCE := 110.0
-const PERFECT_GUARD_REACTION_DISTANCE := 210.0
+# Perfect guards preserve the longer punish window, but keep the lord in
+# follow-up range instead of sending it beyond most heroes' attacks.
+const PERFECT_GUARD_REACTION_DISTANCE := GUARD_REACTION_DISTANCE
 const GUARD_REACTION_DURATION := 1.0
 const PERFECT_GUARD_REACTION_DURATION := 2.0
 const DEATH_ANIMATION_DURATION := 0.64
@@ -492,9 +495,12 @@ func receive_player_hit(amount: float, vulnerable_stance_damage: float = 0.0) ->
 		return {"damage": 0.0, "stance_broken": false}
 	if cast_invulnerable and not is_vulnerable():
 		return {"damage": 0.0, "stance_broken": false, "invulnerable": true}
-	var actual := amount * (stance_break_damage_multiplier if is_stance_broken() else 1.0)
+	var was_stance_broken := is_stance_broken()
+	var actual := amount * (stance_break_damage_multiplier if was_stance_broken else 1.0)
 	hurt_remaining = 0.14
 	var dealt := health_component.take_damage(actual)
+	if dealt > 0.0:
+		damage_received.emit(position, dealt, was_stance_broken)
 	var stance_broken_now := false
 	if dealt > 0.0 and is_vulnerable() and vulnerable_stance_damage > 0.0:
 		stance_broken_now = add_stance_damage(vulnerable_stance_damage)

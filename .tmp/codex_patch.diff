@@ -1,0 +1,196 @@
+*** Begin Patch
+*** Update File: scripts/presentation/battle_renderer.gd
+@@
+ const MA_CHAO_ATTACK_01_TEXTURES := [
+ 	preload("res://assets/art/characters/ma_chao/sprites/attack_1/1.png"),
+ 	preload("res://assets/art/characters/ma_chao/sprites/attack_1/2.png"),
+ 	preload("res://assets/art/characters/ma_chao/sprites/attack_1/3.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/4.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/5.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/6.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/7.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/8.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_1/9.png"),
+ ]
+ const MA_CHAO_ATTACK_02_TEXTURES := [
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_2/4.png"),
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_2/5.png"),
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_2/6.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/1.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/2.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/3.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/4.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/5.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/6.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/7.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/8.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_2/9.png"),
+ ]
+ const MA_CHAO_ATTACK_03_TEXTURES := [
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_3/7.png"),
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_3/8.png"),
+-	preload("res://assets/art/characters/ma_chao/sprites/attack_3/9.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/1.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/2.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/3.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/4.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/5.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/6.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/7.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/8.png"),
++	preload("res://assets/art/characters/ma_chao/sprites/attack_3/9.png"),
+@@
+-const MA_CHAO_ATTACK_01_FOOT_ANCHORS := [Vector2(64, 84), Vector2(64, 81), Vector2(64, 86)]
+-const MA_CHAO_ATTACK_02_FOOT_ANCHORS := [Vector2(64, 84), Vector2(64, 81), Vector2(64, 86)]
+-const MA_CHAO_ATTACK_03_FOOT_ANCHORS := [Vector2(64, 84), Vector2(64, 84), Vector2(64, 83)]
++const MA_CHAO_ATTACK_01_FOOT_ANCHORS := [
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++]
++const MA_CHAO_ATTACK_02_FOOT_ANCHORS := [
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++]
++const MA_CHAO_ATTACK_03_FOOT_ANCHORS := [
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++	Vector2(64, 84), Vector2(64, 84), Vector2(64, 84),
++]
+*** Update File: scripts/actors/prototype_hero_actor.gd
+@@
+ func _cancel_ma_chao_active() -> void:
+ 	ma_active_hold_pending = false
+ 	ma_active_hold_elapsed = 0.0
+ 	ma_active_next_thrust = 0.0
+ 	ma_active_cycle = 0
+ 	ma_active_release_requested = false
++	pending_attack = null
++	hit_delay_remaining = 0.0
++	attack_lock_remaining = 0.0
++	path_dash_request = null
++	path_dash_remaining = 0.0
++	path_dash_speed = 0.0
++	path_dash_distance_remaining = 0.0
++	if current_action == "active":
++		current_action = ""
++		action_elapsed = 0.0
++		action_duration = 0.0
++	clear_basic_attack_movement()
+@@
+ 	if reached_maximum or (reached_minimum and ma_active_release_requested):
+ 		_emit_ma_chao_thrust(true)
+-		ma_active_hold_pending = false
+-		ma_active_hold_elapsed = 0.0
+-		ma_active_next_thrust = 0.0
+-		ma_active_cycle = 0
+-		ma_active_release_requested = false
+-		_finish_action()
++		_finish_ma_chao_active()
++
++func _finish_ma_chao_active() -> void:
++	ma_active_hold_pending = false
++	ma_active_hold_elapsed = 0.0
++	ma_active_next_thrust = 0.0
++	ma_active_cycle = 0
++	ma_active_release_requested = false
++	pending_attack = null
++	hit_delay_remaining = 0.0
++	attack_lock_remaining = 0.0
++	path_dash_request = null
++	path_dash_remaining = 0.0
++	path_dash_speed = 0.0
++	path_dash_distance_remaining = 0.0
++	if current_action == "active":
++		combat_action_finished.emit("active")
++		current_action = ""
++		action_elapsed = 0.0
++		action_duration = 0.0
++	clear_basic_attack_movement()
+@@
+ 		"ma_chao":
+ 			if stage == 1:
+-				lock = 0.42
+-				hit_delay = 0.15
+-				request = AttackRequest.line(position, last_attack_direction, 154.0 + basic_range_bonus, 42.0, 1.32 + damage_bonus + momentum * 0.18, 12 + projectile_pierce_bonus, "银枪点阵")
+-				request.knockback = 190.0 + knockback_bonus
+-				request.stance_damage = 14.0 + stance_bonus
++				lock = 0.54
++				hit_delay = lock * 3.0 / 9.0
++				request = AttackRequest.fan(position, last_attack_direction, 154.0 + basic_range_bonus, deg_to_rad(118.0), 1.50 + damage_bonus + momentum * 0.18, 12 + projectile_pierce_bonus, "银枪横扫")
++				request.knockback = 220.0 + knockback_bonus
++				request.fan_knockback = true
++				request.stance_damage = 16.0 + stance_bonus
+ 			elif stage == 2:
+-				lock = 0.50
+-				hit_delay = 0.20
+-				request = AttackRequest.fan(position, last_attack_direction, 162.0 + basic_range_bonus, deg_to_rad(126.0), 1.70 + damage_bonus + momentum * 0.22, 18 + projectile_pierce_bonus, "流星横挑")
+-				request.knockback = 360.0 + knockback_bonus
+-				request.forced_displacement = 44.0
+-				request.fan_knockback = true
+-				request.stance_damage = 24.0 + stance_bonus
++				lock = 0.60
++				hit_delay = lock * 2.0 / 9.0
++				request = AttackRequest.line(position, last_attack_direction, 176.0 + basic_range_bonus, 30.0, 1.82 + damage_bonus + momentum * 0.22, 18 + projectile_pierce_bonus, "银枪突刺")
++				request.knockback = 300.0 + knockback_bonus
++				request.stance_damage = 22.0 + stance_bonus
+ 			else:
+ 				lock = 0.82
+-				hit_delay = 0.20
++				hit_delay = lock * 3.0 / 9.0
+@@
+ 	if hero_id == "ma_chao":
+ 		_consume_ma_chao_breakthrough(request)
+-	if hero_id == "ma_chao":
+-		_consume_ma_chao_breakthrough(request)
+*** Update File: scripts/domain/hero_catalog.gd
+@@
+ static func ultimate_cutin_for(hero_id: String) -> String:
+ 	return str(definition_for(hero_id).get("ultimate_cutin", ""))
++
++static func new_portrait_for(hero_id: String) -> String:
++	return {
++		"guan_yu": "res://assets/art/characters/hero_new/guanyu.png",
++		"zhang_fei": "res://assets/art/characters/hero_new/zhangfei.png",
++		"zhao_yun": "res://assets/art/characters/hero_new/zhaoyun.png",
++		"ma_chao": "res://assets/art/characters/hero_new/maochao.png",
++	}.get(hero_id, "")
+*** Update File: autoload/save_service.gd
+@@
+ var trial_equipped_hero_id := ""
++var run_hero_id := ""
+@@
+ func consume_run_hero_id() -> String:
+ 	_ensure_profile_shape()
++	if not run_hero_id.is_empty():
++		return run_hero_id
+ 	if not trial_equipped_hero_id.is_empty():
+-		var hero_id := trial_equipped_hero_id
++		run_hero_id = trial_equipped_hero_id
+ 		trial_equipped_hero_id = ""
+-		return hero_id
+-	return str(profile.get("equipped_hero_id", "guan_yu"))
++		return run_hero_id
++	run_hero_id = str(profile.get("equipped_hero_id", "guan_yu"))
++	return run_hero_id
++
++func clear_run_hero() -> void:
++	run_hero_id = ""
++	trial_equipped_hero_id = ""
+@@
+ 	trial_equipped_hero_id = ""
++	run_hero_id = ""
+ 	profile["equipped_hero_id"] = hero_id
+@@
+ 	if not HERO_CATALOG.is_playable(hero_id):
+ 		return false
++	run_hero_id = ""
+ 	trial_equipped_hero_id = hero_id
+*** Update File: autoload/scene_router.gd
+@@
+ func go_home() -> void:
+ 	LoadingOverlay.show_transition("正在回营 · 整备军务")
++	SaveService.clear_run_hero()
+ 	get_tree().change_scene_to_file(HOME_SCENE)
+*** End Patch
