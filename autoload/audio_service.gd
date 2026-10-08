@@ -5,7 +5,14 @@ const HERO_ATTACK_STREAMS: Array[AudioStream] = [
 	preload("res://assets/audio/hero/attack/attack2.mp3"),
 	preload("res://assets/audio/hero/attack/attack3.mp3"),
 	preload("res://assets/audio/hero/attack/attack4.wav"),
+	preload("res://assets/audio/hero/zhanhun/attack5.MP3"),
 ]
+const ZHANHUN_ATTACK_5_STREAM: AudioStream = preload("res://assets/audio/hero/zhanhun/attack5.MP3")
+const ZHANHUN_FLAME_STREAM: AudioStream = preload("res://assets/audio/hero/zhanhun/huohun_new.MP3")
+const ZHANHUN_THUNDER_STREAM: AudioStream = preload("res://assets/audio/hero/zhanhun/dianhun_new.MP3")
+const MA_CHAO_ULTIMATE_VOICE_STREAM: AudioStream = preload("res://assets/audio/hero/zhanhun/machaowushuang.MP3")
+const ZHANG_FEI_FOURTH_STREAM: AudioStream = preload("res://assets/audio/hero/zhanhun/zhangfei4duan.MP3")
+const MA_CHAO_ACTIVE_FINISH_VOICE_STREAM: AudioStream = preload("res://assets/audio/hero/voice/attack-shout-01.mp3")
 const HERO_ATTACK_SHOUT_STREAMS: Array[AudioStream] = [
 	preload("res://assets/audio/hero/voice/attack-shout-01.mp3"),
 	preload("res://assets/audio/hero/voice/attack-shout-02.mp3"),
@@ -80,6 +87,11 @@ var enemy_duel_cheers_enabled := false
 var enemy_duel_cheers_paused := false
 var enemy_duel_cheer_wait_remaining := -1.0
 var last_hero_attack_shout_index := -1
+var ma_chao_active_finish_voice_player: AudioStreamPlayer
+var ma_chao_ultimate_voice_player: AudioStreamPlayer
+var zhanhun_flame_player: AudioStreamPlayer
+var zhanhun_thunder_player: AudioStreamPlayer
+var zhang_fei_fourth_player: AudioStreamPlayer
 
 func _ready() -> void:
 	music_bus_index = _ensure_audio_bus(MUSIC_BUS_NAME)
@@ -101,6 +113,11 @@ func _ready() -> void:
 	enemy_duel_cheer_player = _create_sfx_player(ENEMY_DUEL_CHEER_STREAM, -5.0)
 	enemy_duel_cheer_player.finished.connect(_on_enemy_duel_cheer_finished)
 	hero_attack_shout_player = _create_sfx_player(HERO_ATTACK_SHOUT_STREAMS[0], -5.0)
+	ma_chao_active_finish_voice_player = _create_sfx_player(MA_CHAO_ACTIVE_FINISH_VOICE_STREAM, -5.0)
+	ma_chao_ultimate_voice_player = _create_sfx_player(MA_CHAO_ULTIMATE_VOICE_STREAM, -3.0)
+	zhanhun_flame_player = _create_sfx_player(ZHANHUN_FLAME_STREAM, -2.0)
+	zhanhun_thunder_player = _create_sfx_player(ZHANHUN_THUNDER_STREAM, -2.0)
+	zhang_fei_fourth_player = _create_sfx_player(ZHANG_FEI_FOURTH_STREAM, 2.0)
 	boss_entrance_voice_player = _create_sfx_player(BOSS_ENTRANCE_VOICE_STREAM, -1.0)
 	title_bgm_player = _create_music_player(TITLE_BGM_STREAM)
 	title_bgm_player.finished.connect(_on_title_bgm_finished)
@@ -141,6 +158,27 @@ func set_sfx_volume(value: float) -> void:
 func play_hero_attack_hit() -> void:
 	_play_random(HERO_ATTACK_STREAMS, -5.0)
 
+func play_attack5() -> void:
+	if sfx_players.is_empty():
+		return
+	var player := _next_sfx_player()
+	player.stream = ZHANHUN_ATTACK_5_STREAM
+	player.volume_db = -5.0
+	player.pitch_scale = 1.0
+	player.play()
+
+func play_battle_soul_flame() -> void:
+	_play_dedicated_sfx(zhanhun_flame_player)
+
+func play_battle_soul_thunder() -> void:
+	_play_dedicated_sfx(zhanhun_thunder_player)
+
+func play_ma_chao_ultimate_voice() -> void:
+	_play_dedicated_sfx(ma_chao_ultimate_voice_player)
+
+func play_zhang_fei_fourth() -> void:
+	_play_dedicated_sfx(zhang_fei_fourth_player)
+
 func play_hero_miss() -> void:
 	_play_random(HERO_MISS_STREAMS, -7.0)
 
@@ -162,6 +200,11 @@ func play_guan_yu_blade_wave() -> void:
 
 func play_zhang_fei_ground_slam() -> void:
 	_play_dedicated_sfx(zhang_fei_ground_slam_player)
+
+func play_ma_chao_active_finish_voice() -> void:
+	if ma_chao_active_finish_voice_player == null or ma_chao_active_finish_voice_player.playing:
+		return
+	_play_dedicated_sfx(ma_chao_active_finish_voice_player)
 
 func play_hero_attack_shout() -> void:
 	if hero_attack_shout_player == null or hero_attack_shout_player.playing or HERO_ATTACK_SHOUT_STREAMS.is_empty():

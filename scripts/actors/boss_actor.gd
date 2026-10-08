@@ -83,7 +83,7 @@ const LV_BU_CHARGE_COOLDOWN := 6.4
 const LV_BU_GLAIVE_RETURN_COOLDOWN := 8.6
 const LV_BU_SLOW_SWEEP_COOLDOWN := 5.8
 const LV_BU_RUSH_COOLDOWN := 8.4
-const LV_BU_HIGH_RISK_INTERVAL := 8.0
+const LV_BU_HIGH_RISK_INTERVAL := 5.0
 const VULNERABLE_DEFAULT_STANCE_DAMAGE := 6.0
 const LV_BU_VULNERABLE_DURATION := 3.0
 const LV_BU_CHARGE_DURATION := 0.34
@@ -684,7 +684,7 @@ func max_health() -> float:
 	if archetype == Archetype.XIAHOU_DUN:
 		base_health = XIAHOU_DUN_BASE_HEALTH
 	elif archetype == Archetype.LV_BU:
-		base_health = LV_BU_BASE_HEALTH
+		base_health = LV_BU_BASE_HEALTH * 1.5
 	return base_health * float(THREAT_HEALTH_MULTIPLIERS[threat_tier])
 
 func is_recovering() -> bool:
@@ -876,7 +876,7 @@ func armor() -> float:
 	if archetype == Archetype.XIAHOU_DUN:
 		base_armor = XIAHOU_DUN_BASE_ARMOR
 	elif archetype == Archetype.LV_BU:
-		base_armor = LV_BU_BASE_ARMOR
+		base_armor = LV_BU_BASE_ARMOR * 1.25
 	return base_armor + float(threat_tier) * 2.0
 
 func _approach_player(delta: float, player_position: Vector2) -> bool:
@@ -1282,9 +1282,13 @@ func _queue_lv_bu_combo(player_position: Vector2) -> void:
 		options.append("charge_three_strike")
 		if player_is_attacking or distance_to_player >= IDEAL_ENGAGE_MAX_RANGE + 24.0:
 			options.append("charge_three_strike")
+		if distance_to_player >= 300.0:
+			options.append("charge_three_strike")
 	if whirl_ready:
 		options.append("sweep_whirl")
 		if player_is_attacking or _player_is_stationary():
+			options.append("sweep_whirl")
+		if phase >= 2:
 			options.append("sweep_whirl")
 	if _is_action_ready("lvbu_slow_sweep") and whirl_ready:
 		options.append("slow_skyfall")
@@ -1305,9 +1309,9 @@ func _queue_lv_bu_combo(player_position: Vector2) -> void:
 		options.append("cyclone_thrust")
 		if player_is_attacking or _player_is_stationary():
 			options.append("cyclone_thrust")
-	# A ready ultimate cannot be deferred forever by random selection. After two
-	# missed combo rolls, force a readable finisher, preferring the slow setup.
-	if whirl_ready and lv_bu_whirl_ready_misses >= 2:
+	# A ready ultimate cannot be deferred forever by random selection. After one
+	# missed combo roll, force a readable finisher, preferring the slow setup.
+	if whirl_ready and lv_bu_whirl_ready_misses >= 1:
 		options = ["slow_skyfall" if _is_action_ready("lvbu_slow_sweep") else "warlord_three_strike"]
 	else:
 		while options.size() > 1 and options.has(last_combo_id):

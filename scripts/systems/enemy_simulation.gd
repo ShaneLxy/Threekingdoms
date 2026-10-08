@@ -32,7 +32,7 @@ const DUEL_WALL_SIDE_BOTTOM := 3
 const CAPACITY := 400
 const MAX_DEATH_RECORDS := 160
 const DEATH_DISPLAY_DURATION := 0.72
-const DEATH_ANIMATION_DURATION := 0.45
+const DEATH_ANIMATION_DURATION := 0.36
 const DEATH_FADE_DELAY := 0.42
 const DEATH_LAUNCH_CHANCE := 0.20
 const DEATH_LAUNCH_SPEED := 980.0
@@ -44,6 +44,8 @@ const DEATH_COLLISION_MAX_TARGETS := 2
 const LAUNCH_COLLISION_RADIUS := 29.0
 const LAUNCH_DECELERATION := 2100.0
 const LAUNCH_MIN_SPEED := 170.0
+const MA_CHAO_AIRBORNE_BASE_HEIGHT := 110.0
+const MA_CHAO_AIRBORNE_MIN_HEIGHT := 44.0
 const FORMATION_SQUAD_SIZE := 6
 const FORMATION_SLOT_ANGLE_STEP := 0.0959931
 const FORMATION_SECTOR_ANGLES := [-PI * 0.5, PI, 0.0]
@@ -248,6 +250,8 @@ var death_velocities: Array[Vector2] = []
 var death_impact_charges := PackedByteArray()
 var launch_timers := PackedFloat32Array()
 var launch_durations := PackedFloat32Array()
+var launch_airborne_heights := PackedFloat32Array()
+var launch_airborne_tilts := PackedFloat32Array()
 var launch_velocities: Array[Vector2] = []
 var launch_collision_damages := PackedFloat32Array()
 var launch_collision_knockbacks := PackedFloat32Array()
@@ -303,6 +307,11 @@ var siege_health_multiplier := 1.0
 var siege_damage_multiplier := 1.0
 var siege_armor_bonus := 0.0
 var siege_target_provider: Callable
+var ally_target_provider: Callable
+var ally_target_positions: Array[Vector2] = []
+var ally_target_ids := PackedInt32Array()
+var ally_target_active := PackedByteArray()
+var ally_target_positions_by_enemy: Array[Vector2] = []
 var siege_target_positions: Array[Vector2] = []
 var siege_target_kinds := PackedByteArray()
 var siege_target_ids := PackedInt32Array()
@@ -398,6 +407,8 @@ func _ready() -> void:
 	death_impact_charges.resize(CAPACITY)
 	launch_timers.resize(CAPACITY)
 	launch_durations.resize(CAPACITY)
+	launch_airborne_heights.resize(CAPACITY)
+	launch_airborne_tilts.resize(CAPACITY)
 	launch_velocities.resize(CAPACITY)
 	launch_collision_damages.resize(CAPACITY)
 	launch_collision_knockbacks.resize(CAPACITY)
@@ -527,6 +538,9 @@ func set_siege_morale(stacks: int) -> void:
 func set_siege_target_provider(value: Callable) -> void:
 	siege_target_provider = value
 
+func set_ally_target_provider(value: Callable) -> void:
+	ally_target_provider = value
+
 func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	bounds = world_bounds
 	battle_mode = selected_mode
@@ -556,6 +570,9 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 	navigation_replan_timers.resize(CAPACITY)
 	navigation_waypoint_active.resize(CAPACITY)
 	navigation_preferred_sides.resize(CAPACITY)
+	ally_target_positions_by_enemy.resize(CAPACITY)
+	ally_target_ids.resize(CAPACITY)
+	ally_target_active.resize(CAPACITY)
 	siege_target_positions.resize(CAPACITY)
 	siege_target_kinds.resize(CAPACITY)
 	siege_target_ids.resize(CAPACITY)
@@ -598,6 +615,9 @@ func reset(world_bounds: Rect2, selected_mode: String = "story") -> void:
 		patrol_offsets[id] = Vector2.ZERO
 		attack_wait_times[id] = 0.0
 		attack_turn_grants[id] = 0
+		ally_target_positions_by_enemy[id] = Vector2.ZERO
+		ally_target_ids[id] = -1
+		ally_target_active[id] = 0
 		siege_target_positions[id] = Vector2.ZERO
 		siege_target_kinds[id] = SiegeTargetKind.HERO
 		siege_target_ids[id] = -1
@@ -2848,6 +2868,8 @@ func tick(delta: float, player_position: Vector2) -> void:
 	layer_refresh_remaining = maxf(0.0, layer_refresh_remaining - delta)
 	layer_rotation_remaining = maxf(0.0, layer_rotation_remaining - delta)
 	if layer_refresh_remaining <= 0.0:
+		if ally_target_provider.is_valid():
+			_refresh_ally_targets(player_position)
 		if battle_mode == "siege" and siege_target_provider.is_valid():
 			_refresh_siege_targets(player_position)
 		_assign_desired_behavior_layers(player_position)
@@ -3287,6 +3309,39 @@ func update_tianji_position(id: int, at: Vector2) -> bool:
 func is_tianji_lifted(id: int) -> bool:
 	return id >= 0 and id < CAPACITY and active[id] == 1 and tianji_lifted[id] == 1
 
+func launch_enemy_ma_chao(id: int, duration: float, landing_damage: float, landing_knockback: float) -> bool:
+	if id < 0 or id >= CAPACITY or (active[id] == 0 and death_states[id] == DeathState.NONE):
+		return false
+	if types[id] in [EnemyType.ELITE, EnemyType.GUARD, EnemyType.CAVALRY] or duration <= 0.0:
+		return false
+	var resistance := _knockback_resistance(types[id])
+	var airborne_height := clampf(MA_CHAO_AIRBORNE_BASE_HEIGHT * resistance, MA_CHAO_AIRBORNE_MIN_HEIGHT, MA_CHAO_AIRBORNE_BASE_HEIGHT)
+	launch_airborne_heights[id] = airborne_height
+	launch_airborne_tilts[id] = randf_range(deg_to_rad(-18.0), deg_to_rad(18.0))
+	launch_timers[id] = duration
+	launch_durations[id] = duration
+	launch_velocities[id] = Vector2.ZERO
+	launch_collision_damages[id] = 0.0
+	launch_collision_knockbacks[id] = 0.0
+	launch_collision_charges[id] = 0
+	launch_relay_charges[id] = 0
+	launch_landing_damages[id] = maxf(0.0, landing_damage)
+	launch_landing_knockbacks[id] = maxf(0.0, landing_knockback)
+	launch_hold_until_durations[id] = 1
+	launch_hit_targets[id].clear()
+	facing_directions[id] = Vector2.UP
+	attack_states[id] = AttackState.APPROACH
+	attack_timers[id] = 0.0
+	current_attack_kinds[id] = "ma_chao_airborne"
+	knockback_velocities[id] = Vector2.ZERO
+	forced_displacement_timers[id] = 0.0
+	forced_displacement_velocities[id] = Vector2.ZERO
+	hurt_timers[id] = maxf(hurt_timers[id], duration)
+	hit_feedback_strengths[id] = maxf(hit_feedback_strengths[id], 1.65)
+	hit_feedback_durations[id] = maxf(hit_feedback_durations[id], 0.14)
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	return true
+
 func launch_enemy(id: int, direction: Vector2, speed: float, duration: float, collision_damage: float, collision_knockback: float, collision_targets: int, relay_count: int = 0, landing_damage: float = 0.0, landing_knockback: float = 0.0, hold_until_duration: bool = false) -> bool:
 	if id < 0 or id >= CAPACITY or (active[id] == 0 and death_states[id] == DeathState.NONE):
 		return false
@@ -3326,10 +3381,24 @@ func launch_visual_offset(id: int) -> Vector2:
 	if not is_enemy_launched(id) or launch_durations[id] <= 0.0:
 		return Vector2.ZERO
 	var progress := clampf(1.0 - launch_timers[id] / launch_durations[id], 0.0, 1.0)
+	if current_attack_kinds[id] == "ma_chao_airborne":
+		var height := 4.0 * launch_airborne_heights[id] * progress * (1.0 - progress)
+		return Vector2.UP * height
 	return Vector2.UP * sin(progress * PI) * 78.0
+
+func is_ma_chao_airborne(id: int) -> bool:
+	return id >= 0 and id < CAPACITY and is_enemy_launched(id) and current_attack_kinds[id] == "ma_chao_airborne"
+
+func get_airborne_tilt(id: int) -> float:
+	return launch_airborne_tilts[id] if id >= 0 and id < CAPACITY else 0.0
 
 func _tick_enemy_launch(id: int, delta: float) -> void:
 	launch_timers[id] = maxf(0.0, launch_timers[id] - delta)
+	# 马超的击飞只改变视觉高度，不改变敌人的地面坐标，也不触发空中撞人。
+	if current_attack_kinds[id] == "ma_chao_airborne":
+		if launch_timers[id] <= 0.0:
+			_stop_enemy_launch(id)
+		return
 	var velocity := launch_velocities[id]
 	var direction := velocity.normalized()
 	if direction.length_squared() > 0.01:
@@ -3376,9 +3445,9 @@ func _apply_launch_collision(source_id: int, direction: Vector2, start_position:
 func _stop_enemy_launch(id: int) -> void:
 	var was_active := active[id] == 1
 	var landing_damage := launch_landing_damages[id]
-	var landing_knockback := launch_landing_knockbacks[id]
 	if was_active and landing_damage > 0.0:
-		apply_hit(id, landing_damage, facing_directions[id], landing_knockback)
+		# 落地只结算伤害，不再施加水平击退，避免敌人像弹簧一样再次弹起。
+		apply_hit(id, landing_damage, Vector2.ZERO, 0.0)
 	_clear_launch_state(id)
 	if was_active:
 		hurt_timers[id] = maxf(hurt_timers[id], 0.12)
@@ -3390,6 +3459,8 @@ func _can_be_launched(id: int) -> bool:
 func _clear_launch_state(id: int) -> void:
 	launch_timers[id] = 0.0
 	launch_durations[id] = 0.0
+	launch_airborne_heights[id] = 0.0
+	launch_airborne_tilts[id] = 0.0
 	launch_velocities[id] = Vector2.ZERO
 	launch_collision_damages[id] = 0.0
 	launch_collision_knockbacks[id] = 0.0
@@ -3557,6 +3628,23 @@ func resolve_cavalry_clash(id: int, direction: Vector2) -> bool:
 	enemy_attack_cancelled.emit(id)
 	return true
 
+func apply_guard_counter_repel(id: int, direction: Vector2) -> bool:
+	if id < 0 or id >= CAPACITY or active[id] == 0 or types[id] in [EnemyType.ELITE, EnemyType.GUARD, EnemyType.BANNER]:
+		return false
+	_cancel_attack(id, 0.55)
+	var repel_direction := direction.normalized()
+	if repel_direction.length_squared() <= 0.01:
+		repel_direction = Vector2.RIGHT if facing_directions[id].x >= 0.0 else Vector2.LEFT
+	knockback_velocities[id] = repel_direction * 90.0
+	hurt_timers[id] = maxf(hurt_timers[id], 0.18)
+	hit_feedback_strengths[id] = 1.1
+	hit_feedback_durations[id] = 0.12
+	hit_feedback_timers[id] = hit_feedback_durations[id]
+	desired_behavior_layers[id] = EngagementLayer.ENGAGE
+	decision_timers[id] = 0.0
+	enemy_attack_cancelled.emit(id)
+	return true
+
 func issue_banner_command(id: int) -> bool:
 	if id < 0 or id >= CAPACITY or active[id] == 0 or types[id] != EnemyType.BANNER:
 		return false
@@ -3640,6 +3728,7 @@ func _begin_death(id: int, direction: Vector2) -> void:
 		duel_roles[id] = DuelRole.NONE
 		duel_slots[id] = -1
 	var preserves_launch := launch_timers[id] > 0.0
+	var preserves_ma_chao_airborne := current_attack_kinds[id] == "ma_chao_airborne"
 	var launch_offset := launch_visual_offset(id)
 	var launch_velocity := launch_velocities[id]
 	active[id] = 0
@@ -3704,7 +3793,13 @@ func _begin_death(id: int, direction: Vector2) -> void:
 		"type": type,
 		"facing": facing_directions[id],
 		"state": death_state,
-		"remaining": DEATH_DISPLAY_DURATION,
+		"ma_chao_airborne": preserves_ma_chao_airborne,
+		"airborne_elapsed": 0.0,
+		"airborne_duration": launch_durations[id],
+		"airborne_height": launch_airborne_heights[id],
+		"airborne_tilt": launch_airborne_tilts[id],
+		"airborne_landed": false,
+		"remaining": DEATH_DISPLAY_DURATION + launch_durations[id] + DEATH_ANIMATION_DURATION + 0.18,
 		"velocity": death_velocity,
 		"impact_charges": death_impact_charge_count,
 	})
@@ -3738,6 +3833,13 @@ func _tick_death_records(delta: float) -> void:
 	for index in range(death_records.size() - 1, -1, -1):
 		var record: Dictionary = death_records[index]
 		record["remaining"] = maxf(0.0, float(record.get("remaining", 0.0)) - delta)
+		if bool(record.get("ma_chao_airborne", false)) and not bool(record.get("airborne_landed", false)):
+			var airborne_duration := maxf(0.01, float(record.get("airborne_duration", 0.72)))
+			var airborne_elapsed := minf(airborne_duration, float(record.get("airborne_elapsed", 0.0)) + delta)
+			record["airborne_elapsed"] = airborne_elapsed
+			if airborne_elapsed >= airborne_duration:
+				record["airborne_landed"] = true
+				record["remaining"] = maxf(float(record.get("remaining", 0.0)), DEATH_ANIMATION_DURATION + 0.18)
 		if int(record.get("state", DeathState.FALLING)) == DeathState.LAUNCHED:
 			var velocity: Vector2 = record.get("velocity", Vector2.ZERO)
 			var direction := velocity.normalized()
@@ -3914,10 +4016,34 @@ func refresh_siege_targets_now(player_position: Vector2) -> void:
 	layer_refresh_remaining = minf(layer_refresh_remaining, 0.08)
 
 func _combat_target_position(id: int, player_position: Vector2) -> Vector2:
+	if id >= 0 and id < ally_target_positions_by_enemy.size() and ally_target_active[id] == 1:
+		var ally_target := ally_target_positions_by_enemy[id]
+		if ally_target.is_finite() and ally_target.length_squared() > 0.01:
+			return ally_target
 	if battle_mode != "siege" or not siege_target_provider.is_valid() or id < 0 or id >= siege_target_positions.size():
 		return player_position
 	var target := siege_target_positions[id]
 	return target if target.is_finite() and target.length_squared() > 0.01 else player_position
+
+func ally_target_id_for_enemy(id: int) -> int:
+	if id < 0 or id >= ally_target_ids.size() or ally_target_active[id] == 0:
+		return -1
+	return ally_target_ids[id]
+
+func _refresh_ally_targets(player_position: Vector2) -> void:
+	for id in range(CAPACITY):
+		ally_target_active[id] = 0
+		ally_target_ids[id] = -1
+		if active[id] == 0 or attack_states[id] != AttackState.APPROACH:
+			continue
+		var value = ally_target_provider.call(id, positions[id], types[id], player_position)
+		if value is Dictionary and str((value as Dictionary).get("kind", "")) == "ally":
+			var target := value as Dictionary
+			var target_position = target.get("position", Vector2.ZERO)
+			if target_position is Vector2 and (target_position as Vector2).is_finite():
+				ally_target_positions_by_enemy[id] = target_position
+				ally_target_ids[id] = int(target.get("id", -1))
+				ally_target_active[id] = 1
 
 func _is_siege_nonhero_target(id: int) -> bool:
 	return battle_mode == "siege" and siege_target_provider.is_valid() and siege_target_kind_for_enemy(id) != SiegeTargetKind.HERO

@@ -33,29 +33,47 @@ func resolve_hero_attack(request: AttackRequest, hero_attack: float, hero_bonus:
 		if knockback_direction.length_squared() <= 0.01:
 			knockback_direction = request.direction
 		var knockback := request.knockback
+		var forced_displacement := request.forced_displacement
+		var forced_displacement_duration := request.forced_displacement_duration
+		if request.ma_chao_gather_radius > 0.0 and enemy_type != EnemySimulation.EnemyType.ELITE:
+			knockback_direction = (request.origin - enemies.positions[id]).normalized()
+			knockback = 0.0
+			forced_displacement = request.ma_chao_gather_radius
+			forced_displacement_duration = 0.16
 		if request.prevent_elite_knockback and enemies.get_type(id) == EnemySimulation.EnemyType.ELITE:
 			knockback = 0.0
 		if empowered_targets.has(id):
 			knockback *= request.empowered_knockback_multiplier
+		# 马超专属空中击飞不走普通水平击退，命中后直接交给空中状态接管视觉和落地伤害。
+		if request.ma_chao_airborne:
+			knockback = 0.0
+			request.forced_displacement = 0.0
+			request.forced_displacement_duration = 0.0
+		# 马超先建立空中状态，再结算伤害；致死时死亡记录才能继承原地升空表现。
+		if request.ma_chao_airborne and request.launches_enemies and not enemies.is_ma_chao_airborne(id) and (request.launch_target_limit <= 0 or launched_targets < request.launch_target_limit):
+			if enemies.launch_enemy_ma_chao(id, request.launch_duration, maxf(1.0, damage * request.launch_landing_damage), request.launch_landing_knockback):
+				launched_targets += 1
 		# Death signals are emitted synchronously by apply_hit(), so stage the
 		# action kind first and clear it again for survivors.
 		enemies.set_death_action_kind(id, request.action_kind)
 		if not enemies.apply_hit(id, damage, knockback_direction, knockback, request.ignore_knockback_resistance, request.forced_displacement, request.forced_displacement_duration):
 			enemies.set_death_action_kind(id, AttackRequest.ActionKind.NONE)
-		if request.launches_enemies and (request.launch_target_limit <= 0 or launched_targets < request.launch_target_limit):
-			if enemies.launch_enemy(
-				id,
-				knockback_direction,
-				request.launch_speed,
-				request.launch_duration,
-				maxf(1.0, damage * request.launch_collision_damage_multiplier),
-				request.launch_collision_knockback,
-				request.launch_collision_max_targets,
-				request.launch_relay_count,
-				request.launch_landing_damage,
-				request.launch_landing_knockback,
-				request.launch_hold_until_duration
-			):
+		if request.launches_enemies and not request.ma_chao_airborne and (request.launch_target_limit <= 0 or launched_targets < request.launch_target_limit):
+			var launched := false
+			launched = enemies.launch_enemy(
+					id,
+					knockback_direction,
+					request.launch_speed,
+					request.launch_duration,
+					maxf(1.0, damage * request.launch_collision_damage_multiplier),
+					request.launch_collision_knockback,
+					request.launch_collision_max_targets,
+					request.launch_relay_count,
+					request.launch_landing_damage,
+					request.launch_landing_knockback,
+					request.launch_hold_until_duration
+				)
+			if launched:
 				launched_targets += 1
 		if request.slow_duration > 0.0 and request.slow_multiplier < 1.0:
 			enemies.apply_slow(id, request.slow_multiplier, request.slow_duration)

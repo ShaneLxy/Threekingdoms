@@ -30,6 +30,7 @@ const HERO_ATTACK_SHOUT_CHANCE := 0.20
 const ELITE_ACTOR_SCENE := preload("res://scenes/actors/elite_actor.tscn")
 const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 const BATTLEFIELD_LAYOUT = preload("res://scripts/domain/battlefield_layout.gd")
+const SHENJI_SOUL_SYSTEM = preload("res://scripts/systems/shenji_soul_system.gd")
 const BATTLE_WEATHER_MODES := ["sunny", "rain", "storm", "snow"]
 const BOSS_TRIAL_STARTING_UPGRADES := 5
 const BOSS_TRIAL_LEVELS_PER_NAMED_DEFEAT := 5
@@ -52,6 +53,7 @@ const BOSS_DEFEAT_MERIT := 220.0
 const BOSS_TRIAL_ID := "lvbu"
 const BOSS_TRIAL_BOSS_DEFEAT_MERIT := 1100.0
 const BOSS_TRIAL_FIRST_CLEAR_MERIT := 600.0
+const BOSS_TRIAL_ELITE_DEFEAT_MERIT := 600.0
 # Rewarded refreshes are temporarily hidden. Keep the counter for runtime
 # compatibility so the ad path can be restored without changing draft flow.
 const UPGRADE_AD_REFRESH_LIMIT := 0
@@ -79,6 +81,12 @@ var battle_camera: Camera2D
 @onready var input_router: InputRouter = $InputRouter
 @onready var hud: BattleHud = $HudLayer/BattleHud
 @onready var ultimate_cutin: UltimateCutin = $UltimateCutinLayer/UltimateCutin
+var ma_chao_ultimate_system := MaChaoUltimateSystem.new()
+var shenji_soul_system := SHENJI_SOUL_SYSTEM.new()
+var ma_chao_charge_hit_targets: Dictionary = {}
+var ma_chao_ally_aggro: Dictionary = {}
+const MA_CAVALRY_AGGRO_DURATION := 3.0
+const MA_CAVALRY_AGGRO_RADIUS := 260.0
 
 var telegraphs: Array[Telegraph] = []
 var elites: Array[EliteActor] = []
@@ -127,6 +135,7 @@ var boss_trial_advance_after_levels := false
 var player_action_clash_consumed := false
 var guard_perfect_telegraphs: Dictionary = {}
 var guard_named_reward_consumed := false
+var guard_counter_triggered := false
 var upgrade_refreshes_remaining := UPGRADE_REFRESH_LIMIT
 var upgrade_ad_refreshes_remaining := UPGRADE_AD_REFRESH_LIMIT
 var result_double_claimed := false
@@ -139,6 +148,7 @@ var run_strategy_id := UpgradeSystem.DRAFT_TENDENCY_BALANCED
 var upgrade_selection_mode := "manual"
 var duel_formation_was_sealed := false
 var damage_numbers_enabled := true
+var soul_indicator_visibility: Dictionary = {}
 var overtime_settlement_active := false
 var overtime_settlement_remaining := 0.0
 var pending_named_formations: Array[Dictionary] = []
@@ -168,6 +178,7 @@ func _ready() -> void:
 	pending_named_formation_safe_remaining = 0.0
 	armed_named_formation.clear()
 	named_formation_warning_remaining = 0.0
+	soul_indicator_visibility.clear()
 	pending_siege_enemy_attacks.clear()
 	siege_target_refresh_pending = false
 	siege_companion = null
@@ -196,6 +207,7 @@ func _ready() -> void:
 	# 交给每个敌兵逐帧寻路、碰撞，避免城楼附近单位聚集时严重掉帧。
 	enemies.set_navigation_obstacles(active_obstacles)
 	loot.reset()
+	battle_souls.configure_profile(profile)
 	battle_souls.reset()
 	player.reset_for_run(active_world_bounds)
 	player.clear_battle_souls()
@@ -217,6 +229,8 @@ func _ready() -> void:
 	if director.is_boss_trial():
 		for _level in range(2, director.level + 1):
 			player.apply_level_up_benefits()
+	if player is PrototypeHeroActor and player.hero_id == "ma_chao":
+		player.ma_battle_level = director.level
 	enemies.set_threat_tier(director.threat_tier())
 	enemies.set_difficulty_ramp(director.difficulty_multiplier())
 	upgrades.configure_talent_pool(profile, player.hero_id)
@@ -227,11 +241,15 @@ func _ready() -> void:
 	# to the central stone arena.
 	var renderer_bounds := BOSS_TRIAL_WORLD_BOUNDS if director.is_boss_trial() else active_world_bounds
 	renderer.configure(renderer_bounds, enemies, player, boss, telegraphs, loot, elites, _active_battlefield_id())
+	ma_chao_ultimate_system.allies_reset()
+	renderer.set_ma_chao_ultimate_system(ma_chao_ultimate_system)
 	renderer.set_battle_soul_system(battle_souls)
 	renderer.set_siege_system(siege if siege.is_active() else null)
 	renderer.set_battle_camera(battle_camera)
 	renderer.set_damage_numbers_enabled(damage_numbers_enabled)
 	renderer.set_weather_mode("sunny" if run_mode == "endless" else _battle_weather_for(profile))
+	shenji_soul_system.configure(Callable(self, "_shenji_targets"), Callable(self, "_shenji_damage"), Callable(renderer, "shenji_visual_event"))
+	shenji_soul_system.reset()
 	tianji.configure(player, enemies, elites, boss, battle_camera, upgrades.tianji_slot_capacity())
 	hud.configure(player, boss, director, elites, tianji)
 	hud.set_siege_system(siege if siege.is_active() else null)
@@ -243,6 +261,12 @@ func _ready() -> void:
 	hud.set_upgrade_ad_refreshes_remaining(upgrade_ad_refreshes_remaining)
 	input_router.configure(player, hud)
 	player.attack_requested.connect(_on_player_attack)
+	ma_chao_ultimate_system.configure(Callable(self, "_ma_chao_ultimate_find_target"), Callable(self, "_ma_chao_ultimate_damage_target"), director.is_boss_trial())
+	ma_chao_ultimate_system.configure_target_rules(director.is_boss_trial())
+	enemies.set_ally_target_provider(Callable(self, "_enemy_ally_target"))
+	ma_chao_ally_aggro.clear()
+	ma_chao_ultimate_system.charge_attack_requested.connect(_on_ma_chao_charge_attack)
+	ma_chao_ultimate_system.cavalry_attack_requested.connect(_on_ma_chao_cavalry_attack)
 	player.visual_effect_started.connect(_on_player_visual_effect_started)
 	player.camera_shake_requested.connect(_on_player_camera_shake)
 	player.combat_action_started.connect(_on_player_combat_action_started)
@@ -251,7 +275,10 @@ func _ready() -> void:
 	player.ultimate_started.connect(_on_ultimate_started)
 	player.died.connect(_on_player_died)
 	player.damaged.connect(_on_player_damaged)
+	if player.has_signal("ma_damage_redirect_requested"):
+		player.ma_damage_redirect_requested.connect(_on_ma_damage_redirect_requested)
 	enemies.enemy_died.connect(_on_enemy_died)
+	enemies.enemy_damaged.connect(_on_enemy_damaged)
 	loot.collected.connect(_on_loot_collected)
 	battle_souls.soul_spawned.connect(_on_battle_soul_spawned)
 	battle_souls.soul_collected.connect(_on_battle_soul_collected)
@@ -284,10 +311,12 @@ func _ready() -> void:
 	siege.arrow_tower_damaged.connect(_on_siege_arrow_tower_damaged)
 	siege.garrison_volley_requested.connect(_on_siege_garrison_volley_requested)
 	boss.telegraph_requested.connect(_add_telegraph)
+	boss.damage_received.connect(_on_boss_damage_received)
 	boss.skill_impact_requested.connect(_on_named_skill_impact)
 	boss.rush_started.connect(_on_boss_rush_started)
 	boss.summon_requested.connect(_on_boss_summon)
 	boss.phase_changed.connect(_on_boss_phase)
+	boss.attack_sound_requested.connect(_on_boss_attack_sound_requested)
 	boss.defeated.connect(_on_boss_defeated)
 	tianji.skill_windup_started.connect(_on_tianji_windup_started)
 	tianji.skill_impacted.connect(_on_tianji_impacted)
@@ -329,6 +358,7 @@ func _ready() -> void:
 		LoadingOverlay.finish_transition()
 
 func _exit_tree() -> void:
+	ma_chao_ultimate_system.allies_reset()
 	AudioService.stop_hero_firewheel_loop()
 	AudioService.stop_all_tianji_sounds()
 	AudioService.stop_enemy_duel_cheers()
@@ -447,6 +477,7 @@ func _process(delta: float) -> void:
 	if revive_prompt_active:
 		return
 	_update_named_target_indicators()
+	_update_battle_soul_indicators()
 	_tick_enemy_battle_voice(delta)
 	clash_slow_remaining = maxf(0.0, clash_slow_remaining - delta)
 	var clash_time_scale := CLASH_TIME_SCALE if clash_slow_remaining > 0.0 else 1.0
@@ -461,6 +492,14 @@ func _process(delta: float) -> void:
 	player.tick_guard(simulation_delta)
 	player.tick(simulation_delta, move_direction)
 	player.position = _resolve_movement_against_obstacles(player_move_origin, player.position, 16.0)
+	shenji_soul_system.tick(simulation_delta, player.position, paused or upgrade_open, player.is_defeated())
+	var ma_chao_soul_sync_enabled: bool = player.hero_id == "ma_chao" and player.ma_cavalry_soul_enabled()
+	var current_companion_gale_ratio := player.battle_soul_gale_ratio() if ma_chao_soul_sync_enabled else -1.0
+	var current_companion_has_thunder: bool = player.has_battle_soul("thunder") if ma_chao_soul_sync_enabled else false
+	var current_companion_has_flame: bool = player.has_battle_soul("flame") if ma_chao_soul_sync_enabled else false
+	ma_chao_ultimate_system.battlefield_only_named = director.is_boss_trial() and enemies.is_named_formation_active() and (boss.active or not elites.is_empty())
+	ma_chao_ultimate_system.tick(simulation_delta, player.position, _battle_visible_world_rect(), current_companion_gale_ratio, current_companion_has_thunder, current_companion_has_flame)
+	_tick_ma_chao_ally_aggro(simulation_delta)
 	_tick_player_action_clash()
 	_tick_player_move_audio(simulation_delta, move_direction)
 	_update_battle_camera(simulation_delta)
@@ -992,6 +1031,7 @@ func _on_elite_requested(elite_id: String, scheduled_at: Vector2) -> EliteActor:
 	if director.is_siege() and scheduled_at.is_finite():
 		elite_spawn = scheduled_at
 	elite.activate(archetype, elite_spawn, threat_tier)
+	elite.damage_received.connect(_on_elite_damage_received)
 	elite.telegraph_requested.connect(_on_elite_telegraph)
 	elite.skill_impact_requested.connect(_on_named_skill_impact)
 	elite.defeated.connect(_on_elite_defeated)
@@ -1068,6 +1108,41 @@ func _update_named_target_indicators() -> void:
 			var kind := _elite_indicator_kind(elite.archetype)
 			targets.append(_named_target_indicator(elite.position, screen_center, kind))
 	hud.set_named_target_indicators(targets)
+
+func _update_battle_soul_indicators() -> void:
+	if paused or upgrade_open or finished or victory_cinematic_active or player_death_cinematic_active or revive_prompt_active:
+		soul_indicator_visibility.clear()
+		hud.clear_soul_target_indicators()
+		return
+	var visible_world_rect := _battle_visible_world_rect()
+	if visible_world_rect.size.x <= 0.0 or battle_souls == null:
+		hud.clear_soul_target_indicators()
+		return
+	var screen_center := battle_camera.get_screen_center_position()
+	var candidates: Array[Dictionary] = []
+	var live_ids: Dictionary = {}
+	for drop in battle_souls.drops:
+		var soul_id := str(drop.get("id", "gale"))
+		var at: Vector2 = drop.get("position", Vector2.INF)
+		if not at.is_finite() or float(drop.get("remaining", 0.0)) <= 0.0:
+			continue
+		var identity := "%s:%d:%d" % [soul_id, roundi(at.x), roundi(at.y)]
+		live_ids[identity] = true
+		var inside := visible_world_rect.grow(-16.0).has_point(at)
+		if not soul_indicator_visibility.has(identity):
+			soul_indicator_visibility[identity] = not visible_world_rect.grow(-24.0).has_point(at)
+		elif soul_indicator_visibility[identity] and inside:
+			soul_indicator_visibility[identity] = false
+		elif not soul_indicator_visibility[identity] and not visible_world_rect.grow(-24.0).has_point(at):
+			soul_indicator_visibility[identity] = true
+		if bool(soul_indicator_visibility.get(identity, false)):
+			candidates.append({"soul_id": soul_id, "direction": (at - screen_center).normalized(), "distance": at.distance_squared_to(screen_center), "identity": identity})
+	var known_ids: Array = soul_indicator_visibility.keys()
+	for identity in known_ids:
+		if not live_ids.has(identity):
+			soul_indicator_visibility.erase(identity)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("distance", INF)) < float(b.get("distance", INF)))
+	hud.set_soul_target_indicators(candidates.slice(0, 8))
 
 func _is_named_target_offscreen(target_position: Vector2, visible_world_rect: Rect2) -> bool:
 	return not visible_world_rect.grow(-32.0).has_point(target_position)
@@ -1160,6 +1235,10 @@ func _on_boss_summon(phase: int) -> void:
 		_spawn_boss_guard(EnemySimulation.EnemyType.SWORD, base + Vector2(0, 45))
 		_spawn_boss_guard(EnemySimulation.EnemyType.SWORD, base + Vector2(0, 82))
 
+func _on_boss_attack_sound_requested(sound_type: String) -> void:
+	if boss.archetype == BossActor.Archetype.XIAHOU_DUN and sound_type == "fire_blast":
+		AudioService.play_zhang_fei_fourth()
+
 func _on_boss_phase(phase: int) -> void:
 	_cancel_boss_telegraphs()
 	player.add_ultimate_energy(5.0)
@@ -1197,8 +1276,14 @@ func _on_player_attack(request: AttackRequest) -> void:
 	if player.has_battle_soul("thunder") or player.has_battle_soul("flame"):
 		battle_soul_targets = _battle_soul_target_positions(request)
 	request.armor_ignore_ratio = player.armor_ignore_ratio_for_request(request)
-	if request.label in ["丈八跃砸", "据水断桥·跃砸", "蛇矛掷阵·裂地·首震"]:
+	if request.label in ["蛇矛掷阵·裂地·首震", "蛇矛掷阵·裂地", "蛇矛掷阵·撼地"] and not request.audio_emitted:
+		request.audio_emitted = true
+		AudioService.play_zhang_fei_fourth()
+	elif request.label in ["丈八跃砸", "据水断桥·跃砸"]:
 		AudioService.play_zhang_fei_ground_slam()
+	if request.label == "银枪落刃":
+		AudioService.play_zhang_fei_ground_slam()
+		renderer.add_ma_chao_fourth_quake(request.origin, request.direction, request.visual_scale)
 	if request.clears_projectiles:
 		_clear_projectiles_in_attack(request)
 	# Offensive weapon-clash resolution is intentionally hidden for this version.
@@ -1210,6 +1295,15 @@ func _on_player_attack(request: AttackRequest) -> void:
 	if siege.is_active() and siege.apply_player_attack(request, combat, player.total_attack()):
 		hit_count += 1
 	var combo_hit_count := hit_count
+	if player.hero_id == "ma_chao" and request.action_kind in [AttackRequest.ActionKind.BASIC, AttackRequest.ActionKind.ACTIVE] and not request.ma_chao_airborne and not request.displacement_only:
+		var ring := AttackRequest.circle(player.position, 64.0, 0.0, 24, "马超·环身震退")
+		ring.action_kind = request.action_kind
+		ring.displacement_only = true
+		ring.knockback = 105.0
+		ring.forced_displacement = 12.0
+		ring.forced_displacement_duration = 0.08
+		ring.one_hit_per_target = true
+		combat.resolve_hero_attack(ring, player.total_attack(), 0.0, enemies)
 	for elite in elites:
 		var elite_id := elite.get_instance_id()
 		var can_hit_elite := not request.one_hit_per_target or not request.hit_elite_ids.has(elite_id)
@@ -1297,6 +1391,11 @@ func _on_player_attack(request: AttackRequest) -> void:
 		request.breakout_granted = true
 	if hit_count > 0:
 		_record_player_attack_audio(request)
+		if not request.label.begins_with("战魂·"):
+			if player.has_battle_soul("flame"):
+				AudioService.play_battle_soul_flame()
+			if player.has_battle_soul("thunder"):
+				AudioService.play_battle_soul_thunder()
 	if combo_hit_count > 0:
 		hud.record_combo_hits(combo_hit_count)
 	player.on_attack_resolved(request, request.total_hits)
@@ -1316,7 +1415,10 @@ func _on_player_attack(request: AttackRequest) -> void:
 			var proc_request: AttackRequest = proc.get("request", null) as AttackRequest
 			if proc_request == null:
 				continue
-			renderer.add_battle_soul_proc(str(proc.get("id", "")), proc.get("position", player.position))
+			var proc_id := str(proc.get("id", ""))
+			var proc_position: Vector2 = proc.get("position", player.position)
+			var chain_points: Array[Vector2] = battle_soul_targets.duplicate()
+			renderer.add_battle_soul_proc(proc_id, proc_position, player.position, chain_points, player.battle_soul_flame_radius() if proc_id == "flame" else 78.0)
 			_on_player_attack(proc_request)
 
 func _battle_soul_target_positions(request: AttackRequest) -> Array[Vector2]:
@@ -1383,8 +1485,11 @@ func _tick_player_action_clash() -> void:
 	player.consume_weapon_clash_window()
 
 func _clear_projectiles_in_attack(request: AttackRequest) -> void:
-	for index in range(telegraphs.size() - 1, -1, -1):
-		var telegraph := telegraphs[index]
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if not telegraphs.has(telegraph):
+			continue
 		if telegraph.source_enemy_id < 0 or not enemies.is_active(telegraph.source_enemy_id):
 			continue
 		var enemy_type := enemies.get_type(telegraph.source_enemy_id)
@@ -1393,7 +1498,7 @@ func _clear_projectiles_in_attack(request: AttackRequest) -> void:
 		if not request_hits_telegraph_origin(request, telegraph) and not telegraph.hits_point(request.origin):
 			continue
 		renderer.cancel_projectiles_for_enemy(telegraph.source_enemy_id)
-		telegraphs.remove_at(index)
+		telegraphs.erase(telegraph)
 
 func request_hits_telegraph_origin(request: AttackRequest, telegraph: Telegraph) -> bool:
 	return combat.request_hits_point(request, telegraph.origin)
@@ -1403,14 +1508,17 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 	var clash_kind := _player_clash_kind(request)
 	if clash_kind == Telegraph.ClashKind.NONE:
 		return result
-	for index in range(telegraphs.size() - 1, -1, -1):
-		var telegraph := telegraphs[index]
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if not telegraphs.has(telegraph):
+			continue
 		if telegraph.clash_kind != clash_kind or telegraph.remaining > WEAPON_CLASH_WINDOW or not telegraph.hits_point(player.position):
 			continue
 		if _is_light_enemy_clash_telegraph(telegraph) and _can_clash_light_enemy(request, telegraph.source_enemy_id):
 			var enemy_id := telegraph.source_enemy_id
 			var enemy_type := enemies.get_type(enemy_id)
-			telegraphs.remove_at(index)
+			telegraphs.erase(telegraph)
 			request.excluded_enemy_ids[enemy_id] = true
 			if enemy_type == EnemySimulation.EnemyType.CAVALRY:
 				var clashed_cavalry_ids: Dictionary = result.get("cavalry_ids", {}) as Dictionary
@@ -1426,7 +1534,7 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 			return result
 		if telegraph.source == "boss" and boss.active and _can_clash_named_target(request, boss.position):
 			var perfect := telegraph.remaining <= PERFECT_WEAPON_CLASH_WINDOW
-			telegraphs.remove_at(index)
+			telegraphs.erase(telegraph)
 			var boss_broken := boss.add_stance_damage(_clash_stance_damage(perfect, clash_kind), perfect)
 			result["boss"] = true
 			_finalize_weapon_clash((player.position + boss.position) * 0.5, perfect, clash_kind, boss.display_name(), boss_broken, boss)
@@ -1437,7 +1545,7 @@ func _resolve_weapon_clash(request: AttackRequest) -> Dictionary:
 		if elite == null or not elite.active or not _can_clash_named_target(request, elite.position):
 			continue
 		var perfect := telegraph.remaining <= PERFECT_WEAPON_CLASH_WINDOW
-		telegraphs.remove_at(index)
+		telegraphs.erase(telegraph)
 		var elite_broken := elite.add_stance_damage(_clash_stance_damage(perfect, clash_kind), perfect)
 		var clashed_elite_ids: Dictionary = result.get("elite_ids", {}) as Dictionary
 		clashed_elite_ids[elite.get_instance_id()] = true
@@ -1618,10 +1726,12 @@ func _on_named_stance_broken(target_name: String, at: Vector2) -> void:
 func _on_player_combat_action_started(action_id: String) -> void:
 	player_action_clash_consumed = false
 	action_audio_hits[action_id] = false
-	if randf() < HERO_ATTACK_SHOUT_CHANCE:
+	if action_id != "active_thrust_charge" and action_id != "active_thrust" and randf() < HERO_ATTACK_SHOUT_CHANCE:
 		AudioService.play_hero_attack_shout()
 	if action_id == "firewheel":
 		AudioService.play_hero_firewheel_loop()
+	if player.hero_id == "ma_chao" and action_id == "ultimate":
+		get_tree().create_timer(0.3).timeout.connect(AudioService.play_ma_chao_ultimate_voice)
 
 func _on_player_combat_action_finished(action_id: String) -> void:
 	player_action_clash_consumed = true
@@ -1748,7 +1858,253 @@ func _hitstop_duration(request: AttackRequest, hit_count: int) -> float:
 		return minf(0.118, hitstop + 0.012)
 	return hitstop
 
+func _shenji_targets(at: Vector2, radius: float) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	var ids := enemies.query(AttackRequest.circle(at, radius, 0.0, 256, "神机索敌"))
+	for id in ids:
+		if enemies.is_active(id):
+			candidates.append({"id": id, "kind": "enemy", "position": enemies.positions[id], "armor": enemies.get_armor(id)})
+	for index in range(elites.size()):
+		var elite := elites[index]
+		if is_instance_valid(elite) and elite.active and not elite.is_cast_invulnerable() and elite.position.distance_to(at) <= radius:
+			candidates.append({"id": index, "kind": "elite", "position": elite.position, "armor": elite.armor()})
+	if is_instance_valid(boss) and boss.active and not boss.is_cast_invulnerable() and boss.position.distance_to(at) <= radius:
+		candidates.append({"id": 0, "kind": "boss", "position": boss.position, "armor": boss.armor()})
+	return candidates
+
+func _shenji_damage(target: Dictionary, locked_damage: float, ignore_armor: bool) -> void:
+	var kind := str(target.get("kind", ""))
+	var id := int(target.get("id", -1))
+	var armor := float(target.get("armor", 0.0))
+	var damage := CombatMath.final_damage(locked_damage, 1.0, 0.0, armor, false, 1.0 if ignore_armor else 0.0)
+	if kind == "enemy" and enemies.is_active(id):
+		enemies.apply_hit(id, damage, Vector2.ZERO, 0.0)
+	elif kind == "elite" and id >= 0 and id < elites.size() and is_instance_valid(elites[id]) and elites[id].active:
+		elites[id].receive_player_hit(damage)
+	elif kind == "boss" and is_instance_valid(boss) and boss.active:
+		boss.receive_player_hit(damage)
+
+func _ma_chao_ultimate_find_target(at: Vector2, radius: float, all_candidates: bool = false):
+	var candidates: Array[Dictionary] = []
+	var ids := enemies.query(AttackRequest.circle(at, radius, 0.0, 64, "马超副将索敌"))
+	for id in ids:
+		var enemy_id := int(id)
+		if enemies.is_active(enemy_id):
+			candidates.append({"id": enemy_id, "kind": "enemy", "position": enemies.positions[enemy_id]})
+	for index in range(elites.size()):
+		var elite := elites[index]
+		if is_instance_valid(elite) and elite.active and elite.position.distance_to(at) <= radius:
+			candidates.append({"id": index, "kind": "elite", "position": elite.position, "invulnerable": elite.is_cast_invulnerable()})
+	if is_instance_valid(boss) and boss.active and boss.position.distance_to(at) <= radius:
+		candidates.append({"id": 0, "kind": "boss", "position": boss.position, "invulnerable": boss.is_cast_invulnerable()})
+	if all_candidates:
+		return candidates
+	return candidates[0] if not candidates.is_empty() else {}
+
+func _ma_chao_ultimate_damage_target(ally_id: int, target_id: int, damage: float) -> void:
+	if enemies.is_active(target_id):
+		enemies.apply_hit(target_id, damage, Vector2.ZERO, 0.0)
+		_register_ma_chao_ally_aggro(ally_id)
+
+func _register_ma_chao_ally_aggro(ally_id: int) -> void:
+	if player.hero_id != "ma_chao" or player.ma_cavalry_aggro_priority() <= 0.0:
+		return
+	var ally := ma_chao_ultimate_system.combat_ally(ally_id)
+	if ally.is_empty():
+		return
+	ma_chao_ally_aggro[ally_id] = MA_CAVALRY_AGGRO_DURATION
+
+func _tick_ma_chao_ally_aggro(delta: float) -> void:
+	for ally_id in ma_chao_ally_aggro.keys():
+		var remaining := float(ma_chao_ally_aggro[ally_id]) - delta
+		if remaining <= 0.0 or ma_chao_ultimate_system.combat_ally(int(ally_id)).is_empty():
+			ma_chao_ally_aggro.erase(ally_id)
+		else:
+			ma_chao_ally_aggro[ally_id] = remaining
+
+func _enemy_ally_target(_enemy_id: int, enemy_position: Vector2, _enemy_type: int, _hero_position: Vector2) -> Dictionary:
+	if player.hero_id != "ma_chao" or player.ma_cavalry_aggro_priority() <= 0.0 or ma_chao_ally_aggro.is_empty():
+		return {}
+	var best: Dictionary = {}
+	var best_score := -enemy_position.distance_to(_hero_position)
+	for ally_id_variant in ma_chao_ally_aggro.keys():
+		var ally_id := int(ally_id_variant)
+		var ally := ma_chao_ultimate_system.combat_ally(ally_id)
+		if ally.is_empty():
+			continue
+		var ally_position: Vector2 = ally.get("position", Vector2.ZERO)
+		if enemy_position.distance_to(ally_position) > MA_CAVALRY_AGGRO_RADIUS:
+			continue
+		var score: float = player.ma_cavalry_aggro_priority() * 500.0 - enemy_position.distance_to(ally_position)
+		if score > best_score:
+			best_score = score
+			best = {"kind": "ally", "id": ally_id, "position": ally_position}
+	return best
+
+func _on_ma_chao_charge_attack(origin: Vector2, direction: Vector2, distance: float, damage: float) -> void:
+	var batch_key_prefix := "batch:%d:" % ma_chao_ultimate_system.current_attack_batch_id_value()
+	var request := AttackRequest.line(origin, direction, distance, 78.0, damage * 3.0 / maxf(1.0, player.total_attack()), 24, "马超无双·骑兵冲锋")
+	request.action_kind = AttackRequest.ActionKind.ULTIMATE
+	request.is_path_attack = true
+	request.knockback = 150.0
+	request.forced_displacement = 18.0
+	request.forced_displacement_duration = 0.10
+	request.one_hit_per_target = true
+	var regular_hit_ids: Array[int] = []
+	for enemy_id in enemies.query(request):
+		var enemy_key := "%senemy:%d" % [batch_key_prefix, int(enemy_id)]
+		if ma_chao_charge_hit_targets.has(enemy_key):
+			request.excluded_enemy_ids[int(enemy_id)] = true
+		else:
+			ma_chao_charge_hit_targets[enemy_key] = true
+			regular_hit_ids.append(int(enemy_id))
+	combat.resolve_hero_attack(request, player.total_attack(), 0.0, enemies)
+	# 普通敌人致死时通用结算不会保留击退；箭阵已确认命中后，对仍在场者补一次同规格击退。
+	for enemy_id in regular_hit_ids:
+		if enemies.is_active(enemy_id):
+			enemies.apply_knockback_only(enemy_id, direction, 150.0, false, 18.0, 0.10)
+	for index in range(elites.size()):
+		var elite := elites[index]
+		var elite_key := "%selite:%d" % [batch_key_prefix, index]
+		if is_instance_valid(elite) and elite.active and combat.request_hits_point(request, elite.position) and not ma_chao_charge_hit_targets.has(elite_key):
+			ma_chao_charge_hit_targets[elite_key] = true
+			elite.receive_player_hit(damage * 3.0)
+			elite.apply_stance_break_knockback(direction, 120.0, 120.0)
+	var boss_key := "%sboss:0" % batch_key_prefix
+	if is_instance_valid(boss) and boss.active and combat.request_hits_point(request, boss.position) and not ma_chao_charge_hit_targets.has(boss_key):
+		ma_chao_charge_hit_targets[boss_key] = true
+		boss.receive_player_hit(damage * 3.0)
+		boss.apply_stance_break_knockback(direction, 60.0, 60.0)
+
+func _on_ma_chao_cavalry_attack(ally_id: int, target_id: int, target_kind: String, origin: Vector2, direction: Vector2, damage: float) -> void:
+	var request := AttackRequest.line(origin, direction, 112.0, 62.0, damage / maxf(1.0, player.total_attack()), 12, "马超副将·骑枪突进")
+	request.action_kind = AttackRequest.ActionKind.ULTIMATE
+	if renderer != null and is_instance_valid(renderer):
+		var visual_request := AttackRequest.line(origin, direction, 112.0, 62.0, 0.0, 1, "银枪突刺")
+		renderer.add_flash(visual_request)
+	request.is_path_attack = true
+	request.one_hit_per_target = true
+	request.knockback = 115.0
+	request.forced_displacement = 12.0
+	request.forced_displacement_duration = 0.08
+	if ma_chao_ultimate_system.inherited_gale_attack_ratio() > 0.0:
+		_renderer_add_companion_soul_proc("gale", origin, [origin], 46.0)
+	if target_kind == "boss" and is_instance_valid(boss) and boss.active and combat.request_hits_point(request, boss.position):
+		var boss_result := boss.receive_player_hit(damage)
+		if float(boss_result.get("damage", 0.0)) > 0.0:
+			_register_ma_chao_ally_aggro(ally_id)
+			_apply_ma_chao_companion_soul_effects(boss.position, damage)
+		if randf() < 0.5:
+			AudioService.play_attack5()
+		return
+	if target_kind == "elite":
+		var elite_index := target_id
+		if elite_index >= 0 and elite_index < elites.size() and is_instance_valid(elites[elite_index]) and elites[elite_index].active and combat.request_hits_point(request, elites[elite_index].position):
+			var elite_result := elites[elite_index].receive_player_hit(damage)
+			if float(elite_result.get("damage", 0.0)) > 0.0:
+				_register_ma_chao_ally_aggro(ally_id)
+				_apply_ma_chao_companion_soul_effects(elites[elite_index].position, damage)
+			if randf() < 0.5:
+				AudioService.play_attack5()
+			return
+	var before_hits: Dictionary = {}
+	for id in enemies.query(request):
+		before_hits[id] = {"position": enemies.positions[id], "hp": enemies.hit_points[id]}
+	var hit_count := combat.resolve_hero_attack(request, player.total_attack(), 0.0, enemies)
+	if hit_count > 0:
+		_register_ma_chao_ally_aggro(ally_id)
+		# 捕获命中前位置，击退/致死之后仍在真实命中中心触发；不依赖预选目标还活着。
+		for id in before_hits:
+			if enemies.hit_points[id] < float(before_hits[id]["hp"]):
+				_apply_ma_chao_companion_soul_effects(before_hits[id]["position"], damage)
+				break
+	if randf() < 0.5:
+		AudioService.play_attack5()
+
+func _apply_ma_chao_companion_soul_effects(at: Vector2, base_damage: float) -> void:
+	var thunder_points: Array[Vector2] = [at]
+	if ma_chao_ultimate_system.inherited_thunder_active():
+		thunder_points = _ma_chao_companion_thunder_points(at)
+		var actual_points: Array[Vector2] = []
+		for point in thunder_points:
+			if _damage_ma_companion_thunder_point(point):
+				actual_points.append(point)
+		if not actual_points.is_empty():
+			_renderer_add_companion_soul_proc("thunder", at, actual_points, 78.0)
+	if ma_chao_ultimate_system.inherited_flame_active():
+		var flame := AttackRequest.circle(at, player.battle_soul_flame_radius(), 0.72, player.battle_soul_flame_target_count_for_attack(), "副将·爆炎")
+		flame.action_kind = AttackRequest.ActionKind.PASSIVE
+		flame.knockback = 180.0
+		flame.grants_boss_ultimate_energy = false
+		flame.grants_special_target_dragon_progress = false
+		flame.suppress_visual_feedback = true
+		flame.suppress_impact_feedback = true
+		combat.resolve_hero_attack(flame, player.total_attack() * 0.35, 0.0, enemies)
+		_renderer_add_companion_soul_proc("flame", at, [at], player.battle_soul_flame_radius())
+
+func _damage_ma_companion_thunder_point(point: Vector2) -> bool:
+	for id in enemies.query(AttackRequest.circle(point, 0.5, 0.0, EnemySimulation.CAPACITY, "副将雷击定位")):
+		var hp := enemies.hit_points[id]
+		var thunder := AttackRequest.circle(point, 0.5, 0.42, 1, "副将·雷霆")
+		thunder.action_kind = AttackRequest.ActionKind.PASSIVE
+		thunder.grants_boss_ultimate_energy = false
+		thunder.grants_special_target_dragon_progress = false
+		thunder.suppress_visual_feedback = true
+		thunder.suppress_impact_feedback = true
+		combat.resolve_hero_attack(thunder, player.total_attack() * 0.35, 0.0, enemies)
+		return enemies.hit_points[id] < hp
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active and not elite.is_cast_invulnerable() and elite.position.distance_to(point) < 0.5:
+			return float(elite.receive_player_hit(player.total_attack() * 0.35 * 0.42).get("damage", 0.0)) > 0.0
+	if is_instance_valid(boss) and boss.active and not boss.is_cast_invulnerable() and boss.position.distance_to(point) < 0.5:
+		return float(boss.receive_player_hit(player.total_attack() * 0.35 * 0.42).get("damage", 0.0)) > 0.0
+	return false
+
+func _ma_chao_companion_thunder_points(origin: Vector2) -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	var max_points := maxi(1, player.battle_soul_thunder_chain_count())
+	var seen_positions: Dictionary = {}
+	var append_unique := func(candidate: Vector2) -> bool:
+		if points.size() >= max_points or seen_positions.has(candidate):
+			return points.size() >= max_points
+		seen_positions[candidate] = true
+		points.append(candidate)
+		return points.size() >= max_points
+	# 首击优先；致死或击退移走时，不生成无法命中的虚假首点。
+	if not enemies.query(AttackRequest.circle(origin, 0.5, 0.0, 1, "雷霆首击")).is_empty():
+		append_unique.call(origin)
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active and not elite.is_cast_invulnerable() and elite.position.distance_to(origin) < 0.5:
+			append_unique.call(origin)
+	if is_instance_valid(boss) and boss.active and not boss.is_cast_invulnerable() and boss.position.distance_to(origin) < 0.5:
+		append_unique.call(origin)
+	var search := AttackRequest.circle(origin, 180.0, 0.0, EnemySimulation.CAPACITY, "副将·雷霆索敌")
+	for enemy_id in enemies.query(search):
+		if enemies.is_active(enemy_id) and not enemies.is_iron_bucket_shield(enemy_id) and not (enemies.is_duel_formation_sealed() and enemies.is_duel_shield(enemy_id)) and append_unique.call(enemies.positions[enemy_id]):
+			return points
+	for elite in elites:
+		if is_instance_valid(elite) and elite.active and not elite.is_cast_invulnerable() and elite.position.distance_to(origin) <= 180.0 and append_unique.call(elite.position):
+			return points
+	if is_instance_valid(boss) and boss.active and not boss.is_cast_invulnerable() and boss.position.distance_to(origin) <= 180.0:
+		append_unique.call(boss.position)
+	return points
+
+func _renderer_add_companion_soul_proc(soul_id: String, origin: Vector2, points: Array[Vector2], radius: float) -> void:
+	if renderer == null:
+		return
+	var impact_position: Vector2 = points[0] if not points.is_empty() else origin
+	renderer.add_companion_soul_proc(soul_id, impact_position, origin, points, radius)
+
 func _on_ultimate_requested(direction: Vector2) -> void:
+	if player.hero_id == "ma_chao" and ma_chao_ultimate_system.is_active():
+		if not ma_chao_ultimate_system.can_start_additional(player.ma_cavalry_retinue_count(), player.ma_cavalry_revival_rank()):
+			hud.set_message("西凉再临：当前波次或在场骑兵已达上限")
+			return
+		if player.request_ultimate(direction):
+			hud.set_message("西凉再临！")
+		else:
+			hud.set_message("无双正在发动")
+		return
 	if player.request_ultimate(direction):
 		return
 	if player.ultimate_time > 0.0:
@@ -1762,6 +2118,7 @@ func _on_guard_requested(direction: Vector2) -> void:
 	if not player.request_guard(direction):
 		return
 	guard_named_reward_consumed = false
+	guard_counter_triggered = false
 	guard_perfect_telegraphs.clear()
 	# Preserve the old perfect-clash timing: an attack already inside its final
 	# 0.10 seconds when the button is pressed is a perfect guard.
@@ -1779,11 +2136,49 @@ func _on_weapon_stance_requested() -> void:
 func _on_ultimate_ready() -> void:
 	hud.announce_ultimate_ready()
 
+func _start_ma_chao_additional_batch() -> bool:
+	var companion_gale_ratio := player.battle_soul_gale_ratio() if player.has_method("battle_soul_gale_ratio") and player.ma_cavalry_soul_enabled() else 0.0
+	var companion_has_thunder: bool = player.has_battle_soul("thunder") and player.ma_cavalry_soul_enabled()
+	var companion_has_flame: bool = player.has_battle_soul("flame") and player.ma_cavalry_soul_enabled()
+	var companion_attack_multiplier: float = player.ma_cavalry_attack_multiplier() if player.has_method("ma_cavalry_attack_multiplier") else 0.85
+	return ma_chao_ultimate_system.start_additional(player.position, player.last_attack_direction, player.total_attack(), _battle_visible_world_rect(), player.ma_cavalry_retinue_count(), player.ma_cavalry_duration_bonus(), player.ma_cavalry_attack_interval_reduction(), companion_gale_ratio, companion_has_thunder, companion_has_flame, companion_attack_multiplier, player.ma_cavalry_revival_rank())
+
 func _on_ultimate_started() -> void:
+	var is_ma_additional := player.hero_id == "ma_chao" and ma_chao_ultimate_system.is_active()
 	hud.set_message("无双·%s！" % player.ultimate_ability_label())
+	if player.hero_id == "ma_chao":
+		renderer.reset_player_action_animation_state()
+		if ma_chao_ultimate_system.is_active():
+			if not _start_ma_chao_additional_batch():
+				player.cancel_ma_chao_additional_start()
+				return
+		else:
+			player.reset_ma_cavalry_revival_window()
+			ma_chao_charge_hit_targets.clear()
+			var companion_gale_ratio := player.battle_soul_gale_ratio() if player.has_method("battle_soul_gale_ratio") and player.ma_cavalry_soul_enabled() else 0.0
+			var companion_has_thunder: bool = player.has_battle_soul("thunder") and player.ma_cavalry_soul_enabled()
+			var companion_has_flame: bool = player.has_battle_soul("flame") and player.ma_cavalry_soul_enabled()
+			var companion_attack_multiplier: float = player.ma_cavalry_attack_multiplier() if player.has_method("ma_cavalry_attack_multiplier") else 0.85
+			if not ma_chao_ultimate_system.start(player.position, player.last_attack_direction, player.total_attack(), _battle_visible_world_rect(), player.ma_cavalry_retinue_count(), player.ma_cavalry_duration_bonus(), player.ma_cavalry_attack_interval_reduction(), companion_gale_ratio, companion_has_thunder, companion_has_flame, companion_attack_multiplier):
+				player.cancel_ma_chao_ultimate_start()
+				return
 	hitstop_remaining = 0.0
 	AudioService.play_hero_ultimate_start()
 	ultimate_cutin.play(player.hero_id)
+	if is_ma_additional:
+		AudioService.play_ma_chao_ultimate_voice()
+
+func _on_enemy_damaged(enemy_id: int, at: Vector2, damage: float) -> void:
+	if damage > 0.0:
+		renderer.add_damage_number("enemy:%d" % enemy_id, at, damage, "normal")
+
+func _on_elite_damage_received(at: Vector2, damage: float, _stance_broken: bool) -> void:
+	if damage > 0.0:
+		renderer.add_damage_number("elite:%d:%d" % [int(at.x), int(at.y)], at, damage, "normal")
+
+func _on_boss_damage_received(at: Vector2, damage: float, _stance_broken: bool) -> void:
+	if damage > 0.0:
+		renderer.add_damage_number("boss:%d:%d" % [int(at.x), int(at.y)], at, damage, "normal")
 
 func _on_enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int, ultimate_energy: float) -> void:
 	_cancel_enemy_telegraphs(enemy_id)
@@ -1804,6 +2199,30 @@ func _on_enemy_died(enemy_id: int, enemy_type: int, at: Vector2, experience: int
 func _on_enemy_death_collision(at: Vector2, direction: Vector2) -> void:
 	renderer.add_death_collision(at, direction)
 
+func _on_ma_damage_redirect_requested(amount: float, _attack_origin: Vector2) -> void:
+	var candidates: Array[Dictionary] = []
+	const redirect_radius := 260.0
+	for enemy_id in range(EnemySimulation.CAPACITY):
+		if enemies.is_active(enemy_id) and enemies.positions[enemy_id].distance_to(player.position) <= redirect_radius:
+			candidates.append({"kind": "enemy", "id": enemy_id, "position": enemies.positions[enemy_id]})
+	for elite_index in range(elites.size()):
+		var elite := elites[elite_index]
+		if is_instance_valid(elite) and elite.active and elite.position.distance_to(player.position) <= redirect_radius:
+			candidates.append({"kind": "elite", "id": elite_index, "position": elite.position})
+	if is_instance_valid(boss) and boss.active and boss.position.distance_to(player.position) <= redirect_radius:
+		candidates.append({"kind": "boss", "id": 0, "position": boss.position})
+	if candidates.is_empty():
+		return
+	var target: Dictionary = candidates[randi() % candidates.size()]
+	var target_kind := str(target.get("kind", "enemy"))
+	var target_id := int(target.get("id", -1))
+	if target_kind == "enemy" and enemies.is_active(target_id):
+		enemies.apply_hit(target_id, amount, Vector2.ZERO, 0.0)
+	elif target_kind == "elite" and target_id >= 0 and target_id < elites.size() and is_instance_valid(elites[target_id]) and elites[target_id].active:
+		elites[target_id].receive_player_hit(amount)
+	elif target_kind == "boss" and is_instance_valid(boss) and boss.active:
+		boss.receive_player_hit(amount)
+
 func _on_player_damaged(amount: float) -> void:
 	run_damage_taken += maxf(0.0, amount)
 	if amount > 0.0 and not paused and not upgrade_open and not finished:
@@ -1818,10 +2237,17 @@ func _on_battle_soul_spawned(soul_id: String, _at: Vector2) -> void:
 
 func _on_battle_soul_collected(soul_id: String, title: String, description: String, duration: float) -> void:
 	player.activate_battle_soul(soul_id, duration)
+	if soul_id == "machine":
+		shenji_soul_system.activate(player.battle_soul_machine_rank, player.total_attack(), duration)
+	if player.hero_id == "ma_chao" and player.ma_cavalry_soul_enabled() and ma_chao_ultimate_system.is_active():
+		ma_chao_ultimate_system.sync_inherited_souls(player.battle_soul_gale_ratio(), player.has_battle_soul("thunder"), player.has_battle_soul("flame"))
 	renderer.add_battle_soul_pickup(soul_id, player.position)
 	hud.set_message("获得%s：%s（%d秒）" % [title, description, int(round(duration))])
 
 func _on_enemy_attack(enemy_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float, attack_kind: String) -> void:
+	if enemies.ally_target_id_for_enemy(enemy_id) >= 0:
+		_queue_ally_enemy_attack(enemy_id, enemies.ally_target_id_for_enemy(enemy_id), origin, target, enemy_type, damage, windup, attack_kind)
+		return
 	if siege.is_active() and enemies.siege_target_kind_for_enemy(enemy_id) != EnemySimulation.SiegeTargetKind.HERO:
 		_queue_siege_enemy_attack(enemy_id, enemies.siege_target_kind_for_enemy(enemy_id), enemies.siege_target_id_for_enemy(enemy_id), damage, windup)
 		return
@@ -1939,6 +2365,13 @@ func _schedule_crossbow_attack(enemy_id: int, origin: Vector2, target: Vector2, 
 	_schedule_enemy_telegraph(telegraph, enemy_id, Telegraph.ThreatKind.BASIC)
 	renderer.add_crossbow_bolt(enemy_id, origin, target, windup)
 
+func _queue_ally_enemy_attack(enemy_id: int, ally_id: int, origin: Vector2, target: Vector2, enemy_type: int, damage: float, windup: float, attack_kind: String) -> void:
+	var telegraph := Telegraph.line(origin, target - origin, origin.distance_to(target), 42.0, windup, damage, "enemy_ally")
+	telegraph.source_enemy_id = enemy_id
+	telegraph.visual_kind = "ally_target:%d" % ally_id
+	telegraph.threat_kind = Telegraph.ThreatKind.BASIC
+	_add_telegraph(telegraph)
+
 func _schedule_enemy_telegraph(telegraph: Telegraph, enemy_id: int, threat_kind: int) -> void:
 	telegraph.threat_kind = threat_kind
 	telegraph.source_enemy_id = enemy_id
@@ -1977,7 +2410,11 @@ func _on_elite_defeated(elite: EliteActor) -> void:
 	_cancel_elite_telegraphs(elite.telegraph_source)
 	run_defeated_count += 1
 	battle_souls.record_enemy_corpse(elite.position)
-	loot.drop_loot(elite.position, 12, 60)
+	if director.is_boss_trial():
+		_grant_run_merit(BOSS_TRIAL_ELITE_DEFEAT_MERIT)
+		loot.drop_loot(elite.position, 12, 0)
+	else:
+		loot.drop_loot(elite.position, 12, 60)
 	player.add_ultimate_energy(12.0)
 	player.on_enemy_defeated(EnemySimulation.EnemyType.ELITE, not tianji.is_resolving_damage())
 	if director.is_boss_trial():
@@ -2046,33 +2483,50 @@ func _add_telegraph(telegraph: Telegraph) -> void:
 
 func _tick_telegraphs(delta: float) -> void:
 	var resolved_hit_groups: Dictionary = {}
-	for index in range(telegraphs.size() - 1, -1, -1):
-		var telegraph := telegraphs[index]
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if not telegraphs.has(telegraph):
+			continue
 		if telegraph.source_enemy_id >= 0 and not enemies.is_active(telegraph.source_enemy_id):
-			telegraphs.remove_at(index)
+			telegraphs.erase(telegraph)
 			continue
 		telegraph.remaining -= delta
 		if telegraph.remaining <= 0.0:
 			var hit_group: String = telegraph.hit_group
 			if hit_group != "" and resolved_hit_groups.has(hit_group):
-				telegraphs.remove_at(index)
+				telegraphs.erase(telegraph)
 				continue
 			if _try_resolve_guard(telegraph):
 				if hit_group != "":
 					resolved_hit_groups[hit_group] = true
-				telegraphs.remove_at(index)
+				# 回调可能已取消当前攻击；只在仍存在时移除当前对象。
+				telegraphs.erase(telegraph)
+				continue
+			# Guard callbacks may synchronously remove the current object while
+			# returning false. Do not let a stale snapshot entry reach damage.
+			if not telegraphs.has(telegraph):
 				continue
 			if _try_resolve_late_weapon_clash(telegraph):
 				if hit_group != "":
 					resolved_hit_groups[hit_group] = true
-				telegraphs.remove_at(index)
+				telegraphs.erase(telegraph)
+				continue
+			# Late clash callbacks have the same synchronous-removal contract.
+			if not telegraphs.has(telegraph):
+				continue
+			if telegraph.source == "enemy_ally":
+				var ally_id := int(str(telegraph.visual_kind).trim_prefix("ally_target:"))
+				if telegraph.hits_point(ma_chao_ultimate_system.combat_ally(ally_id).get("position", Vector2.INF)):
+					ma_chao_ultimate_system.receive_ally_damage(ally_id, telegraph.damage)
+				telegraphs.erase(telegraph)
 				continue
 			if _telegraph_hits_player(telegraph):
 				if hit_group != "":
 					resolved_hit_groups[hit_group] = true
 				if _try_block_projectile_telegraph(telegraph):
 					hud.set_message(player.projectile_guard_block_message())
-					telegraphs.remove_at(index)
+					telegraphs.erase(telegraph)
 					continue
 				# Lu Bu's skyfall uses geometric contact as its hit condition. A
 				# shield or invulnerability frame may prevent HP loss, but it does
@@ -2097,7 +2551,7 @@ func _tick_telegraphs(delta: float) -> void:
 						hud.set_message("护体抵挡了%s的攻击" % boss.display_name())
 					else:
 						hud.set_message("%s的攻击未造成伤害" % boss.display_name())
-			telegraphs.remove_at(index)
+			telegraphs.erase(telegraph)
 
 func _tick_named_enemies(delta: float) -> void:
 	# Keep one named enemy as the active mover so elites and the boss do not all
@@ -2208,9 +2662,11 @@ func _enemy_attack_group_for_source(source: String) -> String:
 	return "frontline"
 
 func _cancel_enemy_telegraphs(enemy_id: int) -> void:
-	for index in range(telegraphs.size() - 1, -1, -1):
-		if telegraphs[index].source_enemy_id == enemy_id:
-			telegraphs.remove_at(index)
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if telegraph.source_enemy_id == enemy_id:
+			telegraphs.erase(telegraph)
 	renderer.cancel_archer_projectiles(enemy_id)
 	renderer.cancel_crossbow_bolts(enemy_id)
 	_cancel_pending_siege_enemy_attacks(enemy_id)
@@ -2248,14 +2704,18 @@ func _cancel_pending_siege_enemy_attacks(enemy_id: int) -> void:
 			pending_siege_enemy_attacks.remove_at(index)
 
 func _cancel_boss_telegraphs() -> void:
-	for index in range(telegraphs.size() - 1, -1, -1):
-		if telegraphs[index].source == "boss" or telegraphs[index].source == "boss_preview":
-			telegraphs.remove_at(index)
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if telegraph.source == "boss" or telegraph.source == "boss_preview":
+			telegraphs.erase(telegraph)
 
 func _cancel_elite_telegraphs(source: String) -> void:
-	for index in range(telegraphs.size() - 1, -1, -1):
-		if telegraphs[index].source == source:
-			telegraphs.remove_at(index)
+	var snapshot: Array[Telegraph] = telegraphs.duplicate()
+	snapshot.reverse()
+	for telegraph in snapshot:
+		if telegraph.source == source:
+			telegraphs.erase(telegraph)
 
 func _spawn_boss_guard(enemy_type: int, at: Vector2) -> void:
 	if enemies.get_boss_guard_count() >= 4:
@@ -2358,7 +2818,7 @@ func _is_guardable_telegraph(telegraph: Telegraph) -> bool:
 	if telegraph.threat_kind == Telegraph.ThreatKind.BASIC:
 		return true
 	# Arrow and bolt volleys are active-pattern telegraphs, but the projectiles
-	# themselves remain guardable for the whole 0.3 second guard window.
+	# themselves remain guardable for the whole 0.5 second guard window.
 	if telegraph.threat_kind != Telegraph.ThreatKind.ACTIVE:
 		return false
 	if telegraph.source_enemy_id < 0 or not enemies.is_active(telegraph.source_enemy_id):
@@ -2379,7 +2839,7 @@ func _finalize_guard_named_block(at: Vector2, perfect: bool, target_name: String
 		contact_direction = player.guard_direction
 	renderer.add_guard_feedback(at, contact_direction, perfect)
 	if named_target is BossActor:
-		var boss_reaction_distance := BossActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else BossActor.GUARD_REACTION_DISTANCE
+		var boss_reaction_distance := (BossActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else BossActor.GUARD_REACTION_DISTANCE) * 0.5
 		var boss_start: Vector2 = named_target.position
 		var boss_destination: Vector2 = _clamp_named_spawn(boss_start + contact_direction * boss_reaction_distance)
 		if enemies.is_duel_formation_active():
@@ -2388,7 +2848,7 @@ func _finalize_guard_named_block(at: Vector2, perfect: bool, target_name: String
 		named_target.position = boss_destination
 		_interrupt_boss_action_for_knockback()
 	elif named_target is EliteActor:
-		var elite_reaction_distance := EliteActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else EliteActor.GUARD_REACTION_DISTANCE
+		var elite_reaction_distance := (EliteActor.PERFECT_GUARD_REACTION_DISTANCE if perfect else EliteActor.GUARD_REACTION_DISTANCE) * 0.5
 		var elite_start: Vector2 = named_target.position
 		var elite_destination: Vector2 = _clamp_named_spawn(elite_start + contact_direction * elite_reaction_distance)
 		if enemies.is_duel_formation_active():
@@ -2411,9 +2871,39 @@ func _finalize_guard_minor(telegraph: Telegraph) -> void:
 	if direction.length_squared() <= 0.01:
 		direction = player.guard_direction
 	renderer.add_weapon_clash(player.position + direction * 34.0, false, false, true)
+	if not guard_counter_triggered and telegraph.source_enemy_id >= 0 and enemies.is_active(telegraph.source_enemy_id):
+		var enemy_type := enemies.get_type(telegraph.source_enemy_id)
+		if enemy_type not in [EnemySimulation.EnemyType.ARCHER, EnemySimulation.EnemyType.CROSSBOW, EnemySimulation.EnemyType.ELITE, EnemySimulation.EnemyType.GUARD, EnemySimulation.EnemyType.BANNER]:
+			guard_counter_triggered = true
+			_apply_guard_counter_repel()
+
+func _apply_guard_counter_repel() -> void:
+	var counter_direction := player.guard_direction.normalized()
+	if counter_direction.length_squared() <= 0.01:
+		counter_direction = player.last_attack_direction.normalized()
+	if counter_direction.length_squared() <= 0.01:
+		counter_direction = Vector2.RIGHT
+	var half_angle := deg_to_rad(75.0)
+	var repel_radius := 110.0
+	var repel_direction := counter_direction
+	for enemy_id in range(EnemySimulation.CAPACITY):
+		if not enemies.is_active(enemy_id):
+			continue
+		var enemy_type := enemies.get_type(enemy_id)
+		if enemy_type in [EnemySimulation.EnemyType.ELITE, EnemySimulation.EnemyType.GUARD]:
+			continue
+		var offset: Vector2 = enemies.positions[enemy_id] - player.position
+		if offset.length_squared() > repel_radius * repel_radius:
+			continue
+		if offset.length_squared() > 0.01 and counter_direction.dot(offset.normalized()) < cos(half_angle):
+			continue
+		enemies.apply_guard_counter_repel(enemy_id, repel_direction)
+	renderer.add_guard_feedback(player.position + counter_direction * 34.0, counter_direction, false)
 
 func _on_level_up(level: int) -> void:
 	player.apply_level_up_benefits()
+	if player is PrototypeHeroActor and player.hero_id == "ma_chao":
+		player.ma_battle_level = level
 	if is_instance_valid(siege_companion) and level > siege_companion_level:
 		siege_companion.apply_level_up_benefits()
 		_grant_siege_companion_auto_upgrade(level)
@@ -2602,6 +3092,7 @@ func _on_pause_requested() -> void:
 	if paused or finished or upgrade_open or player_death_cinematic_active or ultimate_cutin.is_playing():
 		return
 	paused = true
+	hud.clear_soul_target_indicators()
 	AudioService.set_hero_firewheel_loop_paused(true)
 	AudioService.set_tianji_sounds_paused(true)
 	AudioService.set_enemy_duel_cheers_paused(true)
@@ -2878,6 +3369,8 @@ func _begin_victory_cinematic(message: String) -> void:
 	if ultimate_cutin.is_playing():
 		ultimate_cutin.cancel()
 	telegraphs.clear()
+	soul_indicator_visibility.clear()
+	hud.clear_soul_target_indicators()
 	director.set_spawn_suppressed(true)
 	enemies.clear_duel_formation()
 	enemies.freeze_for_cinematic()
@@ -2940,6 +3433,8 @@ func _complete_run(victory: bool, message: String, stats: Dictionary = {}) -> vo
 	if finished:
 		return
 	finished = true
+	soul_indicator_visibility.clear()
+	hud.clear_soul_target_indicators()
 	result_double_claimed = false
 	AudioService.stop_hero_firewheel_loop()
 	AudioService.stop_all_tianji_sounds()

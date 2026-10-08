@@ -9,11 +9,12 @@ const HEROES := {
 		"name": "关羽",
 		"hud_name": "关羽 云长",
 		"role": "重击·破势",
+		"trait_summary": "近身压阵型武将。敌人越聚集，关羽越能发挥实力；面对精英和首领时，通过持续交锋叠加斩将优势。",
 		"unlock_cost": 0,
 		"playable": true,
 		"actor_scene": "res://scenes/actors/guan_yu_actor.tscn",
 		"ultimate_cutin": "res://assets/art/characters/guan_yu/cutins/wushuang.png",
-		"portrait": "res://assets/art/characters/guan_yu/portraits/guanyu.png",
+		"portrait": "res://assets/art/characters/hero_new/guanyu.png",
 		"stats": {
 			"attack": 20.0,
 			"defense": 18.0,
@@ -43,11 +44,12 @@ const HEROES := {
 		"name": "张飞",
 		"hud_name": "张飞 翼德",
 		"role": "重击·掷阵",
+		"trait_summary": "近战重击型武将。通过攻击、击杀和格挡积累怒势，在敌阵中越战越勇，并用强力跃砸和震退控制战场。",
 		"unlock_cost": 0,
 		"playable": true,
 		"actor_scene": "res://scenes/actors/zhang_fei_actor.tscn",
 		"ultimate_cutin": "res://assets/art/characters/zhang_fei/cutins/wushuang.png",
-		"portrait": "res://assets/art/characters/zhang_fei/portraits/zhangfei.png",
+		"portrait": "res://assets/art/characters/hero_new/zhangfei.png",
 		"stats": {
 			"attack": 20.0,
 			"defense": 17.0,
@@ -77,11 +79,12 @@ const HEROES := {
 		"name": "赵云",
 		"hud_name": "赵云 子龙",
 		"role": "突进·连击",
+		"trait_summary": "高机动连击型武将。依靠快速突进和连续攻击穿过敌阵，持续作战后获得龙胆护体，适合主动寻找突破口。",
 		"unlock_cost": 0,
 		"playable": true,
 		"actor_scene": "res://scenes/actors/player_actor.tscn",
 		"ultimate_cutin": "res://assets/art/characters/zhao_yun/cutins/wushuang.png",
-		"portrait": "res://assets/art/characters/zhao_yun/portraits/zhaoyun.png",
+		"portrait": "res://assets/art/characters/hero_new/zhaoyun.png",
 		"stats": {
 			"attack": 15.0,
 			"defense": 13.0,
@@ -159,31 +162,33 @@ const HEROES := {
 		"name": "马超",
 		"hud_name": "马超 孟起",
 		"role": "冲锋·穿阵",
-		"unlock_cost": 3000,
+		"trait_summary": "冲锋穿阵型武将。通过连续命中积累铁骑，越打越快、越打越强；依靠突进、挑飞和骑队协同撕开敌阵。",
+		"unlock_cost": 0,
 		"playable": true,
-		"shop_available": false,
+		"shop_available": true,
 		"actor_scene": "res://scenes/actors/ma_chao_actor.tscn",
-		"portrait": "res://assets/art/characters/ma_chao/portraits/machao.png",
+		"portrait": "res://assets/art/characters/hero_new/maochao.png",
 		"stats": {
-			"attack": 19.0,
+			"attack": 17.0,
 			"defense": 14.0,
 			"health": 138.0,
 			"move_speed": 116.0,
 			"basic_range": 162.0,
-			"basic_pierce": 16,
+			"basic_pierce": 6,
 			"active_cooldown": 7.2,
 			"ultimate_cost": 40.0,
 		},
 		"skills": [
-			{"name": "普攻·西凉连骑", "type": "普攻", "description": "点阵、横挑、踏阵突刺；持续直线移动会积累奔势。"},
-			{"name": "被动·奔势", "type": "被动", "description": "持续同向移动积累奔势，急转、停步会衰减；奔势强化冲阵招式。"},
-			{"name": "主动·西凉破阵", "type": "主动", "description": "沿指定方向高速平移穿阵，保留清晰的残影与冲势轨迹。"},
-			{"name": "无双·银枪奔雷", "type": "无双", "description": "消耗 40 能量，连续多段长距离冲锋，可在有限转角内修正方向。"},
+			{"name": "枪法·西凉连骑", "type": "枪法", "description": "点阵、横挑、踏阵突刺与银枪落刃；第四段可由战法解锁。"},
+			{"name": "被动·铁骑", "type": "被动", "description": "攻击命中积累铁骑层数；每层提升攻击速度与攻击力，脱战后逐层衰减。战斗中升级提升攻击和技能的伤害范围。"},
+			{"name": "主动·西凉破阵", "type": "主动", "description": "沿指定方向高速平移穿阵；专属战法可提高突进距离。"},
+			{"name": "无双·银枪奔雷", "type": "无双", "description": "召集箭形骑队冲阵；战法可增加协同副将数量与在场时间。"},
 		],
 		"talent_tree": [
-			{"title": "银枪", "core_title": "基础银枪", "core_summary": "点阵、横挑与踏阵突刺默认开放。", "nodes": [{"id": "ma_long_stride", "summary": "距离与起势", "is_core": true}, {"id": "ma_iron_hoof", "summary": "伤害与击退", "is_core": true}]},
-			{"title": "奔势", "core_title": "基础奔势", "core_summary": "同向移动积累冲锋势能。", "nodes": [{"id": "ma_storm_charge", "summary": "主动冷却与距离", "is_core": true}]},
-			{"title": "无双", "core_title": "基础奔雷", "core_summary": "银枪奔雷默认开放。", "nodes": [{"id": "ma_silver_afterimage", "summary": "无双与破势", "is_core": true}]},
+			{"title": "枪法", "core_title": "基础银枪", "core_summary": "基础枪势每层使普攻与主动伤害提高10%，最多3层；穿阵枪锋每级使普攻与主动穿透+2，最多3级。", "nodes": [{"id": "ma_basic_spear", "summary": "每层使普攻与主动伤害提高10%，最多3层", "is_core": true}, {"id": "ma_spear_pierce", "cost": 700, "summary": "穿阵枪锋：本局每次激活使普攻与主动穿透+2，最多3级"}, {"id": "ma_sweeping_wind", "summary": "第二段范围与角度提高", "is_core": true}, {"id": "ma_skybreaker", "summary": "穿阵枪锋的第三段挑飞与坠地强化"}, {"id": "ma_fourth_strike", "summary": "解锁银枪落刃第四段"}, {"id": "ma_fourth_domain", "summary": "落刃范围提高"}, {"id": "ma_fourth_pierce", "summary": "落刃穿阵强化"}]},
+			{"title": "被动", "core_title": "铁骑淬锋", "core_summary": "命中建立铁骑；脱战后每2秒失去1层。", "nodes": [{"id": "ma_iron_cavalry", "summary": "铁骑层数强化攻速与攻击力", "is_core": true}, {"id": "ma_iron_cavalry_stride", "summary": "铁骑层数额外提供移动速度"}, {"id": "ma_iron_borrow", "summary": "铁骑满层时概率免疫伤害并转给附近敌人"}, {"id": "ma_kill_recovery", "summary": "击杀概率回复生命"}, {"id": "ma_western_recovery", "summary": "乘胜追击满阶后的续战强化"}]},
+			{"title": "主动", "core_title": "西凉破阵", "core_summary": "沿指定方向高速突进穿阵。", "nodes": [{"id": "ma_long_charge", "summary": "主动突进距离提高"}, {"id": "ma_active_cooldown", "summary": "主动冷却时间减少"}, {"id": "ma_active_gather", "summary": "主动命中普通敌军后将其聚到马超身边"}]},
+			{"title": "无双", "core_title": "银枪奔雷", "core_summary": "十骑冲阵，四骑协同作战。", "nodes": [{"id": "ma_ultimate_armor_pierce", "summary": "无双期间无视防御提高"}, {"id": "ma_ultimate_surge", "summary": "无双期间攻速、移速、攻击+20%"}, {"id": "ma_cavalry_retinue", "summary": "协同副将数量+1，最多3级"}, {"id": "ma_cavalry_interval", "summary": "副将攻击间隔减少"}, {"id": "ma_cavalry_soul", "summary": "副将继承爆炎、雷霆和罡风战魂"}, {"id": "ma_cavalry_soul_damage", "summary": "提高副将继承的攻击力，最高 200%"}, {"id": "ma_cavalry_duration", "summary": "副将在场时间每级+3秒，最多3级"}, {"id": "ma_cavalry_revival", "summary": "西凉再临：最大同时在场波数为1/2/3波"}, {"id": "ma_cavalry_aggro", "summary": "铁骑引阵：副将命中建立3秒仇恨，优先级随等级提高"}]},
 		],
 	},
 	"huang_zhong": {
@@ -248,6 +253,14 @@ static func hud_name_for(hero_id: String) -> String:
 
 static func ultimate_cutin_for(hero_id: String) -> String:
 	return str(definition_for(hero_id).get("ultimate_cutin", ""))
+
+static func skill_icon_file_index(skill_type: String) -> int:
+	match skill_type:
+		"普攻", "枪法": return 1
+		"主动": return 2
+		"被动": return 3
+		"无双": return 4
+		_: return 0
 
 static func new_portrait_for(hero_id: String) -> String:
 	return {

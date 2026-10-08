@@ -24,9 +24,6 @@ const RESULT_HERO_PORTRAITS := {
 	"zhao_yun": "res://assets/art/characters/hero_new/zhaoyun.png",
 	"ma_chao": "res://assets/art/characters/hero_new/maochao.png",
 }
-const GUAN_YU_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/guan_yu/sprites/idle_right/guan-yu-idle-01.png")
-const ZHANG_FEI_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/zhang_fei/sprites/idle_right/zhang-fei-idle-01.png")
-const ZHAO_YUN_HUD_Q_TEXTURE: Texture2D = preload("res://assets/art/characters/zhao_yun/sprites/idle_right/zhaoyun-idle-right-01.png")
 const MOVE_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/moveBtn.png")
 const MOVE_KNOB_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/moveBtn1.png")
 const ATTACK_BUTTON_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/attackBtn.png")
@@ -35,6 +32,13 @@ const SHIELD_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/shield.png
 const HERO_INFO_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/heroInfo.png")
 const COMBO_BRUSH_TEXTURE: Texture2D = preload("res://assets/art/ui/battle/combo_brush.png")
 const COMBO_KAITI_FONT: Font = preload("res://assets/fonts/kaiti.ttf")
+const BATTLE_SOUL_LOGO_TEXTURES: Dictionary = {
+	"gale": preload("res://assets/art/ui/shop/zhanhun/gangfeng.png"),
+	"thunder": preload("res://assets/art/ui/shop/zhanhun/leiting.png"),
+	"flame": preload("res://assets/art/ui/shop/zhanhun/baoyan.png"),
+	"iron": preload("res://assets/art/ui/shop/zhanhun/xuanjia.png"),
+	"machine": preload("res://assets/art/battle_souls/shenji.png"),
+}
 # The named dual-bar source contains baked-in fills. Reuse the clean single-bar
 # frame twice so health and stance remain entirely runtime-driven.
 const ENEMY_BAR_FRAME_TEXTURE: Texture2D = preload("res://assets/art/ui/guofeng/hud_bar_frame_2x.png")
@@ -122,6 +126,7 @@ var hero_portrait: Texture2D
 var result_hero_portrait: Texture2D
 var battle_skill_textures: Dictionary = {}
 var offscreen_named_targets: Array[Dictionary] = []
+var offscreen_soul_targets: Array[Dictionary] = []
 var combo_count := 0
 var combo_remaining := 0.0
 var combo_pop_remaining := 0.0
@@ -151,6 +156,8 @@ func configure(player_actor: HeroActor, boss_actor: BossActor, run_director: Run
 	elite_status_order.clear()
 	elite_order_refresh_remaining = 0.0
 	tianji = tianji_system
+	offscreen_named_targets.clear()
+	offscreen_soul_targets.clear()
 	combo_count = 0
 	combo_remaining = 0.0
 	combo_pop_remaining = 0.0
@@ -189,6 +196,16 @@ func set_siege_system(value: SiegeSystem) -> void:
 
 func set_named_target_indicators(targets: Array[Dictionary]) -> void:
 	offscreen_named_targets = targets
+	queue_redraw()
+
+func set_soul_target_indicators(targets: Array[Dictionary]) -> void:
+	offscreen_soul_targets = targets
+	queue_redraw()
+
+func clear_soul_target_indicators() -> void:
+	if offscreen_soul_targets.is_empty():
+		return
+	offscreen_soul_targets.clear()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -1064,6 +1081,7 @@ func _draw() -> void:
 	_draw_tianji_slots(font)
 	_draw_skill_cluster(font)
 	_draw_named_target_indicators()
+	_draw_soul_target_indicators()
 	_draw_modal_backdrop(font)
 	_draw_low_health_warning()
 
@@ -1161,12 +1179,11 @@ func _draw_top_hud(font: Font) -> void:
 		var hero_marker := hero_name.left(1)
 		var badge_rect := Rect2(content_rect.position + Vector2(1.0, 2.0), Vector2(46.0, 46.0))
 		draw_rect(badge_rect, Color("0b1519"))
-		if not _draw_hero_q_badge(player.hero_id, badge_rect):
-			if hero_portrait != null:
-				_draw_hero_badge(hero_portrait, badge_rect)
-			else:
-				draw_circle(badge_rect.get_center(), 21.0, Color("0d1318"))
-				draw_string(font, badge_rect.position + Vector2(10.0, 28.0), hero_marker, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, GOLD_BRIGHT)
+		if hero_portrait != null:
+			_draw_hero_badge(hero_portrait, badge_rect)
+		else:
+			draw_circle(badge_rect.get_center(), 21.0, Color("0d1318"))
+			draw_string(font, badge_rect.position + Vector2(10.0, 28.0), hero_marker, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, GOLD_BRIGHT)
 		draw_rect(badge_rect, GOLD, false, 2.0)
 		var text_origin := content_rect.position + Vector2(56.0, 0.0)
 		var hero_text_width := content_rect.end.x - text_origin.x - 2.0
@@ -1666,6 +1683,46 @@ func _draw_skill_cluster(font: Font) -> void:
 	if player != null and player.is_ultimate_ready():
 		draw_string(font, Vector2(size.x * 0.5 - 100, 236), "无双已就绪 · 消耗 %d" % _ultimate_cost(), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("ffe49a"))
 
+func _draw_soul_target_indicators() -> void:
+	if modal_active or result_active or pause_active or offscreen_soul_targets.is_empty():
+		return
+	var lane_counts: Dictionary = {}
+	for target in offscreen_named_targets:
+		var named_direction: Vector2 = target.get("direction", Vector2.UP)
+		if named_direction.length_squared() <= 0.01:
+			named_direction = Vector2.UP
+		lane_counts[_named_indicator_lane(named_direction.normalized())] = int(lane_counts.get(_named_indicator_lane(named_direction.normalized()), 0)) + 1
+	for target in offscreen_soul_targets:
+		var direction: Vector2 = target.get("direction", Vector2.UP)
+		if direction.length_squared() <= 0.01:
+			direction = Vector2.UP
+		else:
+			direction = direction.normalized()
+		var lane := _named_indicator_lane(direction)
+		var slot := int(lane_counts.get(lane, 0))
+		lane_counts[lane] = slot + 1
+		var center := _named_indicator_position(direction, lane, slot)
+		_draw_soul_target_indicator(center, direction, str(target.get("soul_id", "gale")))
+
+func _draw_soul_target_indicator(center: Vector2, direction: Vector2, soul_id: String) -> void:
+	var texture: Texture2D = BATTLE_SOUL_LOGO_TEXTURES.get(soul_id, null)
+	var radius := 17.0
+	var accent := Color("d8a84e")
+	draw_circle(center, radius + 5.0, Color(0.03, 0.04, 0.05, 0.78))
+	draw_circle(center, radius, Color("1d1715"))
+	if texture != null:
+		_draw_texture_centered(texture, center, Vector2(27.0, 27.0), Color.WHITE)
+	else:
+		draw_circle(center, 8.0, accent)
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var arrow_base := center + direction * (radius + 5.0)
+	var arrow_tip := center + direction * (radius + 15.0)
+	draw_colored_polygon(PackedVector2Array([
+		arrow_tip,
+		arrow_base + perpendicular * 5.0,
+		arrow_base - perpendicular * 5.0,
+	]), accent.lightened(0.14))
+
 func _draw_named_target_indicators() -> void:
 	if modal_active or offscreen_named_targets.is_empty():
 		return
@@ -1712,7 +1769,7 @@ func _named_indicator_position(direction: Vector2, lane: String, slot: int) -> V
 func _named_indicator_slot_offset(slot: int) -> float:
 	if slot <= 0:
 		return 0.0
-	var distance: float = 42.0 * ceil(float(slot) * 0.5)
+	var distance: float = 54.0 * ceil(float(slot) * 0.5)
 	return distance if slot % 2 == 1 else -distance
 
 func _draw_named_target_indicator(center: Vector2, direction: Vector2, kind: String) -> void:
@@ -1949,26 +2006,6 @@ func _draw_hero_badge(texture: Texture2D, rect: Rect2) -> void:
 	var source_rect := Rect2(Vector2((texture_size.x - source_size) * 0.5, 0.0), Vector2(source_size, source_size))
 	draw_texture_rect_region(texture, rect, source_rect)
 
-func _draw_hero_q_badge(hero_id: String, rect: Rect2) -> bool:
-	var texture: Texture2D = null
-	var source_rect := Rect2()
-	match hero_id:
-		"guan_yu":
-			texture = GUAN_YU_HUD_Q_TEXTURE
-			source_rect = Rect2(37.0, 4.0, 44.0, 44.0)
-		"zhang_fei":
-			texture = ZHANG_FEI_HUD_Q_TEXTURE
-			source_rect = Rect2(40.0, 0.0, 48.0, 46.0)
-		"zhao_yun":
-			texture = ZHAO_YUN_HUD_Q_TEXTURE
-			source_rect = Rect2(42.0, 19.0, 48.0, 48.0)
-		_:
-			return false
-	if texture == null:
-		return false
-	draw_texture_rect_region(texture, rect, source_rect)
-	return true
-
 func _draw_skill_button(center: Vector2, radius: float, title: String, subtitle: String, accent: Color, enabled: bool, font: Font, icon_kind: String = "") -> void:
 	var pressed := pressed_controls.has(icon_kind)
 	if pressed:
@@ -2020,12 +2057,12 @@ func _draw_skill_icon(center: Vector2, radius: float, icon_kind: String, accent:
 			var skill_index := 0
 			var skill_hero_id := player.hero_id if player != null else "guan_yu"
 			if icon_kind == "active":
-				skill_index = 2
+				skill_index = HERO_CATALOG.skill_icon_file_index("主动")
 			elif icon_kind == "ultimate":
-				skill_index = 3
+				skill_index = HERO_CATALOG.skill_icon_file_index("无双")
 			elif icon_kind == "drag":
 				skill_hero_id = "guan_yu"
-				skill_index = 0
+				skill_index = HERO_CATALOG.skill_icon_file_index("普攻")
 			var texture := _hero_skill_texture(skill_hero_id, skill_index)
 			if texture != null:
 				# Fill the transparent center while keeping the logo proportional.
@@ -2040,12 +2077,12 @@ func _hero_skill_texture(hero_id: String, skill_index: int) -> Texture2D:
 		"ma_chao": "machao",
 	}
 	var stem := str(names.get(hero_id, ""))
-	if stem.is_empty() or skill_index < 0:
+	if stem.is_empty() or skill_index <= 0:
 		return null
 	var cache_key := "%s:%d" % [hero_id, skill_index]
 	if battle_skill_textures.has(cache_key):
 		return battle_skill_textures[cache_key] as Texture2D
-	var icon_path := "res://assets/art/ui/hero_skills/%s%d.png" % [stem, skill_index + 1]
+	var icon_path := "res://assets/art/ui/hero_skills/%s%d.png" % [stem, skill_index]
 	var texture := load(icon_path) as Texture2D if ResourceLoader.exists(icon_path) else null
 	battle_skill_textures[cache_key] = texture
 	return texture

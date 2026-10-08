@@ -122,14 +122,19 @@ const HERO_POOLS := {
 		"progression_chains": [["firewheel", "firewheel_duration", "firewheel_capstone"]],
 	},
 	"ma_chao": {
-		"upgrade_ids": ["ma_long_stride", "ma_iron_hoof", "ma_storm_charge", "ma_silver_afterimage"],
-		"weapon_ids": ["ma_long_stride", "ma_iron_hoof"],
-		"passive_ids": ["ma_long_stride", "ma_iron_hoof"],
-		"active_ids": ["ma_storm_charge"],
-		"rare_ids": ["ma_silver_afterimage"],
-		"core_talent_ids": ["ma_long_stride", "ma_iron_hoof", "ma_storm_charge", "ma_silver_afterimage"],
-		"talent_blueprint_ids": [],
-		"progression_chains": [],
+		"upgrade_ids": [
+			"ma_basic_spear", "ma_spear_pierce", "ma_sweeping_wind", "ma_iron_cavalry", "ma_iron_cavalry_stride",
+			"ma_skybreaker", "ma_fourth_strike", "ma_fourth_domain", "ma_fourth_pierce",
+			"ma_long_charge", "ma_active_cooldown", "ma_active_gather", "ma_kill_recovery", "ma_western_recovery", "ma_iron_borrow",
+			"ma_ultimate_armor_pierce", "ma_ultimate_surge", "ma_cavalry_retinue", "ma_cavalry_interval", "ma_cavalry_soul", "ma_cavalry_soul_damage", "ma_cavalry_duration", "ma_cavalry_revival", "ma_cavalry_aggro",
+		],
+		"weapon_ids": ["ma_basic_spear", "ma_spear_pierce", "ma_sweeping_wind", "ma_skybreaker", "ma_fourth_strike", "ma_fourth_domain", "ma_fourth_pierce"],
+		"passive_ids": ["ma_iron_cavalry", "ma_iron_cavalry_stride", "ma_iron_borrow", "ma_kill_recovery", "ma_western_recovery"],
+		"active_ids": ["ma_long_charge", "ma_active_cooldown", "ma_active_gather"],
+		"rare_ids": ["ma_ultimate_armor_pierce", "ma_ultimate_surge", "ma_cavalry_retinue", "ma_cavalry_interval", "ma_cavalry_soul", "ma_cavalry_soul_damage", "ma_cavalry_duration", "ma_cavalry_revival", "ma_cavalry_aggro"],
+		"core_talent_ids": ["ma_basic_spear", "ma_sweeping_wind", "ma_iron_cavalry"],
+		"talent_blueprint_ids": ["ma_spear_pierce", "ma_skybreaker", "ma_fourth_strike", "ma_fourth_domain", "ma_fourth_pierce", "ma_iron_cavalry_stride", "ma_long_charge", "ma_active_cooldown", "ma_active_gather", "ma_kill_recovery", "ma_western_recovery", "ma_iron_borrow", "ma_ultimate_armor_pierce", "ma_ultimate_surge", "ma_cavalry_retinue", "ma_cavalry_interval", "ma_cavalry_soul", "ma_cavalry_soul_damage", "ma_cavalry_duration", "ma_cavalry_revival", "ma_cavalry_aggro"],
+		"progression_chains": [["ma_spear_pierce", "ma_skybreaker"], ["ma_iron_cavalry", "ma_iron_cavalry_stride"], ["ma_long_charge", "ma_active_cooldown"], ["ma_long_charge", "ma_active_gather"], ["ma_fourth_strike", "ma_fourth_domain", "ma_fourth_pierce"], ["ma_kill_recovery", "ma_western_recovery"], ["ma_ultimate_armor_pierce", "ma_ultimate_surge"], ["ma_cavalry_retinue", "ma_cavalry_interval"], ["ma_cavalry_duration", "ma_cavalry_revival", "ma_cavalry_aggro"]],
 	},
 	"huang_zhong": {
 		"upgrade_ids": ["huang_draw_strength", "huang_hawk_eye", "huang_blade_return", "huang_dingjun_volley"],
@@ -248,10 +253,32 @@ const DEFINITIONS := {
 	"returning_spear": {"title": "回马穿心", "category": "无双", "description": "七进七出每次穿阵的伤害提高。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
 	"zhao_ultimate_armor_pierce": {"title": "七进·穿云", "category": "无双", "description": "七进七出无视防御 +5%；对普通敌人等比例增伤，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
 	"triumph": {"title": "凯歌", "category": "无双", "description": "无双充能效率提高；击败精英额外回血并充能。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [1500], "shop_rank_limited": true},
-	"ma_long_stride": {"title": "踏雪长驱", "category": "银枪", "description": "普攻距离提高，并立刻获得部分奔势。", "max_stacks": 3},
-	"ma_iron_hoof": {"title": "铁骑余威", "category": "奔势", "description": "招式伤害与击退强度提高。", "max_stacks": 3},
-	"ma_storm_charge": {"title": "西凉雷骑", "category": "破阵", "description": "西凉破阵冷却缩短，冲阵距离扩大。", "max_stacks": 3},
-	"ma_silver_afterimage": {"title": "银影奔雷", "category": "无双", "description": "银枪奔雷伤害与架势伤害提高。", "max_stacks": 3},
+	"ma_basic_spear": {"title": "基础枪势", "category": "枪法", "description": "普攻与主动技能伤害提高 10%，最多叠加 3 层。", "max_stacks": 3},
+	"ma_spear_pierce": {"title": "穿阵枪锋", "category": "枪法", "description": "使普攻与主动技能穿透目标数每级 +2，最多3级。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [700, 1200, 1900], "shop_rank_limited": true},
+	"ma_sweeping_wind": {"title": "横扫余威", "category": "枪法", "description": "第二段横扫范围与角度提高，最多叠加 3 层。", "max_stacks": 3},
+	"ma_skybreaker": {"title": "破空坠星", "category": "枪法", "description": "普攻第三段挑飞更高，并提高敌人落地伤害，最多叠加 3 层。", "max_stacks": 3, "requires": "ma_spear_pierce", "shop_max_rank": 3, "shop_costs": [650, 1050, 1650], "shop_rank_limited": true},
+	"ma_fourth_strike": {"title": "银枪落刃", "category": "枪法", "description": "解锁第四段普攻：跃至空中停顿后，朝输入方向斜砸落地并击飞范围内敌人。", "max_stacks": 1, "shop_max_rank": 1, "shop_costs": [1800], "shop_rank_limited": true},
+	"ma_fourth_domain": {"title": "落刃扩域", "category": "银枪落刃", "description": "第四段落点范围与击飞范围提高。", "max_stacks": 2, "requires": "ma_fourth_strike", "shop_max_rank": 2, "shop_costs": [900, 1500], "shop_rank_limited": true},
+	"ma_fourth_pierce": {"title": "落刃穿阵", "category": "银枪落刃", "description": "第四段对精英与领主伤害提高，并额外增加穿透。", "max_stacks": 1, "requires": "ma_fourth_domain", "requires_stacks": 2, "shop_max_rank": 1, "shop_costs": [2200], "shop_rank_limited": true},
+	"ma_iron_cavalry": {"title": "铁骑淬锋", "category": "被动", "description": "每层铁骑额外提供攻击速度与攻击力；最多叠加 3 层。", "max_stacks": 3},
+	"ma_iron_cavalry_stride": {"title": "铁骑·疾蹄", "category": "铁骑淬锋", "description": "每层铁骑额外提供移动速度；1/2/3级为每层 +3/+4/+5 速度。", "max_stacks": 3, "requires": "ma_iron_cavalry", "shop_max_rank": 3, "shop_costs": [700, 1200, 1900], "shop_rank_limited": true},
+	"ma_long_charge": {"title": "长驱破阵", "category": "主动", "description": "西凉破阵突进距离提高，每级增加 42。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [600, 1000, 1600], "shop_rank_limited": true},
+	"ma_active_cooldown": {"title": "西凉疾袭", "category": "长驱破阵", "description": "主动技能冷却时间减少 1 秒/2 秒，最多 2 级。", "max_stacks": 2, "requires": "ma_long_charge", "shop_max_rank": 2, "shop_costs": [900, 1600], "shop_rank_limited": true},
+		"ma_active_gather": {"title": "西凉聚阵", "category": "主动", "description": "主动技能命中的普通敌军被牵引向马超，牵引距离提高 36/54/72。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [700, 1200, 1900], "shop_rank_limited": true},
+
+	"ma_kill_recovery": {"title": "乘胜追击", "category": "被动", "description": "击杀普通敌军有概率回复生命，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1100, 1700], "shop_rank_limited": true},
+	"ma_western_recovery": {"title": "西凉续战", "category": "被动", "description": "连续击杀提高乘胜追击的触发概率与回复量。", "max_stacks": 2, "requires": "ma_kill_recovery", "requires_stacks": 3, "shop_max_rank": 2, "shop_costs": [1100, 1900], "shop_rank_limited": true},
+		"ma_iron_borrow": {"title": "铁骑借锋", "category": "铁骑·疾蹄", "description": "铁骑满层时，有 8%/16%/24% 概率免疫一次伤害，并将伤害转给附近随机敌人。", "max_stacks": 3, "requires": "ma_iron_cavalry", "requires_stacks": 1, "shop_max_rank": 3, "shop_costs": [900, 1500, 2400], "shop_rank_limited": true},
+	"ma_ultimate_armor_pierce": {"title": "奔雷破甲", "category": "无双", "description": "银枪奔雷期间无视防御提高，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [650, 1150, 1900], "shop_rank_limited": true},
+	"ma_ultimate_surge": {"title": "雷霆贯阵", "category": "奔雷破甲", "description": "无双期间攻击速度、移动速度与攻击力各提高 20%。", "max_stacks": 1, "requires": "ma_ultimate_armor_pierce", "shop_max_rank": 1, "shop_costs": [2400], "shop_rank_limited": true},
+	"ma_cavalry_retinue": {"title": "铁骑从军", "category": "无双", "description": "协同马超作战的副将数量 +1，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [900, 1500, 2400], "shop_rank_limited": true},
+	"ma_cavalry_interval": {"title": "锐骑先登", "category": "铁骑从军", "description": "副将基础攻击间隔减少 1 秒/2 秒/3 秒，最多 3 级。", "max_stacks": 3, "requires": "ma_cavalry_retinue", "requires_stacks": 1, "shop_max_rank": 3, "shop_costs": [800, 1400, 2200], "shop_rank_limited": true},
+		"ma_cavalry_soul": {"title": "铁骑共鸣", "category": "锐骑先登", "description": "副将继承马超发动无双时的爆炎、雷霆和罡风战魂效果。", "max_stacks": 1, "requires": "ma_cavalry_interval", "requires_stacks": 1, "shop_max_rank": 1, "shop_costs": [2600], "shop_rank_limited": true},
+		"ma_cavalry_soul_damage": {"title": "铁骑裂阵", "category": "铁骑共鸣", "description": "提高副将继承的攻击力：1级 100%，2级 150%，3级 200%。", "max_stacks": 3, "requires": "ma_cavalry_soul", "requires_stacks": 1, "shop_max_rank": 3, "shop_costs": [1000, 1800, 2800], "shop_rank_limited": true},
+	"ma_cavalry_duration": {"title": "久战西凉", "category": "无双", "description": "副将在场持续时间每级增加 3 秒，最多叠加 3 层。", "max_stacks": 3, "shop_max_rank": 3, "shop_costs": [800, 1350, 2200], "shop_rank_limited": true},
+		"ma_cavalry_revival": {"title": "西凉再临", "category": "久战西凉", "description": "最大同时在场骑兵波数 +1：未激活 1 波，1/2 级为 2/3 波；每波按当前骑兵数独立存活。", "max_stacks": 2, "requires": "ma_cavalry_duration", "requires_stacks": 1, "shop_max_rank": 2, "shop_costs": [900, 1600], "shop_rank_limited": true},
+		"ma_cavalry_aggro": {"title": "铁骑引阵", "category": "久战西凉", "description": "骑兵周围 260 范围内，副将命中建立约3秒短时仇恨；等级越高，敌人越优先攻击副将。副将退场或死亡后仇恨立即失效。", "max_stacks": 3, "requires": "ma_cavalry_revival", "requires_stacks": 1, "shop_max_rank": 3, "shop_costs": [1000, 1800, 2800], "shop_rank_limited": true},
+	"ma_cavalry_hunt": {"title": "雷骑合围", "category": "无双", "description": "无双期间副将命中后提高马超下一次冲阵伤害。", "max_stacks": 1, "requires": "ma_cavalry_retinue", "requires_stacks": 3, "shop_max_rank": 1, "shop_costs": [2600], "shop_rank_limited": true},
 	"huang_draw_strength": {"title": "强弓贯甲", "category": "弓术", "description": "弓箭伤害提高，穿透目标数增加。", "max_stacks": 3},
 	"huang_hawk_eye": {"title": "百步鹰眼", "category": "弓术", "description": "普攻与主动技能射程提高。", "max_stacks": 3},
 	"huang_blade_return": {"title": "刀弦自守", "category": "刀势", "description": "刀形态击退提高，防御提高。", "max_stacks": 3},
@@ -469,7 +496,11 @@ func _take_weighted_candidate(candidates: Array[String], candidate_weights: Dict
 	return candidates.pop_back()
 
 func record_selection(upgrade_id: String) -> void:
-	owned_counts[upgrade_id] = int(owned_counts.get(upgrade_id, 0)) + 1
+	var max_stacks := max_stacks_for(upgrade_id)
+	var current_stacks := int(owned_counts.get(upgrade_id, 0))
+	if max_stacks > 0 and current_stacks >= max_stacks:
+		return
+	owned_counts[upgrade_id] = current_stacks + 1
 	if not selection_history.has(upgrade_id):
 		selection_history.append(upgrade_id)
 
@@ -564,6 +595,10 @@ func title_for(upgrade_id: String) -> String:
 
 func description_for(upgrade_id: String) -> String:
 	return str(_definition(upgrade_id).get("description", ""))
+
+static func is_auto_unlock_talent(upgrade_id: String) -> bool:
+	var definition: Dictionary = DEFINITIONS.get(upgrade_id, {}) as Dictionary
+	return not str(definition.get("requires", "")).is_empty() and (definition.get("shop_costs", []) as Array).is_empty() and not bool(definition.get("shop_rank_limited", false))
 
 func category_for(upgrade_id: String) -> String:
 	return str(_definition(upgrade_id).get("category", "强化"))

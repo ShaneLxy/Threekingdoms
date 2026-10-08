@@ -17,18 +17,30 @@ const CORPSE_MIN_DROP_DISTANCE := 84.0
 const MAX_REMEMBERED_CORPSES := 72
 const PROC_COOLDOWN := 0.68
 
-const SOUL_IDS: Array[String] = ["gale", "thunder", "flame", "iron"]
+const SOUL_IDS: Array[String] = ["gale", "thunder", "flame", "iron", "machine"]
 
 var drops: Array[Dictionary] = []
 var recent_corpses: Array[Dictionary] = []
 var drop_remaining := DROP_INTERVAL
+var drop_interval := DROP_INTERVAL
+var buff_duration := BUFF_DURATION
+var soul_ranks: Dictionary = {}
 var proc_cooldowns: Dictionary = {}
+
+func configure_profile(profile: Dictionary) -> void:
+	var effects := SoulResonance.effects_for(profile)
+	drop_interval = float(effects.drop_interval)
+	buff_duration = float(effects.buff_duration)
+	soul_ranks = (profile.get("battle_soul_armory", {}) as Dictionary).duplicate(true)
+
+func profile_effects() -> Dictionary:
+	return {"drop_interval": drop_interval, "buff_duration": buff_duration}
 
 func reset() -> void:
 	drops.clear()
 	recent_corpses.clear()
 	proc_cooldowns.clear()
-	drop_remaining = DROP_INTERVAL
+	drop_remaining = drop_interval
 
 func record_enemy_corpse(at: Vector2) -> void:
 	if not at.is_finite():
@@ -52,14 +64,16 @@ func tick(delta: float, player_position: Vector2) -> void:
 	if drop_remaining <= 0.0:
 		# If the player happens to clear the whole field at the exact interval,
 		# retry shortly rather than creating a reward at an arbitrary position.
-		drop_remaining = DROP_INTERVAL if _try_spawn_at_nearby_corpse(player_position) else 2.0
+		drop_remaining = drop_interval if _try_spawn_at_nearby_corpse(player_position) else 2.0
 	for index in range(drops.size() - 1, -1, -1):
 		var drop: Dictionary = drops[index]
 		drop["remaining"] = maxf(0.0, float(drop.get("remaining", 0.0)) - delta)
 		var at: Vector2 = drop.get("position", Vector2.ZERO)
 		if player_position.distance_squared_to(at) <= PICKUP_DISTANCE * PICKUP_DISTANCE:
 			var soul_id := str(drop.get("id", "gale"))
-			soul_collected.emit(soul_id, title_for(soul_id), description_for(soul_id), BUFF_DURATION)
+			var armory_id := _armory_id_for(soul_id)
+			var rank := clampi(int(soul_ranks.get(armory_id, 0)), 0, BattleSoulArmory.max_rank_for(armory_id))
+			soul_collected.emit(soul_id, title_for(soul_id), description_for(soul_id, rank), buff_duration)
 			drops.remove_at(index)
 			continue
 		if float(drop.get("remaining", 0.0)) <= 0.0:
@@ -110,6 +124,7 @@ func title_for(soul_id: String) -> String:
 		"thunder": return "雷霆战魂"
 		"flame": return "爆炎战魂"
 		"iron": return "玄甲战魂"
+		"machine": return "神机战魂"
 		_: return "战魂"
 
 func short_title_for(soul_id: String) -> String:
@@ -120,13 +135,14 @@ func short_title_for(soul_id: String) -> String:
 		"iron": return "玄甲"
 		_: return "战魂"
 
-func description_for(soul_id: String) -> String:
-	match soul_id:
-		"gale": return "普攻速度 +30%"
-		"thunder": return "攻击命中后追加雷击"
-		"flame": return "攻击命中后引发爆炎"
-		"iron": return "受到伤害 -30%"
-		_: return "获得临时战场增益"
+func _armory_id_for(soul_id: String) -> String:
+	return "%s_mastery" % soul_id
+
+func description_for(soul_id: String, rank: int = 0) -> String:
+	var armory_id := _armory_id_for(soul_id)
+	if BattleSoulArmory.definition_for(armory_id).is_empty():
+		return "获得临时战场增益"
+	return BattleSoulArmory.current_effect_for(armory_id, rank)
 
 func icon_for(soul_id: String) -> String:
 	match soul_id:
@@ -134,6 +150,7 @@ func icon_for(soul_id: String) -> String:
 		"thunder": return "雷"
 		"flame": return "炎"
 		"iron": return "甲"
+		"machine": return "机"
 		_: return "魂"
 
 func color_for(soul_id: String) -> Color:
@@ -142,6 +159,7 @@ func color_for(soul_id: String) -> Color:
 		"thunder": return Color("79baff")
 		"flame": return Color("f28a48")
 		"iron": return Color("e1c26a")
+		"machine": return Color("d8a84e")
 		_: return Color("d8e7ef")
 
 func _try_spawn_at_nearby_corpse(player_position: Vector2) -> bool:

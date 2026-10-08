@@ -6,12 +6,14 @@ const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
 const SIEGE_ARMORY = preload("res://scripts/domain/siege_armory.gd")
 const BATTLE_SOUL_ARMORY = preload("res://scripts/domain/battle_soul_armory.gd")
+const SOUL_RESONANCE = preload("res://scripts/domain/soul_resonance.gd")
 
 const PROFILE_PATH := "user://profile.json"
 const PROFILE_BACKUP_PATH := "user://profile.json.bak"
 const PROFILE_TEMP_PATH := "user://profile.json.tmp"
-const CURRENT_SAVE_VERSION := 11
-const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu", "zhang_fei", "zhao_yun"]
+const CURRENT_SAVE_VERSION := 12
+const DEFAULT_NEW_PROFILE_HEROES := ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao"]
+const FREE_RELEASE_HEROES := ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao"]
 const DEFAULT_NEW_PROFILE_TIANJI_SKILLS := {
 	"fire_rain_burning": 1,
 	"xun_wind_break": 1,
@@ -29,7 +31,8 @@ var profile: Dictionary = {
 	"purchased_upgrades": [],
 	"military_strategies": {},
 	"siege_armory": {},
-	"battle_soul_armory": {},
+	"battle_soul_armory": {"gale_mastery": 0, "thunder_mastery": 0, "flame_mastery": 0, "iron_mastery": 0, "machine_mastery": 0},
+	"soul_resonance_rank": 0,
 	"tianji_skills": DEFAULT_NEW_PROFILE_TIANJI_SKILLS.duplicate(),
 	"hero_talents": {"guan_yu": [], "zhang_fei": [], "zhao_yun": [], "ma_chao": [], "huang_zhong": []},
 	"hero_talent_ranks": {"guan_yu": {}, "zhang_fei": {}, "zhao_yun": {}, "ma_chao": {}, "huang_zhong": {}},
@@ -40,6 +43,7 @@ var profile: Dictionary = {
 }
 var trial_equipped_hero_id := ""
 var run_hero_id := ""
+var syncing_auto_unlock_talents := false
 
 func load_profile() -> Dictionary:
 	var loaded_profile: Dictionary = _read_profile_file(PROFILE_PATH)
@@ -210,6 +214,28 @@ func purchase_battle_soul_armory(armory_id: String) -> bool:
 	save_profile()
 	return true
 
+func soul_resonance_rank() -> int:
+	_ensure_profile_shape()
+	return SOUL_RESONANCE.rank_for(profile)
+
+func soul_resonance_cost() -> int:
+	return SOUL_RESONANCE.cost_for(profile)
+
+func can_purchase_soul_resonance() -> bool:
+	_ensure_profile_shape()
+	return SOUL_RESONANCE.can_purchase(profile)
+
+func purchase_soul_resonance() -> bool:
+	_ensure_profile_shape()
+	if not SOUL_RESONANCE.purchase(profile):
+		return false
+	save_profile()
+	return true
+
+func soul_resonance_effects() -> Dictionary:
+	_ensure_profile_shape()
+	return SOUL_RESONANCE.effects_for(profile)
+
 func tianji_rank(skill_id: String) -> int:
 	_ensure_profile_shape()
 	var ranks: Dictionary = profile.get("tianji_skills", {}) as Dictionary
@@ -300,6 +326,36 @@ func talent_prerequisite_satisfied_for_purchase(hero_id: String, talent_id: Stri
 		return true
 	return talent_rank(hero_id, prerequisite_id) >= required_rank
 
+func _sync_auto_unlock_talents(hero_id: String) -> bool:
+	if syncing_auto_unlock_talents:
+		return false
+	syncing_auto_unlock_talents = true
+	var hero_definition := HERO_CATALOG.definition_for(hero_id)
+	var branches: Array = hero_definition.get("talent_tree", []) as Array
+	var hero_talents: Dictionary = profile.get("hero_talents", {}) as Dictionary
+	var talents: Array = hero_talents.get(hero_id, []) as Array
+	var all_ranks: Dictionary = profile.get("hero_talent_ranks", {}) as Dictionary
+	var ranks: Dictionary = all_ranks.get(hero_id, {}) as Dictionary
+	var changed := false
+	for branch_variant in branches:
+		var branch: Dictionary = branch_variant as Dictionary
+		for node_variant in branch.get("nodes", []) as Array:
+			var node: Dictionary = node_variant as Dictionary
+			var talent_id := str(node.get("id", ""))
+			if talent_id.is_empty() or not UPGRADE_SYSTEM.is_auto_unlock_talent(talent_id):
+				continue
+			if talent_prerequisite_satisfied_for_purchase(hero_id, talent_id) and int(ranks.get(talent_id, 0)) <= 0:
+				ranks[talent_id] = 1
+				if not talents.has(talent_id):
+					talents.append(talent_id)
+				changed = true
+	hero_talents[hero_id] = talents
+	all_ranks[hero_id] = ranks
+	profile["hero_talents"] = hero_talents
+	profile["hero_talent_ranks"] = all_ranks
+	syncing_auto_unlock_talents = false
+	return changed
+
 func purchase_talent(hero_id: String, talent_id: String, cost: int) -> bool:
 	_ensure_profile_shape()
 	var definition: Dictionary = UPGRADE_SYSTEM.DEFINITIONS.get(talent_id, {}) as Dictionary
@@ -324,6 +380,7 @@ func purchase_talent(hero_id: String, talent_id: String, cost: int) -> bool:
 	all_ranks[hero_id] = ranks
 	profile["hero_talent_ranks"] = all_ranks
 	profile["military_merit"] = int(profile.get("military_merit", 0)) - next_cost
+	_sync_auto_unlock_talents(hero_id)
 	save_profile()
 	return true
 
@@ -333,6 +390,8 @@ func has_hero(hero_id: String) -> bool:
 
 func purchase_hero(hero_id: String, cost: int) -> bool:
 	_ensure_profile_shape()
+	if FREE_RELEASE_HEROES.has(hero_id):
+		return has_hero(hero_id)
 	var hero_definition := HERO_CATALOG.definition_for(hero_id)
 	var required_cost := int(hero_definition.get("unlock_cost", cost))
 	if required_cost <= 0 or not HERO_CATALOG.has_hero(hero_id) or not bool(hero_definition.get("shop_available", true)) or not HERO_CATALOG.is_playable(hero_id) or has_hero(hero_id) or int(profile.get("military_merit", 0)) < required_cost:
@@ -405,6 +464,8 @@ func equip_hero_for_trial(hero_id: String) -> bool:
 		return false
 	run_hero_id = ""
 	trial_equipped_hero_id = hero_id
+	profile["equipped_hero_id"] = hero_id
+	save_profile()
 	return true
 
 func tutorial_stage() -> int:
@@ -469,6 +530,9 @@ func _migrate_profile() -> bool:
 	if save_version < 11:
 		changed = _migrate_to_version_11() or changed
 		save_version = 11
+	if save_version < 12:
+		changed = _migrate_to_version_12() or changed
+		save_version = 12
 	if save_version != stored_version:
 		profile["save_version"] = save_version
 		changed = true
@@ -649,6 +713,18 @@ func _migrate_to_version_10() -> bool:
 	profile["siege_armory"] = {}
 	return true
 
+func _migrate_to_version_12() -> bool:
+	var changed := false
+	var soul_ranks: Dictionary = profile.get("battle_soul_armory", {}) as Dictionary
+	for armory_id in BATTLE_SOUL_ARMORY.DISPLAY_ORDER:
+		if not soul_ranks.has(armory_id):
+			continue
+		var old_rank := clampi(int(soul_ranks.get(armory_id, 0)), 1, BATTLE_SOUL_ARMORY.max_rank_for(armory_id))
+		soul_ranks[armory_id] = old_rank - 1
+		changed = true
+	profile["battle_soul_armory"] = soul_ranks
+	return changed
+
 func _migrate_to_version_11() -> bool:
 	if profile.has("battle_soul_armory"):
 		return false
@@ -673,6 +749,12 @@ func _ensure_profile_shape() -> bool:
 	if not profile.has("unlocked_heroes"):
 		profile["unlocked_heroes"] = DEFAULT_NEW_PROFILE_HEROES.duplicate()
 		changed = true
+	var unlocked_heroes: Array = profile.get("unlocked_heroes", []) as Array
+	for free_hero_id in FREE_RELEASE_HEROES:
+		if not unlocked_heroes.has(free_hero_id):
+			unlocked_heroes.append(free_hero_id)
+			changed = true
+	profile["unlocked_heroes"] = unlocked_heroes
 	if not profile.has("completed_chapters"):
 		profile["completed_chapters"] = []
 		changed = true
@@ -696,6 +778,15 @@ func _ensure_profile_shape() -> bool:
 		changed = true
 	if not profile.has("battle_soul_armory"):
 		profile["battle_soul_armory"] = {}
+		changed = true
+	var soul_ranks: Dictionary = profile.get("battle_soul_armory", {}) as Dictionary
+	for armory_id in BATTLE_SOUL_ARMORY.DISPLAY_ORDER:
+		if not soul_ranks.has(armory_id):
+			soul_ranks[armory_id] = 0
+			changed = true
+	profile["battle_soul_armory"] = soul_ranks
+	if not profile.has("soul_resonance_rank"):
+		profile["soul_resonance_rank"] = 0
 		changed = true
 	for obsolete_key in ["tianji_seals", "tianji_slots", "tianji_pity", "tianji_free_spin_used"]:
 		if profile.has(obsolete_key):
@@ -723,6 +814,9 @@ func _ensure_profile_shape() -> bool:
 				ranks[talent_id] = 1
 				changed = true
 		all_talent_ranks[hero_id] = ranks
+	for hero_id_variant in HERO_CATALOG.all_ids():
+		if _sync_auto_unlock_talents(str(hero_id_variant)):
+			changed = true
 	profile["hero_talents"] = hero_talents
 	profile["hero_talent_ranks"] = all_talent_ranks
 	if profile.has("unlocked_talents"):

@@ -67,6 +67,9 @@ var launch_target_limit := 0
 var launch_landing_damage := 0.0
 var launch_landing_knockback := 0.0
 var launch_hold_until_duration := false
+# 马超专属：敌人原地抛物线升空，落地时结算额外伤害，不触发张飞的碰撞传递。
+var ma_chao_airborne := false
+var ma_chao_gather_radius := 0.0
 
 static func line(at: Vector2, toward: Vector2, length: float, line_width: float, damage_multiplier: float, max_targets: int, name: String) -> AttackRequest:
 	var request := AttackRequest.new()

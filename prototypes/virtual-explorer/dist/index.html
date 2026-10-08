@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#08121e" />
+  <title>星际漫游 · 虚拟世界探索原型</title>
+  <style>:root{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,sans-serif}*{box-sizing:border-box}html,body{background:#08121e;width:100%;height:100%;margin:0;overflow:hidden}body{touch-action:none;-webkit-user-select:none;user-select:none}#app{width:100%;height:100%;position:relative}canvas{width:100%;height:100%;display:block}.hud{pointer-events:none;flex-direction:column;justify-content:space-between;padding:24px;display:flex;position:absolute;inset:0}.topbar{justify-content:space-between;align-items:flex-start;gap:16px;display:flex}.brand{max-width:360px}.eyebrow{color:#6ee7f9;letter-spacing:.18em;text-transform:uppercase;font-size:11px;font-weight:700}h1{letter-spacing:-.03em;margin:6px 0 0;font-size:clamp(22px,4vw,36px);line-height:1.1}.subtitle{color:#e4f1f8b8;margin-top:8px;font-size:13px;line-height:1.5}.scene-panel{pointer-events:auto;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);background:#08121e9e;border:1px solid #aadceb33;border-radius:12px;min-width:190px;padding:12px}.scene-label{color:#e4f1f88c;margin-bottom:8px;font-size:11px}.scene-buttons{flex-wrap:wrap;gap:6px;display:flex}button{color:#e7f7fb;font:inherit;cursor:pointer;background:#ffffff0f;border:1px solid #aadceb3d;border-radius:8px;padding:8px 10px;font-size:12px;transition:all .2s}button:hover,button.active{color:#07141d;background:#8be9f5;border-color:#8be9f5;transform:translateY(-1px)}.bottom{justify-content:space-between;align-items:flex-end;gap:18px;display:flex}.hint{color:#e4f1f8ad;max-width:320px;font-size:12px;line-height:1.6}.status{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);background:#08121e80;border-left:2px solid #8be9f5;min-width:210px;padding:12px 14px}.status strong{color:#e7f7fb;font-size:13px;display:block}.status span{color:#e4f1f89e;margin-top:4px;font-size:11px;display:block}.crosshair{opacity:.65;width:16px;height:16px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.crosshair:before,.crosshair:after{content:"";background:#dcfaffbf;position:absolute}.crosshair:before{width:16px;height:1px;top:7px;left:0}.crosshair:after{width:1px;height:16px;top:0;left:7px}.joystick{background:#08121e52;border:1px solid #dcfaff42;border-radius:50%;width:112px;height:112px;display:none;position:absolute;bottom:112px;left:24px}.stick{background:#8be9f5b8;border-radius:50%;width:40px;height:40px;position:absolute;top:36px;left:36px;box-shadow:0 0 24px #8be9f557}.mobile-tip{color:#e4f1f899;font-size:11px;display:none;position:absolute;bottom:34px;right:22px}@media (width<=700px){.hud{padding:18px}.subtitle{max-width:230px}.scene-panel{min-width:0}.hint{display:none}.status{min-width:0}.joystick,.mobile-tip{display:block}.crosshair{opacity:.35}}</style>
+  <script type="module" crossorigin src="/assets/index-B45T_ysI.js"></script>
+</head>
+<body>
+  <main id="app">
+    <div class="hud">
+      <div class="topbar">
+        <div class="brand"><div class="eyebrow">Virtual Explorer · Prototype 01</div><h1>星际漫游</h1><div class="subtitle">以第一人称穿过山谷、海底与深空，观察这个世界的不同尺度。</div></div>
+        <section class="scene-panel"><div class="scene-label">选择探索区域</div><div class="scene-buttons"><button data-scene="valley" class="active">山谷</button><button data-scene="ocean">海底</button><button data-scene="cosmos">深空</button></div></section>
+      </div>
+      <div class="bottom"><div class="hint">WASD 移动 · 鼠标拖动转向 · 手机用左侧摇杆移动、右侧拖动视角</div><div class="status"><strong id="scene-name">山谷 · 云端入口</strong><span id="scene-detail">风从高地吹来，远处有一座通往海洋的光门。</span></div></div>
+    </div>
+    <div class="crosshair"></div><div class="joystick" id="joystick"><div class="stick" id="stick"></div></div><div class="mobile-tip">拖动屏幕探索</div>
+  </main>
+</body>
+</html>

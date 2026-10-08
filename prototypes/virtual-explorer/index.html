@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#08121e" />
+  <title>星际漫游 · 虚拟世界探索原型</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #08121e; }
+    body { touch-action: none; user-select: none; }
+    #app { width: 100%; height: 100%; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hud { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 24px; }
+    .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .brand { max-width: 360px; }
+    .eyebrow { color: #6ee7f9; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; font-weight: 700; }
+    h1 { margin: 6px 0 0; font-size: clamp(22px, 4vw, 36px); line-height: 1.1; letter-spacing: -.03em; }
+    .subtitle { margin-top: 8px; color: rgba(228, 241, 248, .72); font-size: 13px; line-height: 1.5; }
+    .scene-panel { pointer-events: auto; min-width: 190px; background: rgba(8, 18, 30, .62); border: 1px solid rgba(170, 220, 235, .2); border-radius: 12px; padding: 12px; backdrop-filter: blur(14px); }
+    .scene-label { color: rgba(228, 241, 248, .55); font-size: 11px; margin-bottom: 8px; }
+    .scene-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+    button { border: 1px solid rgba(170, 220, 235, .24); background: rgba(255,255,255,.06); color: #e7f7fb; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12px; cursor: pointer; transition: .2s ease; }
+    button:hover, button.active { background: #8be9f5; color: #07141d; border-color: #8be9f5; transform: translateY(-1px); }
+    .bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; }
+    .hint { max-width: 320px; color: rgba(228, 241, 248, .68); font-size: 12px; line-height: 1.6; }
+    .status { min-width: 210px; padding: 12px 14px; border-left: 2px solid #8be9f5; background: rgba(8, 18, 30, .5); backdrop-filter: blur(12px); }
+    .status strong { display: block; color: #e7f7fb; font-size: 13px; }
+    .status span { display: block; margin-top: 4px; color: rgba(228, 241, 248, .62); font-size: 11px; }
+    .crosshair { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); opacity: .65; }
+    .crosshair::before, .crosshair::after { content: ""; position: absolute; background: rgba(220, 250, 255, .75); }
+    .crosshair::before { width: 16px; height: 1px; left: 0; top: 7px; } .crosshair::after { height: 16px; width: 1px; top: 0; left: 7px; }
+    .joystick { display: none; position: absolute; left: 24px; bottom: 112px; width: 112px; height: 112px; border: 1px solid rgba(220,250,255,.26); border-radius: 50%; background: rgba(8,18,30,.32); }
+    .stick { position: absolute; left: 36px; top: 36px; width: 40px; height: 40px; border-radius: 50%; background: rgba(139,233,245,.72); box-shadow: 0 0 24px rgba(139,233,245,.34); }
+    .mobile-tip { display: none; position: absolute; right: 22px; bottom: 34px; color: rgba(228,241,248,.6); font-size: 11px; }
+    @media (max-width: 700px) { .hud { padding: 18px; } .subtitle { max-width: 230px; } .scene-panel { min-width: 0; } .hint { display: none; } .status { min-width: 0; } .joystick, .mobile-tip { display: block; } .crosshair { opacity: .35; } }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <div class="hud">
+      <div class="topbar">
+        <div class="brand"><div class="eyebrow">Virtual Explorer · Prototype 01</div><h1>星际漫游</h1><div class="subtitle">以第一人称穿过山谷、海底与深空，观察这个世界的不同尺度。</div></div>
+        <section class="scene-panel"><div class="scene-label">选择探索区域</div><div class="scene-buttons"><button data-scene="valley" class="active">山谷</button><button data-scene="ocean">海底</button><button data-scene="cosmos">深空</button></div></section>
+      </div>
+      <div class="bottom"><div class="hint">WASD 移动 · 鼠标拖动转向 · 手机用左侧摇杆移动、右侧拖动视角</div><div class="status"><strong id="scene-name">山谷 · 云端入口</strong><span id="scene-detail">风从高地吹来，远处有一座通往海洋的光门。</span></div></div>
+    </div>
+    <div class="crosshair"></div><div class="joystick" id="joystick"><div class="stick" id="stick"></div></div><div class="mobile-tip">拖动屏幕探索</div>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

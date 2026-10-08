@@ -142,8 +142,34 @@ static func subtitle_for(skill_id: String) -> String:
 static func icon_for(skill_id: String) -> String:
 	return str(definition_for(skill_id).get("icon", "天"))
 
-static func description_for(skill_id: String) -> String:
-	return str(definition_for(skill_id).get("description", ""))
+static func description_for(skill_id: String, rank: int = 0) -> String:
+	var definition := definition_for(skill_id)
+	if definition.is_empty():
+		return ""
+	var shown_rank := clampi(rank, 0, max_rank_for(skill_id))
+	if shown_rank <= 0:
+		return str(definition.get("description", ""))
+	return "%s\n%s" % [str(definition.get("description", "")), effect_summary_for(skill_id, shown_rank)]
+
+static func effect_summary_for(skill_id: String, rank: int) -> String:
+	var definition := definition_for(skill_id)
+	var shown_rank := clampi(rank, 1, max_rank_for(skill_id))
+	var damage := damage_ratio_for(skill_id, shown_rank) * 100.0
+	var cooldown := cooldown_for(skill_id, shown_rank)
+	var radius := radius_for(skill_id, shown_rank)
+	match skill_id:
+		"seven_star_lightning": return "%d级：伤害倍率 %.0f%%，落雷半径 %.0f，冷却 %.1f秒，麻痹 %.2f秒" % [shown_rank, damage, radius, cooldown, float(definition.get("slow_duration", 0.0))]
+		"xun_wind_break": return "%d级：伤害倍率 %.0f%%，风体宽度 %.0f，卷起%d名普通敌军，击飞 %.0f，冷却 %.1f秒" % [shown_rank, damage, radius, int(_rank_value(definition, "wind_lift_limits", shown_rank, 0)), float(_rank_value(definition, "wind_fling_distance", shown_rank, 0.0)), cooldown]
+		"eight_trigram_tide": return "%d级：伤害倍率 %.0f%%，洪潮宽度 %.0f，击退 %.0f，伤害半高 %.0f，冷却 %.1f秒" % [shown_rank, damage, float(_rank_value(definition, "flood_widths", shown_rank, 0.0)), float(_rank_value(definition, "knockbacks", shown_rank, 0.0)), float(_rank_value(definition, "damage_half_heights", shown_rank, 0.0)), cooldown]
+		"fire_rain_burning": return "%d级：每轮伤害倍率 %.0f%%，范围半径 %.0f，持续 %.1f秒，末陨倍率 %.0f%%，冷却 %.1f秒" % [shown_rank, damage, radius, float(definition.get("duration", 0.0)), float(definition.get("final_meteor_damage_ratio", 0.0)) * 100.0, cooldown]
+		"arrow_support_volley": return "%d级：每轮伤害倍率 %.0f%%，覆盖半径 %.0f，箭雨%d轮，冷却 %.1f秒" % [shown_rank, damage, radius, int(definition.get("volley_count", 0)), cooldown]
+	return "等级 %d / %d" % [shown_rank, max_rank_for(skill_id)]
+
+static func _rank_value(definition: Dictionary, key: String, rank: int, fallback: Variant) -> Variant:
+	var values: Array = definition.get(key, []) as Array
+	if values.is_empty():
+		return fallback
+	return values[clampi(rank - 1, 0, values.size() - 1)]
 
 static func max_rank_for(skill_id: String) -> int:
 	return int(definition_for(skill_id).get("max_rank", 0))
@@ -160,7 +186,10 @@ static func cooldown_for(skill_id: String, rank: int) -> float:
 
 static func damage_ratio_for(skill_id: String, rank: int) -> float:
 	var definition := definition_for(skill_id)
-	return float(definition.get("damage_ratio", 0.5)) * (1.0 + float(maxi(0, rank - 1)) * 0.11)
+	var rank_ratios: Array = definition.get("rank_damage_ratios", []) as Array
+	if not rank_ratios.is_empty():
+		return float(rank_ratios[clampi(maxi(1, rank) - 1, 0, rank_ratios.size() - 1)])
+	return float(definition.get("damage_ratio", 0.5))
 
 static func radius_for(skill_id: String, rank: int) -> float:
 	var definition := definition_for(skill_id)

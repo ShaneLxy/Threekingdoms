@@ -9,7 +9,8 @@ const FRAME_HOLD := 1.0 / 24.0
 
 var _flip_h := false
 var _max_frame := -1
-var _uniform_scale := 1.0
+var _scale := Vector2.ONE
+var _sprite_offset := Vector2.ZERO
 var _speed_scale := 1.0
 var _has_custom_scale := false
 var _stopping := false
@@ -17,14 +18,16 @@ var _stopping := false
 func configure(options: Dictionary) -> void:
 	_flip_h = bool(options.get("flip_h", false))
 	_max_frame = int(options.get("max_frame", -1))
-	_uniform_scale = float(options.get("scale", 1.0))
+	var configured_scale = options.get("scale", 1.0)
+	_scale = configured_scale if configured_scale is Vector2 else Vector2.ONE * float(configured_scale)
+	_sprite_offset = options.get("sprite_offset", Vector2.ZERO) as Vector2
 	_speed_scale = float(options.get("speed_scale", 1.0))
 
 func _ready() -> void:
 	if not _has_custom_scale:
-		scale = Vector2.ONE * _uniform_scale
+		scale = _scale
 	sprite.flip_h = _flip_h
-	sprite.offset = Vector2(-SOURCE_CONTACT_OFFSET.x if _flip_h else SOURCE_CONTACT_OFFSET.x, SOURCE_CONTACT_OFFSET.y)
+	sprite.offset = _sprite_offset if _sprite_offset != Vector2.ZERO else Vector2(-SOURCE_CONTACT_OFFSET.x if _flip_h else SOURCE_CONTACT_OFFSET.x, SOURCE_CONTACT_OFFSET.y)
 	sprite.speed_scale = _speed_scale
 	sprite.play("default")
 	if _max_frame >= 0:

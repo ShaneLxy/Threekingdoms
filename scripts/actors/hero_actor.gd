@@ -9,7 +9,7 @@ const COMMON_SPEED_BONUS := 8.0
 const COMMON_HEAL_RATIO := 0.10
 const BASIC_ATTACK_MOVEMENT_DISTANCE := 18.0
 const BASIC_ATTACK_MOVEMENT_SPEED_RATIO := 0.42
-const GUARD_ACTIVE_DURATION := 0.30
+const GUARD_ACTIVE_DURATION := 0.50
 const GUARD_COOLDOWN_DURATION := 1.00
 const GUARD_FRONT_HALF_ANGLE := deg_to_rad(90.0)
 const GUARD_TIME_EPSILON := 0.00001
@@ -25,6 +25,7 @@ const REVIVE_SURGE_KNOCKBACK := 820.0
 const REVIVE_SURGE_DISPLACEMENT := 96.0
 const BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO := 0.30
 const BATTLE_SOUL_IRON_DAMAGE_REDUCTION := 0.30
+const BATTLE_SOUL_IRON_REGEN_PER_SECOND := 0.0
 
 # Shared contract for every playable hero. Individual heroes own their combo,
 # passive, skill state, and presentation while the battle scene consumes this API.
@@ -84,9 +85,12 @@ var revive_surge_remaining := 0.0
 var battle_soul_remaining: Dictionary = {}
 var battle_soul_gale_attack_speed_ratio := BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO
 var battle_soul_iron_damage_reduction := BATTLE_SOUL_IRON_DAMAGE_REDUCTION
+var battle_soul_iron_regen_per_second := BATTLE_SOUL_IRON_REGEN_PER_SECOND
+var battle_soul_iron_regen_elapsed := 0.0
 var battle_soul_thunder_chain_targets := 3
 var battle_soul_flame_radius_multiplier := 1.0
 var battle_soul_flame_target_count := 10
+var battle_soul_machine_rank := 0
 
 func configure_hero(selected_hero_id: String) -> void:
 	hero_id = selected_hero_id
@@ -103,10 +107,13 @@ func reset_guard_state() -> void:
 
 func clear_battle_souls() -> void:
 	battle_soul_remaining.clear()
+	battle_soul_iron_regen_elapsed = 0.0
 
 func activate_battle_soul(soul_id: String, duration: float) -> void:
 	if soul_id.is_empty() or duration <= 0.0:
 		return
+	if soul_id == "iron" and not has_battle_soul("iron"):
+		battle_soul_iron_regen_elapsed = 0.0
 	battle_soul_remaining[soul_id] = maxf(float(battle_soul_remaining.get(soul_id, 0.0)), duration)
 
 func tick_battle_souls(delta: float) -> void:
@@ -117,12 +124,29 @@ func tick_battle_souls(delta: float) -> void:
 			battle_soul_remaining.erase(soul_id)
 		else:
 			battle_soul_remaining[soul_id] = next_remaining
+	if not has_battle_soul("iron") or battle_soul_iron_regen_per_second <= 0.0 or health_component == null:
+		battle_soul_iron_regen_elapsed = 0.0
+		return
+	battle_soul_iron_regen_elapsed += delta
+	if battle_soul_iron_regen_elapsed < 1.0:
+		return
+	var regen_ticks := floori(battle_soul_iron_regen_elapsed)
+	battle_soul_iron_regen_elapsed -= float(regen_ticks)
+	if health_component.current >= health_component.maximum:
+		return
+	var healed := minf(health_component.maximum, health_component.current + float(regen_ticks) * battle_soul_iron_regen_per_second)
+	if healed > health_component.current:
+		health_component.current = healed
+		health_component.health_changed.emit(health_component.current, health_component.maximum)
 
 func has_battle_soul(soul_id: String) -> bool:
 	return float(battle_soul_remaining.get(soul_id, 0.0)) > 0.0
 
 func attack_speed_multiplier() -> float:
 	return 1.0 + battle_soul_gale_attack_speed_ratio if has_battle_soul("gale") else 1.0
+
+func battle_soul_gale_ratio() -> float:
+	return battle_soul_gale_attack_speed_ratio if has_battle_soul("gale") else 0.0
 
 func apply_battle_soul_damage_reduction(amount: float) -> float:
 	return amount * (1.0 - battle_soul_iron_damage_reduction) if has_battle_soul("iron") else amount
@@ -393,9 +417,11 @@ func _apply_battle_soul_armory(profile: Dictionary) -> void:
 	var effects := BATTLE_SOUL_ARMORY.effects_for_profile(profile)
 	battle_soul_gale_attack_speed_ratio = float(effects.get("gale_attack_speed_ratio", BATTLE_SOUL_GALE_ATTACK_SPEED_RATIO))
 	battle_soul_iron_damage_reduction = clampf(float(effects.get("iron_damage_reduction", BATTLE_SOUL_IRON_DAMAGE_REDUCTION)), 0.0, 0.95)
+	battle_soul_iron_regen_per_second = maxf(0.0, float(effects.get("iron_regen_per_second", BATTLE_SOUL_IRON_REGEN_PER_SECOND)) )
 	battle_soul_thunder_chain_targets = maxi(1, int(effects.get("thunder_chain_targets", 3)))
 	battle_soul_flame_radius_multiplier = maxf(0.1, float(effects.get("flame_radius_multiplier", 1.0)))
 	battle_soul_flame_target_count = maxi(1, int(effects.get("flame_target_count", 10)))
+	battle_soul_machine_rank = clampi(int(effects.get("machine_rank", 0)), 0, 3)
 
 func _apply_military_strategy(profile: Dictionary) -> void:
 	var effects := MILITARY_STRATEGY.effects_for_profile(profile)
@@ -756,7 +782,7 @@ func revive_surge_hud_effect() -> Dictionary:
 
 func battle_soul_hud_effects() -> Array[Dictionary]:
 	var effects: Array[Dictionary] = []
-	for soul_id in ["gale", "thunder", "flame", "iron"]:
+	for soul_id in ["gale", "thunder", "flame", "iron", "machine"]:
 		var remaining := float(battle_soul_remaining.get(soul_id, 0.0))
 		if remaining <= 0.0:
 			continue
@@ -774,6 +800,8 @@ func battle_soul_hud_effects() -> Array[Dictionary]:
 				effect.merge({"id": "battle_soul_flame", "icon": "炎", "label": "爆炎", "stack_text": "范围+%d%%" % int(round((battle_soul_flame_radius_multiplier - 1.0) * 100.0)), "color": Color("f28a48")})
 			"iron":
 				effect.merge({"id": "battle_soul_iron", "icon": "甲", "label": "玄甲", "stack_text": "免伤%d%%" % int(round(battle_soul_iron_damage_reduction * 100.0)), "color": Color("e1c26a")})
+			"machine":
+				effect.merge({"id": "battle_soul_machine", "icon": "机", "label": "神机", "stack_text": "连弩%d级" % (battle_soul_machine_rank + 1), "color": Color("d8a84e")})
 		effects.append(effect)
 	return effects
 

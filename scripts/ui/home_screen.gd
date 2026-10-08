@@ -5,6 +5,7 @@ const HERO_CATALOG = preload("res://scripts/domain/hero_catalog.gd")
 const MILITARY_STRATEGY = preload("res://scripts/domain/military_strategy.gd")
 const TIANJI_CATALOG = preload("res://scripts/domain/tianji_catalog.gd")
 const BATTLE_SOUL_ARMORY = preload("res://scripts/domain/battle_soul_armory.gd")
+const SOUL_RESONANCE = preload("res://scripts/domain/soul_resonance.gd")
 const BOWANGPO_GROUND_TEXTURE = preload("res://assets/art/environment/bowangpo1/1.png")
 const XINYE_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/xinye1/ground-canvas.png")
 const BOWANGPO_GROUND_CANVAS_TEXTURE = preload("res://assets/art/environment/bowangpo1/ground-canvas.png")
@@ -27,6 +28,7 @@ const SHOP_SELECTED_BUTTON_TEXTURE = preload("res://assets/art/ui/shop/selectBtn
 const SHOP_UNSELECTED_BUTTON_TEXTURE = preload("res://assets/art/ui/shop/unselectBtn.png")
 const SHOP_PANEL_TEXTURE = preload("res://assets/art/ui/shop/skillTab.png")
 const SHOP_BACKGROUND_TEXTURE: Texture2D = preload("res://assets/art/ui/shop/shop_background.png")
+const SHOP_MERIT_TEXTURE: Texture2D = preload("res://assets/art/ui/shop/jungong.png")
 const KAITI_FONT: Font = preload("res://assets/fonts/kaiti.ttf")
 const EXPEDITION_BACKGROUND_TEXTURE = preload("res://assets/art/ui/expedition/select_battle.png")
 const EXPEDITION_STORY_TAB_TEXTURE = preload("res://assets/art/ui/expedition/zhuxian.png")
@@ -51,7 +53,7 @@ const TITLE_LOGO_TEXTURE = preload("res://assets/art/ui/title/logo.png")
 const TAPTAP_LOGIN_BUTTON_TEXTURE = preload("res://assets/art/ui/title/taptap_login_button.png")
 const TAPTAP_LOGIN_BUTTON_SIZE := Vector2(292.0, 54.0)
 const TITLE_VIDEO_STREAM: VideoStream = preload("res://assets/art/ui/title/title-animation.ogv")
-const RELEASE_HERO_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun"]
+const RELEASE_HERO_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao"]
 const STRATEGY_DISPLAY_GROUPS := [
 	{"title": "攻伐", "subtitle": "军械与练兵，强化输出与成长效率。", "branch_ids": ["arsenal", "training"]},
 	{"title": "固守", "subtitle": "兵甲与奇门，提升容错并扩充阵位。", "branch_ids": ["armor", "tianji"]},
@@ -61,7 +63,7 @@ const STRATEGY_DISPLAY_GROUPS := [
 const TIANJI_ALTAR_ORDER: Array[String] = ["seven_star_lightning", "fire_rain_burning", "arrow_support_volley", "eight_trigram_tide", "xun_wind_break"]
 const HERO_SELECT_SLOT_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao", "huang_zhong"]
 const HERO_SELECT_PLAYABLE_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao"]
-const HERO_SELECT_TRIAL_IDS: Array[String] = ["ma_chao"]
+const HERO_SELECT_TRIAL_IDS: Array[String] = []
 const HERO_SELECT_NEW_PORTRAITS := {
 	"guan_yu": "res://assets/art/characters/hero_new/guanyu.png",
 	"zhang_fei": "res://assets/art/characters/hero_new/zhangfei.png",
@@ -204,14 +206,31 @@ const SHOP_ALTAR_POINTS := [
 	Vector2(0.360, 0.643), # 左下
 	Vector2(0.320, 0.439), # 左上
 ]
-const SHOP_SOUL_POINT_SLOTS := [1, 2, 3, 4] # 四项占据左右两侧星角，顶部留空。
-const SHOP_SOUL_EMPTY_POINT_SLOT := 0
+const SHOP_SOUL_POINT_SLOTS := [1, 2, 3, 4, 0]
+const SHOP_SOUL_CENTER_POINT := Vector2(0.452, 0.500)
+
+class SoulResonanceLines extends Control:
+	var points: Array[Vector2] = []
+	var center := Vector2.ZERO
+	var illuminated := false
+
+	func _draw() -> void:
+		var color := Color("edc86a") if illuminated else Color("9b8152")
+		for point in points:
+			var direction := (center - point).normalized()
+			var start := point + direction * 42.0
+			var finish := center - direction * 44.0
+			draw_line(start, finish, Color(color, 0.10), 9.0, true)
+			draw_line(start, finish, Color(color, 0.28), 4.0, true)
+			draw_line(start, finish, Color(color, 0.80), 1.5, true)
+		draw_arc(center, 25.0, 0.0, TAU, 64, Color(color, 0.20), 8.0, true)
+		draw_arc(center, 25.0, 0.0, TAU, 64, color, 2.0, true)
 const SHOP_HERO_IDS: Array[String] = ["guan_yu", "zhang_fei", "zhao_yun", "ma_chao", "huang_zhong"]
 const SHOP_HERO_SKILL_ICONS := {
 	"guan_broad_edge": "sword_slash", "guan_heavy_blade": "blade_arc", "guan_drag_blade": "wind_sweep", "guan_drag_steadiness": "shield", "guan_drag_charge": "focus", "guan_drag_waves": "whirlwind", "guan_drag_reach": "wind_sweep", "guan_fourth_strike": "crossed_swords", "guan_fourth_dash": "dash", "guan_fourth_collision": "shield", "guan_fourth_wave": "blade_arc", "guan_fourth_execution": "skull_mist", "guan_sweeping_guard": "ward_shield", "guan_sweeping_guard_large": "wing_guard", "guan_martial_pressure": "berserk", "guan_battlefield_radius": "group_blessing", "guan_pressure_recovery": "healing_wave", "guan_iron_guard": "iron_helm", "guan_mark_hunt": "true_sight", "guan_breaking_wave": "wind_sweep", "guan_rending_tide": "water_drop", "guan_wave_count": "whirlwind", "guan_breaking_step": "dash", "guan_river_cleaver": "water_drop", "guan_saintly_wrath": "fire_burst", "guan_war_banner": "war_banner", "guan_saintly_duration": "time_sand", "guan_saintly_armor_pierce": "crossed_swords", "guan_saintly_warfront": "fortress",
 	"zhang_heavy_roar": "berserk", "zhang_fourth_strike": "fortress", "zhang_fourth_wave_expand": "wind_sweep", "zhang_slam_leap": "dash", "zhang_slam_mastery": "whirlwind", "zhang_rage": "berserk", "zhang_rage_hunt": "skull_mist", "zhang_rage_fervor": "swift_boots", "zhang_rage_overwhelm": "crossed_swords", "zhang_iron_hide": "iron_helm", "zhang_active_charge": "focus", "zhang_bridge_breaker": "fortress", "zhang_bridge_repel": "shield", "zhang_bridge_shockwave": "wind_sweep", "zhang_earthshaker": "fortress", "zhang_immovable": "ward_shield", "zhang_battle_cry": "war_banner", "zhang_ultimate_armor_pierce": "crossed_swords", "zhang_ultimate_bloodlust": "healing_cross", "zhang_war_stomp": "fortress",
 	"spear_reach": "sword_slash", "sweeping_wind": "wind_sweep", "sweeping_guard": "ward_shield", "sweeping_guard_large": "wing_guard", "dash_echo": "dash", "firewheel": "fire_burst", "firewheel_duration": "time_sand", "firewheel_capstone": "dragon_fire", "dragon_armor": "iron_helm", "dragon_stride": "swift_boots", "dragon_stride_double": "dash", "dragon_stride_threefold": "dragon_crest", "dragon_scale": "shield", "dragon_scale_regen": "healing_wave", "dragon_focus": "focus", "dragon_focus_guard": "ward_shield", "dragon_focus_invulnerable": "holy_bloom", "seven_edge": "crossed_swords", "snake_spin": "whirlwind", "spear_shadow": "shadow_strike", "white_dragon": "dragon_fire", "returning_spear": "sword_slash", "zhao_ultimate_armor_pierce": "crossed_swords", "triumph": "war_banner",
-	"ma_long_stride": "swift_boots", "ma_iron_hoof": "iron_helm", "ma_storm_charge": "dash", "ma_silver_afterimage": "dragon_crest",
+	"ma_spear_pierce": "crossed_swords", "ma_skybreaker": "wind_sweep", "ma_fourth_strike": "crossed_swords", "ma_iron_cavalry": "dragon_crest", "ma_long_charge": "dash", "ma_cavalry_retinue": "group_blessing", "ma_cavalry_duration": "time_sand",
 	"huang_draw_strength": "arrow_shot", "huang_hawk_eye": "true_sight", "huang_blade_return": "blade_arc", "huang_dingjun_volley": "arrow_rain",
 }
 const STRATEGY_CARD_WIDTH := 286.0
@@ -224,7 +243,7 @@ const TITLE_INTRO_DURATION := 1.05
 const TITLE_REVEAL_DURATION := 0.72
 const TITLE_ENTER_SEAL_DURATION := 0.18
 const TITLE_PROMPT_TEXT := "触碰屏幕开始游戏"
-const SETTINGS_VERSION_TEXT := "版本号：v1.1.2"
+const SETTINGS_VERSION_TEXT := "版本号：v2.0.2"
 const HEALTH_GAME_NOTICE_TITLE := "健康游戏公告"
 const HEALTH_GAME_NOTICE_LINES: Array[String] = [
 	"抵制不良游戏，拒绝盗版游戏。",
@@ -641,7 +660,7 @@ func _show_expedition(tab: String = "story") -> void:
 		_create_expedition_level("story_03", "火烧新野", EXPEDITION_STORY_POINTS["story_03"])
 		_create_expedition_level("story_05", "当阳断后", EXPEDITION_STORY_POINTS["story_05"])
 	else:
-		_create_expedition_level("changban", "长坂坡", EXPEDITION_ENDLESS_POINT)
+		_create_expedition_level("changban", "血战长坂坡", EXPEDITION_ENDLESS_POINT)
 		_create_expedition_level("hulao", "名将斗阵", EXPEDITION_TRIAL_POINT)
 	# Animate first entry as well; creation order is reversed in endless mode.
 	var ordered_plates := expedition_nameplates.duplicate()
@@ -696,7 +715,15 @@ func _create_shared_back_button(callback: Callable, tooltip: String = "返回") 
 	return back
 
 func _create_expedition_back_button() -> void:
-	_create_shared_back_button(_show_main, "返回首页")
+	_create_shared_back_button(_leave_expedition_to_main, "返回首页")
+
+func _leave_expedition_to_main() -> void:
+	# Leaving the tutorial's expedition page cancels its resumable checkpoint;
+	# otherwise startup would force the player back into the same page forever.
+	var stage := SaveService.tutorial_stage()
+	if stage in [16, 17]:
+		SaveService.complete_tutorial()
+	_show_main()
 
 func _animate_expedition_plate_exit(plate: TextureButton) -> void:
 	if not is_instance_valid(plate):
@@ -915,7 +942,10 @@ func _show_shop(section: String = "heroes") -> void:
 	var build_id := shop_build_id
 	var opening_shop := page != "shop"
 	if page == "shop":
-		_remember_shop_scroll(shop_section)
+		if shop_list_scroll != null and is_instance_valid(shop_list_scroll):
+			shop_scroll_positions[shop_section] = shop_list_scroll.scroll_horizontal if shop_list_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED else shop_list_scroll.scroll_vertical
+		elif shop_section == "heroes":
+			shop_scroll_positions[shop_section] = int(shop_scroll_positions.get(shop_section, 0))
 	shop_grid_buttons.clear()
 	page = "shop"
 	shop_section = section if section in ["heroes", "strategies", "tianji", "souls"] else "heroes"
@@ -979,10 +1009,21 @@ func _show_shop(section: String = "heroes") -> void:
 		"strategies": _populate_strategy_shop(restore_scroll)
 		"tianji": _populate_tianji_shop(restore_scroll)
 		"souls": _populate_battle_soul_shop(restore_scroll)
-	call_deferred("_restore_shop_scroll", shop_section, restore_scroll, build_id)
+	if shop_section == "heroes":
+		call_deferred("_restore_hero_shop_scroll", restore_scroll, build_id)
+	else:
+		call_deferred("_restore_shop_scroll", shop_section, restore_scroll, build_id)
 	_create_shared_back_button(_show_main)
 	call_deferred("_tutorial_refresh_shop", build_id)
 	queue_redraw()
+
+func _restore_hero_shop_scroll(scroll_value: int, build_id: int) -> void:
+	if build_id != shop_build_id or shop_section != "heroes":
+		return
+	if shop_list_scroll == null or not is_instance_valid(shop_list_scroll):
+		return
+	var target_scroll := maxi(0, scroll_value)
+	shop_list_scroll.set_deferred("scroll_horizontal", target_scroll)
 
 func _shop_content_rect() -> Rect2:
 	var left_margin := clampf(size.x * 0.018, 18.0, 24.0)
@@ -1064,7 +1105,7 @@ func _shop_label(parent: Control, text: String, at: Vector2, label_size: Vector2
 	label.horizontal_alignment = alignment
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.clip_text = true
+	label.clip_text = false
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
@@ -1080,7 +1121,9 @@ func _shop_icon_texture(icon_id: String) -> Texture2D:
 	if shop_icon_cache.has(icon_id):
 		return shop_icon_cache[icon_id] as Texture2D
 	var icon_path := "res://assets/art/ui/shop/skillImg/%s.png" % icon_id
-	if icon_id.contains("/"):
+	if icon_id.begins_with("res://"):
+		icon_path = icon_id
+	elif icon_id.contains("/"):
 		icon_path = "res://assets/art/ui/shop/%s.png" % icon_id
 	var texture := load(icon_path) as Texture2D
 	shop_icon_cache[icon_id] = texture
@@ -1110,6 +1153,7 @@ func _shop_item_icon(item_id: String, kind: String) -> String:
 			"thunder_mastery": return "zhanhun/leiting"
 			"flame_mastery": return "zhanhun/baoyan"
 			"iron_mastery": return "zhanhun/xuanjia"
+			"machine_mastery": return "res://assets/art/battle_souls/shenji.png"
 	return "crossed_swords"
 
 func _show_shop_heroes() -> void:
@@ -1184,12 +1228,13 @@ func _populate_hero_shop() -> void:
 				continue
 			var is_core := bool(node.get("is_core", false))
 			var is_run_upgrade := bool(node.get("is_run_upgrade", false))
+			var is_auto_unlock := UpgradeSystem.is_auto_unlock_talent(talent_id)
 			var rank := SaveService.talent_rank(selected_shop_hero_id, talent_id)
 			var max_rank := maxi(1, SaveService.talent_max_rank(selected_shop_hero_id, talent_id))
 			if is_core and hero_owned:
 				rank = max_rank
 			var prerequisite_ok := is_core or SaveService.talent_prerequisite_satisfied_for_purchase(selected_shop_hero_id, talent_id)
-			var locked := not hero_owned or (not is_core and not prerequisite_ok)
+			var locked := not hero_owned or (not is_core and not is_auto_unlock and not prerequisite_ok)
 			var cost := int(node.get("cost", 0))
 			branch_nodes.append({
 				"id": talent_id,
@@ -1204,6 +1249,7 @@ func _populate_hero_shop() -> void:
 				"locked": locked,
 				"core": is_core,
 				"run_upgrade": is_run_upgrade,
+				"auto_unlock": is_auto_unlock,
 				"cost": cost,
 			})
 		var branch_lookup: Dictionary = {}
@@ -1778,8 +1824,9 @@ func _create_shop_icon_grid(items: Array[Dictionary], viewport: Rect2, restore_s
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		icon_frame.add_child(icon)
-		var rank := int(item.get("rank", 0))
-		var max_rank := int(item.get("max_rank", 1))
+		var base_soul := shop_section == "souls" and item_id != SOUL_RESONANCE.ID
+		var rank := int(item.get("rank", 0)) + (1 if base_soul else 0)
+		var max_rank := int(item.get("max_rank", 1)) + (1 if base_soul else 0)
 		if rank <= 0 or bool(item.get("locked", false)):
 			var shade := ColorRect.new()
 			shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1807,13 +1854,29 @@ func _create_shop_altar_nodes(items: Array[Dictionary], tooltip: String) -> void
 	var art_rect := _shop_background_rect()
 	var center_origin := shop_center_panel.get_global_rect().position
 	var node_size := Vector2(clampf(size.x * 0.105, 92.0, 136.0), clampf(size.y * 0.134, 80.0, 108.0))
+	if shop_section == "souls":
+		var lines := SoulResonanceLines.new()
+		lines.size = shop_center_panel.size
+		lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lines.center = art_rect.position + art_rect.size * SHOP_SOUL_CENTER_POINT - center_origin
+		lines.illuminated = SOUL_RESONANCE.rank_for(profile) > 0
+		for corner in SHOP_ALTAR_POINTS:
+			lines.points.append(art_rect.position + art_rect.size * corner - center_origin)
+		shop_center_panel.add_child(lines)
 	for index in range(items.size()):
-		if index >= SHOP_ALTAR_POINTS.size():
-			break
 		var item: Dictionary = items[index]
 		var item_id := str(item.get("id", ""))
-		var slot := int(SHOP_SOUL_POINT_SLOTS[index]) if shop_section == "souls" else index
-		var point: Vector2 = art_rect.position + art_rect.size * (SHOP_ALTAR_POINTS[slot] as Vector2)
+		var is_resonance := shop_section == "souls" and item_id == SOUL_RESONANCE.ID
+		var point: Vector2
+		if is_resonance:
+			point = art_rect.position + art_rect.size * SHOP_SOUL_CENTER_POINT
+		else:
+			if index >= SHOP_ALTAR_POINTS.size() or (shop_section == "souls" and index >= SHOP_SOUL_POINT_SLOTS.size()):
+				continue
+			var slot := int(SHOP_SOUL_POINT_SLOTS[index]) if shop_section == "souls" else index
+			if slot < 0 or slot >= SHOP_ALTAR_POINTS.size():
+				continue
+			point = art_rect.position + art_rect.size * (SHOP_ALTAR_POINTS[slot] as Vector2)
 		var cell := Button.new()
 		cell.text = str(item.get("title", item_id))
 		cell.position = point - center_origin - node_size * 0.5
@@ -1842,7 +1905,7 @@ func _create_shop_altar_nodes(items: Array[Dictionary], tooltip: String) -> void
 		selection_frame.visible = false
 		selection_frame.add_theme_stylebox_override(
 			"panel",
-			UITheme.flat_box_style(Color(0.08, 0.11, 0.10, 0.66), GOLD_BRIGHT, 2)
+			StyleBoxEmpty.new() if is_resonance else UITheme.flat_box_style(Color(0.08, 0.11, 0.10, 0.66), GOLD_BRIGHT, 2)
 		)
 		cell.add_child(selection_frame)
 		cell.set_meta("shop_selection_frame", selection_frame)
@@ -1872,16 +1935,19 @@ func _create_shop_altar_nodes(items: Array[Dictionary], tooltip: String) -> void
 		icon_frame.add_child(icon)
 		var rank := int(item.get("rank", 0))
 		var max_rank := int(item.get("max_rank", 1))
-		if rank <= 0:
+		var base_soul := shop_section == "souls" and not is_resonance
+		var shown_rank := rank + 1 if base_soul else rank
+		var shown_max := max_rank + 1 if base_soul else max_rank
+		if (rank <= 0 and not base_soul) or bool(item.get("locked", false)):
 			icon.modulate = Color(0.62, 0.65, 0.65, 0.85)
 		var altar_title_y := altar_icon_size + 6.0
 		var altar_rank_y := altar_title_y + 22.0
-		_shop_label(cell, cell.text, Vector2(0.0, altar_title_y), Vector2(node_size.x, 24.0), 15, GOLD_BRIGHT if rank > 0 else Color("d3c7a6"), HORIZONTAL_ALIGNMENT_CENTER, true)
-		_shop_label(cell, "%d / %d 阶" % [rank, max_rank], Vector2(0.0, altar_rank_y), Vector2(node_size.x, 18.0), 12, Color("e6d8b4") if rank >= max_rank else Color("b3c7c5"), HORIZONTAL_ALIGNMENT_CENTER, true)
+		_shop_label(cell, cell.text, Vector2(0.0, altar_title_y), Vector2(node_size.x, 24.0), 15, GOLD_BRIGHT if shown_rank > 0 else Color("d3c7a6"), HORIZONTAL_ALIGNMENT_CENTER, true)
+		var rank_text := "%d / %d 级" % [shown_rank, shown_max]
+		if is_resonance and rank == 0:
+			rank_text = "锁定" if bool(item.get("locked", false)) else "未激活"
+		_shop_label(cell, rank_text, Vector2(0.0, altar_rank_y), Vector2(node_size.x, 18.0), 12, Color("e6d8b4") if rank >= max_rank else Color("b3c7c5"), HORIZONTAL_ALIGNMENT_CENTER, true)
 		shop_grid_buttons["%s:%s" % [shop_section, item_id]] = cell
-	if shop_section == "souls":
-		var empty_point: Vector2 = art_rect.position + art_rect.size * (SHOP_ALTAR_POINTS[SHOP_SOUL_EMPTY_POINT_SLOT] as Vector2)
-		_shop_label(shop_center_panel, "未点亮", empty_point - center_origin - Vector2(48.0, 9.0), Vector2(96.0, 18.0), 12, Color("8c8170"), HORIZONTAL_ALIGNMENT_CENTER)
 
 func _shop_item_callback(item: Dictionary) -> Callable:
 	var item_id := str(item.get("id", ""))
@@ -1973,25 +2039,25 @@ func _render_shop_detail(category: String, title: String, description: String, r
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_frame.add_child(icon)
-	_shop_label(shop_detail_body, category, Vector2(0.0, 59.0), Vector2(body_width, 24.0), 13, Color("c8a96b"), HORIZONTAL_ALIGNMENT_CENTER, true)
-	_shop_label(shop_detail_body, title, Vector2(0.0, 85.0), Vector2(body_width, 52.0), 18, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_CENTER, true)
-	_shop_label(shop_detail_body, "当前等级  %d / %d" % [rank, max_rank], Vector2(0.0, 139.0), Vector2(body_width, 24.0), 13, Color("d1dfda"), HORIZONTAL_ALIGNMENT_CENTER)
+	_shop_label(shop_detail_body, category, Vector2(0.0, 59.0), Vector2(body_width, 27.0), 16, Color("c8a96b"), HORIZONTAL_ALIGNMENT_CENTER, true)
+	_shop_label(shop_detail_body, title, Vector2(0.0, 88.0), Vector2(body_width, 72.0), 20, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_CENTER, true)
+	_shop_label(shop_detail_body, "当前等级  %d / %d" % [rank, max_rank], Vector2(0.0, 149.0), Vector2(body_width, 27.0), 16, Color("d1dfda"), HORIZONTAL_ALIGNMENT_CENTER)
 	var divider := ColorRect.new()
 	divider.position = Vector2(12.0, 169.0)
 	divider.size = Vector2(body_width - 24.0, 1.0)
 	divider.color = Color("8d7749", 0.54)
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_detail_body.add_child(divider)
-	var description_top := 182.0
-	var description_height := 156.0
-	var status_top := 344.0
+	var description_top := 194.0
+	var description_height := 150.0
+	var status_top := 354.0
 	if not prerequisite_text.is_empty():
-		_shop_label(shop_detail_body, prerequisite_text, Vector2(6.0, 181.0), Vector2(body_width - 12.0, 34.0), 12, Color("c8a96b"), HORIZONTAL_ALIGNMENT_LEFT, true)
-		description_top = 220.0
-		description_height = 120.0
-		status_top = 347.0
-	_shop_label(shop_detail_body, description, Vector2(6.0, description_top), Vector2(body_width - 12.0, description_height), 14, Color("d5e2dd"), HORIZONTAL_ALIGNMENT_LEFT)
-	_shop_label(shop_detail_body, status, Vector2(6.0, status_top), Vector2(body_width - 12.0, 58.0), 13, Color("f0c879"), HORIZONTAL_ALIGNMENT_LEFT, true)
+		_shop_label(shop_detail_body, prerequisite_text, Vector2(6.0, 193.0), Vector2(body_width - 12.0, 40.0), 15, Color("c8a96b"), HORIZONTAL_ALIGNMENT_LEFT, true)
+		description_top = 240.0
+		description_height = 108.0
+		status_top = 356.0
+	_shop_label(shop_detail_body, description, Vector2(6.0, description_top), Vector2(body_width - 12.0, description_height), 17, Color("d5e2dd"), HORIZONTAL_ALIGNMENT_LEFT)
+	_shop_label(shop_detail_body, status, Vector2(6.0, status_top), Vector2(body_width - 12.0, 64.0), 16, Color("f0c879"), HORIZONTAL_ALIGNMENT_LEFT, true)
 	if not action_title.is_empty():
 		var action := _create_button(action_title, "", Vector2(8.0, shop_detail_body.size.y - 60.0), action_callback, Vector2(body_width - 16.0, 46.0), action_disabled, 15, shop_detail_body, false)
 		if action_disabled:
@@ -2001,7 +2067,7 @@ func _render_shop_detail(category: String, title: String, description: String, r
 			action.add_theme_stylebox_override("hover", _make_box_style(Color("70572a"), Color("fff0a8"), 3))
 
 func _shop_detail_section(title: String, top: float, body_width: float) -> void:
-	_shop_label(shop_detail_body, title, Vector2(6.0, top), Vector2(body_width - 12.0, 21.0), 13, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_LEFT, true)
+	_shop_label(shop_detail_body, title, Vector2(6.0, top), Vector2(body_width - 12.0, 28.0), 17, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_LEFT, true)
 	var divider := ColorRect.new()
 	divider.position = Vector2(6.0, top + 23.0)
 	divider.size = Vector2(body_width - 12.0, 1.0)
@@ -2054,19 +2120,27 @@ func _render_shop_sectioned_detail(category: String, title: String, description:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_frame.add_child(icon)
-	var heading_left := 55.0
+	var resonance_detail := title == SOUL_RESONANCE.TITLE
+	icon_frame.visible = not resonance_detail
+	var heading_left := 4.0 if resonance_detail else 55.0
 	var heading_width := maxf(1.0, body_width - heading_left - 4.0)
-	_shop_label(shop_detail_body, category, Vector2(heading_left, 0.0), Vector2(heading_width, 17.0), 11, Color("c8a96b"))
-	_shop_label(shop_detail_body, title, Vector2(heading_left, 16.0), Vector2(heading_width, 38.0), 16, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_LEFT, true)
-	_shop_label(shop_detail_body, "等级 %d / %d" % [rank, max_rank], Vector2(heading_left, 57.0), Vector2(heading_width, 18.0), 12, Color("d1dfda"))
-	_shop_detail_section(prerequisite_heading, 84.0, body_width)
-	_shop_detail_text(prerequisite_text if not prerequisite_text.is_empty() else "无", Vector2(7.0, 113.0), Vector2(body_width - 14.0, 51.0), 13, Color("c8a96b"))
-	_shop_detail_section(effect_heading, 174.0, body_width)
+	_shop_label(shop_detail_body, category, Vector2(heading_left, 0.0), Vector2(heading_width, 23.0), 15 if resonance_detail else 16, Color("c8a96b"))
+	_shop_label(shop_detail_body, title, Vector2(heading_left, 20.0), Vector2(heading_width, 56.0), 20, GOLD_BRIGHT, HORIZONTAL_ALIGNMENT_LEFT, true)
+	var rank_text := "未激活 · 0 / 3" if resonance_detail and rank == 0 else "等级 %d / %d" % [rank, max_rank]
+	_shop_label(shop_detail_body, rank_text, Vector2(heading_left, 80.0), Vector2(heading_width, 24.0), 15, Color("d1dfda"))
+	if resonance_detail:
+		var body_text := "%s\n%s\n\n%s\n%s\n\n%s\n%s" % [prerequisite_heading, prerequisite_text, effect_heading, description, cost_heading, cost_text]
+		_shop_detail_text(body_text, Vector2(4.0, 112.0), Vector2(body_width - 8.0, maxf(1.0, body_height - 166.0)), 16, Color("d5e2dd"))
+		_create_shop_texture_button(shop_detail_body, action_title, Vector2(5.0, body_height - 46.0), Vector2(body_width - 10.0, 40.0), action_callback, true, action_disabled)
+		return
+	_shop_detail_section(prerequisite_heading, 96.0, body_width)
+	_shop_detail_text(prerequisite_text if not prerequisite_text.is_empty() else "无", Vector2(7.0, 128.0), Vector2(body_width - 14.0, 54.0), 16, Color("c8a96b"))
+	_shop_detail_section(effect_heading, 188.0, body_width)
 	var button_top := body_height - 46.0
 	var cost_top := body_height - (134.0 if not action_title.is_empty() else 88.0)
-	_shop_detail_text(description, Vector2(7.0, 204.0), Vector2(body_width - 14.0, maxf(1.0, cost_top - 212.0)), 14, Color("d5e2dd"))
+	_shop_detail_text(description, Vector2(7.0, 220.0), Vector2(body_width - 14.0, maxf(1.0, cost_top - 228.0)), 17, Color("d5e2dd"))
 	_shop_detail_section(cost_heading, cost_top, body_width)
-	_shop_detail_text(cost_text, Vector2(7.0, cost_top + 29.0), Vector2(body_width - 14.0, 51.0), 13, Color("f0c879"))
+	_shop_detail_text(cost_text, Vector2(7.0, cost_top + 31.0), Vector2(body_width - 14.0, 54.0), 16, Color("f0c879"))
 	if not action_title.is_empty():
 		_create_shop_texture_button(shop_detail_body, action_title, Vector2(5.0, button_top), Vector2(body_width - 10.0, 40.0), action_callback, true, action_disabled)
 
@@ -2077,6 +2151,7 @@ func _render_shop_talent_detail(talent_id: String) -> void:
 		return
 	var is_core := bool(node.get("is_core", false))
 	var is_run_upgrade := bool(node.get("is_run_upgrade", false))
+	var is_auto_unlock := UpgradeSystem.is_auto_unlock_talent(talent_id)
 	var hero_owned := SaveService.has_hero(selected_shop_hero_id)
 	var rank := SaveService.talent_rank(selected_shop_hero_id, talent_id)
 	var max_rank := maxi(1, SaveService.talent_max_rank(selected_shop_hero_id, talent_id))
@@ -2084,11 +2159,13 @@ func _render_shop_talent_detail(talent_id: String) -> void:
 		rank = max_rank
 	var prerequisite_ok := is_core or SaveService.talent_prerequisite_satisfied_for_purchase(selected_shop_hero_id, talent_id)
 	var cost := SaveService.talent_cost(selected_shop_hero_id, talent_id, int(node.get("cost", 0)))
-	var action_disabled := is_core or is_run_upgrade or not hero_owned or not prerequisite_ok or rank >= max_rank or cost <= 0
-	var action_title := "" if is_core or is_run_upgrade or rank >= max_rank else ("升级" if rank > 0 else "购买")
+	var action_disabled := is_core or is_run_upgrade or is_auto_unlock or not hero_owned or not prerequisite_ok or rank >= max_rank or cost <= 0
+	var action_title := "" if is_core or is_run_upgrade or is_auto_unlock or rank >= max_rank else ("升级" if rank > 0 else "购买")
 	var action := Callable(self, "_buy_shop_talent").bind(selected_shop_hero_id, talent_id, int(node.get("cost", 0)))
 	var cost_text := "已满阶" if rank >= max_rank else ("下一阶：%d 军功" % cost)
-	if not is_core and not is_run_upgrade and not hero_owned:
+	if is_auto_unlock:
+		cost_text = "随前置战法自动解锁"
+	elif not is_core and not is_run_upgrade and not hero_owned:
 		cost_text += "\n需先招募%s" % _selected_shop_hero_name()
 	elif not is_core and not is_run_upgrade and not prerequisite_ok:
 		cost_text += "\n需先解锁前置战法"
@@ -2157,7 +2234,7 @@ func _render_shop_tianji_detail(skill_id: String) -> void:
 	_render_shop_sectioned_detail(
 		"天机阵法 · 战斗中启阵",
 		str(definition.get("title", skill_id)),
-		str(definition.get("description", "")),
+		TIANJI_CATALOG.description_for(skill_id, rank),
 		rank,
 		max_rank,
 		cost_text,
@@ -2172,7 +2249,28 @@ func _render_shop_tianji_detail(skill_id: String) -> void:
 	)
 	tianji_detail_dialog = shop_detail_panel
 
+func _render_shop_resonance_detail() -> void:
+	var rank := SOUL_RESONANCE.rank_for(profile)
+	var cost := SOUL_RESONANCE.cost_for(profile)
+	var unlocked := SOUL_RESONANCE.unfinished_for(profile).is_empty()
+	var cost_text := "已满级" if rank >= 3 else "%s：%d 军功" % ["激活" if rank == 0 else "升级", cost]
+	if not unlocked:
+		cost_text += "\n五魂铭刻全部四级后开放"
+	elif rank < 3 and int(profile.get("military_merit", 0)) < cost:
+		cost_text += "\n军功不足"
+	_render_shop_sectioned_detail("战魂阁 · 永久共鸣", SOUL_RESONANCE.TITLE, SOUL_RESONANCE.description_for(profile), rank, 3, cost_text, "满级" if rank >= 3 else ("激活" if rank == 0 else "升级"), Callable(self, "_buy_shop_resonance"), not SaveService.can_purchase_soul_resonance(), "group_blessing", SOUL_RESONANCE.prerequisite_text(profile), "激活条件", "共鸣效果", "共鸣消耗")
+	battle_soul_detail_dialog = shop_detail_panel
+
+func _buy_shop_resonance() -> void:
+	SaveService.purchase_soul_resonance()
+	_show_shop("souls")
+	_set_shop_selected_item_id("souls", SOUL_RESONANCE.ID)
+	_show_shop_item_detail(SOUL_RESONANCE.ID)
+
 func _render_shop_soul_detail(armory_id: String) -> void:
+	if armory_id == SOUL_RESONANCE.ID:
+		_render_shop_resonance_detail()
+		return
 	var definition := BATTLE_SOUL_ARMORY.definition_for(armory_id)
 	if definition.is_empty():
 		return
@@ -2188,9 +2286,9 @@ func _render_shop_soul_detail(armory_id: String) -> void:
 	_render_shop_sectioned_detail(
 		"战魂阁 · 战场掉落后生效",
 		str(definition.get("title", armory_id)),
-		str(definition.get("description", "")),
-		rank,
-		max_rank,
+		BATTLE_SOUL_ARMORY.description_for(armory_id, rank),
+		rank + 1,
+		max_rank + 1,
 		cost_text,
 		action_title,
 		action,
@@ -2271,9 +2369,9 @@ func _populate_hero_talent_tree() -> void:
 	var is_owned := SaveService.has_hero(selected_shop_hero_id)
 	var unlock_cost := int(shop_hero.get("unlock_cost", 0))
 	var can_afford_unlock := int(profile.get("military_merit", 0)) >= unlock_cost
-	var root_status := "已拥有" if is_owned else "招募 %d" % unlock_cost
-	var root_callback: Callable = Callable(self, "_show_shop_heroes") if is_owned else Callable(self, "_buy_hero").bind(selected_shop_hero_id, unlock_cost)
-	var root_button := _create_button(str(shop_hero.get("name", "武将")), root_status, HERO_TREE_ROOT_RECT.position, root_callback, HERO_TREE_ROOT_RECT.size, not is_owned and not can_afford_unlock, 13, content, false)
+	var root_status := "已开放" if is_owned else "尚未开放"
+	var root_callback: Callable = Callable(self, "_show_shop_heroes")
+	var root_button := _create_button(str(shop_hero.get("name", "武将")), root_status, HERO_TREE_ROOT_RECT.position, root_callback, HERO_TREE_ROOT_RECT.size, not is_owned, 13, content, false)
 	root_button.z_index = 1
 	if is_owned:
 		root_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2372,10 +2470,11 @@ func _create_hero_tree_talent_button(content: Control, layout: Dictionary, is_ow
 	var node_rect := layout.get("rect", Rect2()) as Rect2
 	var is_core := bool(node.get("is_core", false))
 	var is_run_upgrade := bool(node.get("is_run_upgrade", false))
-	if is_core or is_run_upgrade:
+	var is_auto_unlock := UpgradeSystem.is_auto_unlock_talent(talent_id)
+	if is_core or is_run_upgrade or is_auto_unlock:
 		var core_button := _create_button(str(definition.get("title", talent_id)), _talent_tree_summary(node, selected_shop_hero_id, talent_id), node_rect.position, Callable(self, "_show_talent_detail").bind(selected_shop_hero_id, talent_id, 0, is_core, is_run_upgrade), node_rect.size, false, 11, content, false)
-		core_button.tooltip_text = str(definition.get("description", ""))
-		if is_owned:
+		core_button.tooltip_text = "随前置战法自动解锁\n%s" % str(definition.get("description", "")) if is_auto_unlock else str(definition.get("description", ""))
+		if is_owned or is_core:
 			_set_button_owned_visual(core_button)
 		else:
 			_set_button_locked_visual(core_button)
@@ -2420,6 +2519,7 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 	var maxed := rank >= max_rank
 	var next_cost := SaveService.talent_cost(hero_id, talent_id, cost)
 	var prerequisite_id := str(definition.get("requires", ""))
+	var is_auto_unlock := UpgradeSystem.is_auto_unlock_talent(talent_id)
 	var prerequisite_unlocked := SaveService.talent_prerequisite_satisfied_for_purchase(hero_id, talent_id)
 	var prerequisite_rank := maxi(1, int(definition.get("requires_stacks", 1)))
 	var overlay := ColorRect.new()
@@ -2472,9 +2572,12 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 	status_label.size = Vector2(content_width, 24.0)
 	status_label.add_theme_font_size_override("font_size", 16)
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var purchase_disabled := is_core or is_run_upgrade or maxed or not hero_owned or not prerequisite_unlocked or next_cost <= 0
+	var purchase_disabled := is_core or is_run_upgrade or is_auto_unlock or maxed or not hero_owned or not prerequisite_unlocked or next_cost <= 0
 	if is_core:
 		status_label.text = "默认开放"
+		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
+	elif is_auto_unlock:
+		status_label.text = "随前置战法自动解锁"
 		status_label.add_theme_color_override("font_color", Color("9ee0c6"))
 	elif is_run_upgrade:
 		status_label.text = "解锁前置战法后，在战斗中的升级选择技能中获得"
@@ -2495,7 +2598,7 @@ func _show_talent_detail(hero_id: String, talent_id: String, cost: int, is_core:
 		status_label.add_theme_color_override("font_color", GOLD_BRIGHT)
 	dialog.add_child(status_label)
 	var action_y := dialog_size.y - 62.0
-	var purchase_title := "默认开放" if is_core else ("局内获取" if is_run_upgrade else ("已满阶" if maxed else ("升级 · %d 军功" % next_cost if rank > 0 else "购买 · %d 军功" % next_cost)))
+	var purchase_title := "默认开放" if is_core else ("自动解锁" if is_auto_unlock else ("局内获取" if is_run_upgrade else ("已满阶" if maxed else ("升级 · %d 军功" % next_cost if rank > 0 else "购买 · %d 军功" % next_cost))))
 	var purchase_button := _create_button(purchase_title, "", Vector2(24.0, action_y), Callable(self, "_buy_talent_from_detail").bind(hero_id, talent_id, cost), Vector2((content_width - 12.0) * 0.5, 44.0), purchase_disabled, 16, dialog, false)
 	if purchase_disabled:
 		_set_button_locked_visual(purchase_button)
@@ -2868,7 +2971,13 @@ func _populate_battle_soul_shop(restore_scroll: int = 0) -> void:
 			"icon": _shop_item_icon(armory_id, "soul"),
 			"locked": false,
 		})
-	_populate_shop_category_icons(items, restore_scroll, "战场掉落 · 接触后生效 20 秒")
+	items.append({
+		"id": SOUL_RESONANCE.ID, "title": SOUL_RESONANCE.TITLE,
+		"description": SOUL_RESONANCE.DESCRIPTION,
+		"rank": SOUL_RESONANCE.rank_for(profile), "max_rank": 3,
+		"icon": "res://assets/art/battle_souls/wuhun.png", "locked": not SOUL_RESONANCE.unfinished_for(profile).is_empty(),
+	})
+	_populate_shop_category_icons(items, restore_scroll, "战场掉落 · 接触后生效 %d 秒" % int(SOUL_RESONANCE.effects_for(profile).buff_duration))
 
 func _create_battle_soul_card(armory_id: String, definition: Dictionary, rank: int, max_rank: int, cost: int, affordable: bool, at: Vector2, card_size: Vector2, parent: Control) -> Button:
 	var accent: Color = definition.get("color", GOLD) as Color
@@ -2896,7 +3005,7 @@ func _create_battle_soul_card(armory_id: String, definition: Dictionary, rank: i
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(title_label)
 	var rank_label := Label.new()
-	rank_label.text = "%d / %d 阶" % [rank, max_rank]
+	rank_label.text = "%d / %d 阶" % [rank + 1, max_rank + 1]
 	rank_label.position = Vector2(card_size.x - 76.0, 20.0)
 	rank_label.size = Vector2(60.0, 20.0)
 	rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -2905,7 +3014,7 @@ func _create_battle_soul_card(armory_id: String, definition: Dictionary, rank: i
 	rank_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(rank_label)
 	var rule_label := Label.new()
-	rule_label.text = "战场掉落 · 接触后生效 20 秒"
+	rule_label.text = "战场掉落 · 接触后生效 %d 秒" % int(SOUL_RESONANCE.effects_for(profile).buff_duration)
 	rule_label.position = Vector2(80.0, 45.0)
 	rule_label.size = Vector2(card_size.x - 96.0, 18.0)
 	rule_label.add_theme_font_size_override("font_size", 13)
@@ -2914,17 +3023,19 @@ func _create_battle_soul_card(armory_id: String, definition: Dictionary, rank: i
 	card.add_child(rule_label)
 	var summary_label := Label.new()
 	summary_label.text = str(definition.get("card_summary", ""))
-	summary_label.position = Vector2(16.0, 82.0)
-	summary_label.size = Vector2(card_size.x - 32.0, 24.0)
-	summary_label.add_theme_font_size_override("font_size", 16)
+	summary_label.position = Vector2(16.0, 80.0)
+	summary_label.size = Vector2(card_size.x - 32.0, 44.0)
+	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	summary_label.add_theme_font_size_override("font_size", 14)
 	summary_label.add_theme_color_override("font_color", accent.lightened(0.12))
 	summary_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(summary_label)
 	var effect_label := Label.new()
 	effect_label.text = BATTLE_SOUL_ARMORY.effect_summary_for(armory_id, rank)
-	effect_label.position = Vector2(16.0, 112.0)
-	effect_label.size = Vector2(card_size.x - 32.0, 42.0)
-	effect_label.add_theme_font_size_override("font_size", 14)
+	effect_label.position = Vector2(16.0, 128.0)
+	effect_label.size = Vector2(card_size.x - 32.0, 72.0)
+	effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	effect_label.add_theme_font_size_override("font_size", 13)
 	effect_label.add_theme_color_override("font_color", Color("d2e2dc"))
 	effect_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(effect_label)
@@ -2988,7 +3099,8 @@ func _show_battle_soul_detail(armory_id: String, feedback: String = "") -> void:
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dialog.add_child(title_label)
 	var description_label := Label.new()
-	description_label.text = "%s\n战场内每 35 秒随机掉落；走到掉落位置后生效 20 秒。" % str(definition.get("description", ""))
+	var soul_timing := SOUL_RESONANCE.effects_for(profile)
+	description_label.text = "%s\n战场内每 %s 秒随机掉落；走到掉落位置后生效 %d 秒。" % [str(definition.get("description", "")), str(soul_timing.drop_interval), int(soul_timing.buff_duration)]
 	description_label.position = Vector2(24.0, 102.0)
 	description_label.size = Vector2(content_width, 72.0)
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2997,7 +3109,7 @@ func _show_battle_soul_detail(armory_id: String, feedback: String = "") -> void:
 	description_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dialog.add_child(description_label)
 	var rank_label := Label.new()
-	rank_label.text = "当前铭刻  %d / %d 阶" % [rank, max_rank]
+	rank_label.text = "当前铭刻  %d / %d 阶" % [rank + 1, max_rank + 1]
 	rank_label.position = Vector2(24.0, 194.0)
 	rank_label.size = Vector2(content_width, 24.0)
 	rank_label.add_theme_font_size_override("font_size", 17)
@@ -3007,7 +3119,7 @@ func _show_battle_soul_detail(armory_id: String, feedback: String = "") -> void:
 	var effect_label := Label.new()
 	effect_label.text = BATTLE_SOUL_ARMORY.effect_summary_for(armory_id, rank)
 	effect_label.position = Vector2(24.0, 228.0)
-	effect_label.size = Vector2(content_width, 58.0)
+	effect_label.size = Vector2(content_width, 84.0)
 	effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	effect_label.add_theme_font_size_override("font_size", 17)
 	effect_label.add_theme_color_override("font_color", accent.lightened(0.14))
@@ -3226,25 +3338,11 @@ func _show_tianji_detail(skill_id: String, feedback: String = "") -> void:
 	cancel_button.add_theme_stylebox_override("hover", _make_box_style(Color("20343c"), DRAGON_BLUE, 3))
 
 func _tianji_effect_summary(skill_id: String, rank: int, maxed: bool) -> String:
-	var shown_rank := maxi(1, rank)
-	var current_damage := TIANJI_CATALOG.damage_ratio_for(skill_id, shown_rank)
-	var current_cooldown := TIANJI_CATALOG.cooldown_for(skill_id, shown_rank)
-	if skill_id == "seven_star_lightning":
-		var current_radius := TIANJI_CATALOG.radius_for(skill_id, shown_rank)
-		if rank <= 0:
-			return "解锁效果：伤害倍率 %.0f%% · 半径 %.0f · 基础冷却 %.1f 秒\n升阶成长：伤害约 +11%%、冷却约 -5.5%%，并扩大范围" % [current_damage * 100.0, current_radius, current_cooldown]
-		if maxed:
-			return "当前效果：伤害倍率 %.0f%% · 半径 %.0f · 基础冷却 %.1f 秒\n已达到该阵法的最高阶" % [current_damage * 100.0, current_radius, current_cooldown]
-		var next_radius := TIANJI_CATALOG.radius_for(skill_id, rank + 1)
-		return "当前效果：伤害倍率 %.0f%% · 半径 %.0f · 冷却 %.1f 秒\n下一阶：半径 %.0f · 伤害 %.0f%% · 冷却 %.1f 秒" % [current_damage * 100.0, current_radius, current_cooldown, next_radius, TIANJI_CATALOG.damage_ratio_for(skill_id, rank + 1) * 100.0, TIANJI_CATALOG.cooldown_for(skill_id, rank + 1)]
 	if rank <= 0:
-		return "解锁效果：伤害倍率 %.0f%% · 基础冷却 %.1f 秒\n升阶成长：每阶伤害约 +11%%，基础冷却约 -5.5%%" % [current_damage * 100.0, current_cooldown]
+		return "解锁效果：%s" % TIANJI_CATALOG.effect_summary_for(skill_id, 1)
 	if maxed:
-		return "当前效果：伤害倍率 %.0f%% · 基础冷却 %.1f 秒\n已达到该阵法的最高阶" % [current_damage * 100.0, current_cooldown]
-	var next_rank := rank + 1
-	var next_damage := TIANJI_CATALOG.damage_ratio_for(skill_id, next_rank)
-	var next_cooldown := TIANJI_CATALOG.cooldown_for(skill_id, next_rank)
-	return "当前效果：伤害倍率 %.0f%% · 基础冷却 %.1f 秒\n下一阶：伤害倍率 %.0f%% · 基础冷却 %.1f 秒" % [current_damage * 100.0, current_cooldown, next_damage * 100.0, next_cooldown]
+		return TIANJI_CATALOG.effect_summary_for(skill_id, rank)
+	return "%s\n下一阶：%s" % [TIANJI_CATALOG.effect_summary_for(skill_id, rank), TIANJI_CATALOG.effect_summary_for(skill_id, rank + 1)]
 
 func _buy_tianji_from_detail(skill_id: String) -> void:
 	var current_profile := SaveService.load_profile()
@@ -3773,16 +3871,17 @@ func _hero_select_info_rect() -> Rect2:
 func _skill_icon_path(hero_id: String, index: int) -> String:
 	var names := {"guan_yu": "guanyu", "zhang_fei": "zhangfei", "zhao_yun": "zhaoyun", "ma_chao": "machao"}
 	var stem := str(names.get(hero_id, ""))
-	if stem.is_empty():
+	if stem.is_empty() or index < 0:
 		return ""
-	# Passive/active image files have the opposite visual order from the skill list.
-	# Only exchange the images; labels, descriptions and gameplay remain unchanged.
-	var icon_index := index
-	if index == 1:
-		icon_index = 2
-	elif index == 2:
-		icon_index = 1
-	return "res://assets/art/ui/hero_skills/%s%d.png" % [stem, icon_index + 1]
+	var hero := HERO_CATALOG.definition_for(hero_id)
+	var skills: Array = hero.get("skills", []) as Array
+	if index >= skills.size():
+		return ""
+	var skill_type := str((skills[index] as Dictionary).get("type", ""))
+	var file_index := HERO_CATALOG.skill_icon_file_index(skill_type)
+	if file_index <= 0:
+		return ""
+	return "res://assets/art/ui/hero_skills/%s%d.png" % [stem, file_index]
 
 func _hero_select_info_sections(info_rect: Rect2) -> Dictionary:
 	var inner := info_rect.grow(-18.0)
@@ -3831,7 +3930,9 @@ func _populate_hero_select_skill_labels(stats_rect: Rect2, hero: Dictionary) -> 
 		cell.tooltip_text = "点击查看技能说明"
 		cell.pressed.connect(_show_hero_skill_popup.bind(skill, cell))
 		var icon := TextureRect.new()
-		icon.texture = load(_skill_icon_path(hero_id, index)) as Texture2D
+		var icon_path := _skill_icon_path(hero_id, index)
+		if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
+			icon.texture = load(icon_path) as Texture2D
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.position = Vector2((cell.size.x - icon_size.x) * 0.5, 0.0)
 		icon.size = icon_size
@@ -4934,7 +5035,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var margin := _safe_margin()
 	if page == "shop":
-		draw_string(font, Vector2(size.x - margin - 240.0, 52), "军功  %d" % int(profile.get("military_merit", 0)), HORIZONTAL_ALIGNMENT_LEFT, 184.0, 21, GOLD_BRIGHT)
+		_draw_shop_merit_currency(font, margin)
 	match page:
 		"main": _draw_main(font)
 		#"modes", "expedition": _draw_expedition(font)
@@ -4947,6 +5048,29 @@ func _draw() -> void:
 	if title_menu_fade_remaining > 0.0:
 		var fade_alpha := clampf(title_menu_fade_remaining / TITLE_MENU_FADE_DURATION, 0.0, 1.0)
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, fade_alpha))
+
+func _draw_shop_merit_currency(font: Font, margin: float) -> void:
+	var texture_size := SHOP_MERIT_TEXTURE.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return
+	var target_height := 39.0
+	if size.x < 900.0:
+		target_height = 31.0
+	var target_size := texture_size * (target_height / texture_size.y)
+	var currency_rect := Rect2(Vector2(size.x - margin - target_size.x, 28.0), target_size)
+	draw_texture_rect(SHOP_MERIT_TEXTURE, currency_rect, false)
+	var merit_text := _format_merit_amount(int(profile.get("military_merit", 0)))
+	var number_rect := Rect2(currency_rect.position.x + target_size.x * 0.40, currency_rect.position.y + target_size.y * 0.62, target_size.x * 0.51, target_size.y * 0.76)
+	draw_string_outline(font, number_rect.position, merit_text, HORIZONTAL_ALIGNMENT_CENTER, number_rect.size.x, 20 if target_height >= 39.0 else 17, 3, Color("11191f", 0.92))
+	draw_string(font, number_rect.position, merit_text, HORIZONTAL_ALIGNMENT_CENTER, number_rect.size.x, 20 if target_height >= 39.0 else 17, GOLD_BRIGHT)
+
+func _format_merit_amount(amount: int) -> String:
+	var digits := str(maxi(0, amount))
+	var grouped := ""
+	while digits.length() > 3:
+		grouped = "," + digits.substr(digits.length() - 3, 3) + grouped
+		digits = digits.substr(0, digits.length() - 3)
+	return digits + grouped
 
 func _draw_main(_font: Font) -> void:
 	# 首页由主背景、边框与四个入口按钮构成，不再叠加文字标题，避免遮挡画面主体。
@@ -5701,12 +5825,7 @@ class HeroSelectInfoOverlay extends Control:
 			chip_x += chip_width + 9.0
 
 		draw_string(KAITI_FONT, trait_rect.position + Vector2(0.0, 20.0), "武将特性", HORIZONTAL_ALIGNMENT_LEFT, trait_rect.size.x, 20, GOLD_BRIGHT)
-		var skills: Array = hero.get("skills", []) as Array
-		var trait_description := ""
-		if skills.size() > 1:
-			trait_description = str((skills[1] as Dictionary).get("description", ""))
-		elif not skills.is_empty():
-			trait_description = str((skills[0] as Dictionary).get("description", ""))
+		var trait_description := str(hero.get("trait_summary", ""))
 		var trait_lines := _wrap_text(trait_description, trait_rect.size.x, 16).split("\n")
 		var trait_bottom := trait_rect.size.y - 5.0
 		for line_index in range(trait_lines.size()):

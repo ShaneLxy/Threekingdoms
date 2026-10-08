@@ -279,7 +279,7 @@ const TIANJI_FIRE_RAIN_FINAL_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/art/effects/tianji/fire_rain/meteor_final/055 MYNSZD E53202_22.png")
 ]
 const PLAYER_ULTIMATE_SOURCE_FOOT_ANCHOR := Vector2(64, 108)
-const GUAN_YU_SPRITE_SCALE := 0.75
+const GUAN_YU_SPRITE_SCALE := 0.82
 const GUAN_YU_SOURCE_FOOT_ANCHOR := Vector2(64, 86)
 const GUAN_YU_TALL_SWING_SOURCE_FOOT_ANCHOR := Vector2(50, 124)
 const GUAN_YU_WORLD_FOOT_OFFSET := Vector2(0, 13)
@@ -303,12 +303,47 @@ const GUAN_YU_WUSHUANG_GROUND_EFFECT_TEXTURES: Array[Texture2D] = [
 ]
 const ZHANG_FEI_SPRITE_SCALE := 1.0
 const ZHANG_FEI_WORLD_FOOT_OFFSET := Vector2(0, 15)
-const MA_CHAO_SPRITE_SCALE := 1.0
+const MA_CHAO_SPRITE_SCALE := 0.8
+const MA_CHAO_ACTIVE_EFFECT_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-01.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-02.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-03.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-04.png"),
+	preload("res://assets/art/effects/zhao_yun/ultimate/zhaoyun-ultimate-effect-05.png"),
+]
+const MA_CHAO_ACTIVE_EFFECT_FRAME_DURATION := 0.06
+const MA_CHAO_ACTIVE_EFFECT_SCALE := 0.72
+const MA_CHAO_ACTIVE_EFFECT_SOURCE_ANCHOR := Vector2(491.0, 180.0)
+const MA_CHAO_ACTIVE_EFFECT_GUN_TIP_OFFSET := Vector2(0.0, -27.0)
+const MA_CHAO_THIRD_EFFECT_FRAME_DURATION := 0.045
+const MA_CHAO_THIRD_EFFECT_SCALE := 0.65
+const MA_CHAO_THIRD_EFFECT_SIDE_OFFSET := 72.0
+const MA_CHAO_THIRD_EFFECT_VERTICAL_OFFSET := -34.0
+const MA_CHAO_THIRD_EFFECT_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/ma_chao3duan/1.png"),
+	preload("res://assets/art/effects/ma_chao3duan/2.png"),
+	preload("res://assets/art/effects/ma_chao3duan/3.png"),
+	preload("res://assets/art/effects/ma_chao3duan/4.png"),
+	preload("res://assets/art/effects/ma_chao3duan/5.png"),
+	preload("res://assets/art/effects/ma_chao3duan/6.png"),
+	preload("res://assets/art/effects/ma_chao3duan/7.png"),
+	preload("res://assets/art/effects/ma_chao3duan/8.png"),
+]
 const MA_CHAO_WORLD_FOOT_OFFSET := Vector2(0, 15)
 const MA_CHAO_SOURCE_FOOT_ANCHOR := Vector2(64, 84)
 const MA_CHAO_IDLE_FRAME_DURATION := 0.16
 const MA_CHAO_WALK_FRAME_DURATION := 0.11
+const MA_CHAO_GUARD_FRAME_INDICES := [0, 1, 4, 6]
+const MA_CHAO_GUARD_FRAME_DURATION := 0.10
 const MA_CHAO_DEATH_FRAME_DURATIONS: Array[float] = [0.12, 0.14, 0.20, 0.30, 0.54]
+const MA_CHAO_FOURTH_QUAKE_FRAME_DURATION := 0.055
+const MA_CHAO_FOURTH_QUAKE_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/art/effects/ma_chao4duan/1.png"), preload("res://assets/art/effects/ma_chao4duan/2.png"),
+	preload("res://assets/art/effects/ma_chao4duan/3.png"), preload("res://assets/art/effects/ma_chao4duan/4.png"),
+	preload("res://assets/art/effects/ma_chao4duan/5.png"), preload("res://assets/art/effects/ma_chao4duan/6.png"),
+	preload("res://assets/art/effects/ma_chao4duan/7.png"), preload("res://assets/art/effects/ma_chao4duan/8.png"),
+	preload("res://assets/art/effects/ma_chao4duan/9.png"), preload("res://assets/art/effects/ma_chao4duan/10.png"),
+]
 const MA_CHAO_ATTACK_03_FOOT_ANCHORS := [
 	Vector2(64, 84), Vector2(64, 84), Vector2(64, 116), Vector2(64, 102),
 	Vector2(64, 94), Vector2(64, 81), Vector2(64, 82),
@@ -1155,6 +1190,26 @@ const ENEMY_CAVALRY_ATTACK_TEXTURES := [
 	preload("res://assets/art/enemies/cavalry/attack_01_right/1.png"),
 	preload("res://assets/art/enemies/cavalry/attack_01_right/2.png"),
 ]
+const BATTLE_SOUL_LOGO_TEXTURES: Dictionary = {
+	"gale": preload("res://assets/art/ui/shop/zhanhun/gangfeng.png"),
+	"thunder": preload("res://assets/art/ui/shop/zhanhun/leiting.png"),
+	"flame": preload("res://assets/art/ui/shop/zhanhun/baoyan.png"),
+	"iron": preload("res://assets/art/ui/shop/zhanhun/xuanjia.png"),
+	"machine": preload("res://assets/art/battle_souls/shenji.png"),
+}
+const SHENJI_CROSSBOW_TEXTURE := preload("res://assets/art/battle_souls/lianNu.png")
+# Source: 64x44, alpha bounds (0,0)-(64,44); bow/rail intersection pivot.
+const SHENJI_CROSSBOW_ANCHOR := Vector2(30.0, 22.0)
+const SHENJI_CROSSBOW_SOURCE_ANGLE := 2.711
+const SHENJI_CROSSBOW_SCALE := 0.45
+const SHENJI_BOW_OFFSET := Vector2(-34.0, -38.0)
+const SHENJI_MUZZLE_DISTANCE := 24.0
+const SHENJI_ARROW_SCALE := 0.62 * 1.75
+const SHENJI_FLASH_DURATION := 0.16
+const SHENJI_IMPACT_DURATION := 0.22
+const SHENJI_VISUAL_LIMIT := 32
+const BATTLE_SOUL_BOOM_TEXTURES: Array[Texture2D] = [preload("res://assets/art/effects/battle_soul/boom/1.png"), preload("res://assets/art/effects/battle_soul/boom/2.png"), preload("res://assets/art/effects/battle_soul/boom/3.png"), preload("res://assets/art/effects/battle_soul/boom/4.png"), preload("res://assets/art/effects/battle_soul/boom/5.png"), preload("res://assets/art/effects/battle_soul/boom/6.png")]
+
 const ENEMY_CAVALRY_DEATH_TEXTURES := [
 	preload("res://assets/art/enemies/cavalry/death_right/1.png"),
 	preload("res://assets/art/enemies/cavalry/death_right/2.png"),
@@ -1225,12 +1280,20 @@ const ELITE_CHUNYU_DAO_DEATH_TEXTURES := [
 	preload("res://assets/art/elites/chunyu_dao/death_right/chunyu-dao-death-03.png"),
 ]
 const ARCHER_PROJECTILE_TEXTURE := preload("res://assets/art/projectiles/archer-arrow.png")
+const MA_CHAO_HORSE_MOVE_TEXTURES: Array[Texture2D] = [preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_move1/1.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_move1/2.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_move1/3.png")]
+const MA_CHAO_COMPANION_STAY_TEXTURE: Texture2D = preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_stay1/1.png")
+const MA_CHAO_COMPANION_ATTACK_TEXTURES: Array[Texture2D] = [preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_attack1/1.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_attack1/2.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_attack1/3.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_attack1/3-1.png"), preload("res://assets/art/characters/ma_chao/wushuang_companion/wushuang_attack1/2-2.png")]
+const MA_CAVALRY_GALE_TRAIL_LIMIT := 48
+const MA_CAVALRY_GALE_TRAIL_PER_ALLY := 3
+const MA_CAVALRY_GALE_TRAIL_INTERVAL := 0.05
+const MA_CAVALRY_GALE_TRAIL_LIFETIME := 0.16
 
 var bounds := Rect2(0, 0, 2560, 1440)
 var enemies: EnemySimulation
 var player: HeroActor
 var boss: BossActor
 var battle_soul_system: BattleSoulSystem
+var ma_chao_ultimate_system: MaChaoUltimateSystem
 var siege_system: SiegeSystem
 var siege_companion: HeroActor
 var battle_camera: Camera2D
@@ -1258,9 +1321,20 @@ var archer_projectiles: Array[Dictionary] = []
 var archer_impact_marks: Array[Dictionary] = []
 var crossbow_bolts: Array[Dictionary] = []
 var crossbow_impact_marks: Array[Dictionary] = []
+var shenji_arrows: Array[Dictionary] = []
+var shenji_impact_marks: Array[Dictionary] = []
+var shenji_bow_position := Vector2.ZERO
+var shenji_bow_direction := Vector2.RIGHT
+var shenji_bow_flash_remaining := 0.0
 var banner_command_marks: Array[Dictionary] = []
 var battle_soul_proc_marks: Array[Dictionary] = []
 var battle_soul_pickup_marks: Array[Dictionary] = []
+var ma_chao_fourth_quake_marks: Array[Dictionary] = []
+var gale_afterimages: Array[Dictionary] = []
+var gale_afterimage_elapsed := 0.0
+var gale_afterimage_last_position := Vector2.ZERO
+var cavalry_gale_trails: Array[Dictionary] = []
+var cavalry_gale_trail_elapsed := 0.0
 var damage_numbers_enabled := true
 var damage_number_marks: Array[Dictionary] = []
 var firewheel_rings: Array[Dictionary] = []
@@ -1425,6 +1499,41 @@ func set_elites(elite_actors: Array[EliteActor]) -> void:
 	elites = elite_actors
 	queue_redraw()
 
+func set_ma_chao_ultimate_system(system: MaChaoUltimateSystem) -> void:
+	ma_chao_ultimate_system = system
+	queue_redraw()
+
+func shenji_visual_event(event_name: String, at: Vector2, direction: Vector2) -> void:
+	if event_name == "aim":
+		shenji_bow_position = player.position + SHENJI_BOW_OFFSET if player != null else at
+		shenji_bow_direction = direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
+	elif event_name == "fire":
+		shenji_bow_position = player.position + SHENJI_BOW_OFFSET if player != null else at
+		shenji_bow_direction = direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
+		shenji_bow_flash_remaining = SHENJI_FLASH_DURATION
+		if shenji_arrows.size() >= SHENJI_VISUAL_LIMIT:
+			shenji_arrows.pop_front()
+		var visual_origin := player.position + SHENJI_BOW_OFFSET if player != null else at
+		var forward := direction.normalized() if direction.length_squared() > 0.01 else Vector2.RIGHT
+		shenji_arrows.append({"position": visual_origin + forward * SHENJI_MUZZLE_DISTANCE, "direction": forward, "remaining": 1.2, "age": 0.0})
+	elif event_name == "impact":
+		if shenji_impact_marks.size() >= SHENJI_VISUAL_LIMIT:
+			shenji_impact_marks.pop_front()
+		shenji_impact_marks.append({"position": at, "direction": direction, "remaining": SHENJI_IMPACT_DURATION})
+		# Match the nearest visual bolt on the same ray; no gameplay arrow is changed.
+		var nearest := -1
+		var nearest_distance := INF
+		for index in range(shenji_arrows.size()):
+			var arrow: Dictionary = shenji_arrows[index]
+			var arrow_direction: Vector2 = arrow.get("direction", Vector2.RIGHT)
+			var distance := at.distance_squared_to(arrow.get("position", at))
+			if arrow_direction.dot(direction) > 0.99 and distance < nearest_distance:
+				nearest = index
+				nearest_distance = distance
+		if nearest >= 0:
+			shenji_arrows.remove_at(nearest)
+	queue_redraw()
+
 func set_battle_soul_system(system: BattleSoulSystem) -> void:
 	battle_soul_system = system
 	battle_soul_proc_marks.clear()
@@ -1576,15 +1685,27 @@ func _flash_duration_for_request(request: AttackRequest) -> float:
 func add_pickup(at: Vector2) -> void:
 	pickup_marks.append({"position": at, "remaining": 0.45})
 
-func add_battle_soul_proc(soul_id: String, at: Vector2) -> void:
-	const duration := 0.36
+func add_battle_soul_proc(soul_id: String, at: Vector2, origin: Vector2 = Vector2.ZERO, chain_points: Array[Vector2] = [], radius: float = 78.0) -> void:
+	const duration := 0.42
 	battle_soul_proc_marks.append({
 		"id": soul_id,
 		"position": at,
+		"origin": origin if origin != Vector2.ZERO else (player.position if player != null else at),
+		"chain_points": chain_points,
+		"radius": radius,
 		"remaining": duration,
 		"duration": duration,
 		"seed": randi_range(0, 1000),
 	})
+	queue_redraw()
+
+var companion_soul_proc_counts: Dictionary = {}
+
+func add_companion_soul_proc(soul_id: String, at: Vector2, origin: Vector2, points: Array[Vector2], radius: float) -> void:
+	companion_soul_proc_counts[soul_id] = int(companion_soul_proc_counts.get(soul_id, 0)) + 1
+	if soul_id != "gale":
+		add_battle_soul_proc(soul_id, at, origin, points, radius)
+		battle_soul_proc_marks[-1]["cavalry"] = true
 	queue_redraw()
 
 func add_battle_soul_pickup(soul_id: String, at: Vector2) -> void:
@@ -2024,14 +2145,29 @@ func _spawn_ground_impact_effect(at: Vector2, scale_multiplier: Variant) -> void
 func _on_hero_visual_effect_started(effect_id: String, origin: Vector2, direction: Vector2, travel_distance: float, metadata: Dictionary) -> void:
 	if effect_id == "firewheel_ring":
 		firewheel_rings.append({"position": origin, "direction": direction.normalized(), "remaining": travel_distance})
-	elif effect_id == "zhang_fourth_ground_wave":
+	elif effect_id in ["zhang_fourth_ground_wave", "ma_chao_ground_wave"]:
 		var effect_scene = preload("res://scenes/effects/ground_impact_wave.tscn")
 		var effect_instance = effect_scene.instantiate()
 		effect_instance.position = origin
+		var is_ma_chao_wave := effect_id == "ma_chao_ground_wave"
+		var wave_direction := direction.normalized()
+		var wave_scale: Variant = metadata.get("scale", 0.32)
+		var sprite_offset := Vector2.ZERO
+		if is_ma_chao_wave:
+			var visible_bounds := Rect2(905.0, 547.0, 347.0, 314.0)
+			var desired_length := maxf(1.0, travel_distance)
+			var desired_width := maxf(1.0, float(metadata.get("width", 110.0)))
+			wave_scale = Vector2(desired_length / visible_bounds.size.x, desired_width / visible_bounds.size.y)
+			var contact_point_from_center := Vector2(visible_bounds.position.x - 960.0, visible_bounds.end.y - 540.0)
+			var facing_left := wave_direction.x < 0.0
+			# AnimatedSprite2D 的 offset 会随父节点缩放，不能提前乘 wave_scale。
+			sprite_offset = Vector2(-contact_point_from_center.x if not facing_left else contact_point_from_center.x, -absf(contact_point_from_center.y))
+			effect_instance.rotation = 0.0
 		effect_instance.configure({
-			"flip_h": bool(metadata.get("flip_h", direction.x < 0.0)),
+			"flip_h": direction.x < 0.0 if is_ma_chao_wave else bool(metadata.get("flip_h", direction.x < 0.0)),
 			"max_frame": int(metadata.get("max_frame", -1)),
-			"scale": float(metadata.get("scale", 0.32)),
+			"scale": wave_scale,
+			"sprite_offset": sprite_offset,
 			"speed_scale": float(metadata.get("speed_scale", 1.0)),
 		})
 		add_child(effect_instance)
@@ -2061,6 +2197,10 @@ func tick_visuals(delta: float) -> void:
 	_tick_weather(delta)
 	player_hit_flash_remaining = maxf(0.0, player_hit_flash_remaining - delta)
 	_tick_player_animation(delta)
+	_tick_gale_afterimages(delta)
+	cavalry_gale_trail_elapsed += delta
+	_tick_cavalry_gale_trails(delta)
+	_tick_ma_chao_fourth_quake(delta)
 	_tick_enemy_animation(delta)
 	for index in range(flashes.size() - 1, -1, -1):
 		flashes[index].remaining -= delta
@@ -2195,6 +2335,7 @@ func tick_visuals(delta: float) -> void:
 			archer_projectiles.remove_at(index)
 		else:
 			archer_projectiles[index] = projectile
+	_tick_shenji_visuals(delta)
 	for index in range(archer_impact_marks.size() - 1, -1, -1):
 		archer_impact_marks[index].remaining -= delta
 		if archer_impact_marks[index].remaining <= 0.0:
@@ -2281,7 +2422,7 @@ func _tick_player_animation(delta: float) -> void:
 	var is_guan_yu := player.presentation_id() == "guan_yu"
 	var is_zhang_fei := player.presentation_id() == "zhang_fei"
 	var drag_charge_ready := _guan_yu_drag_charge_ready()
-	var can_render_standard_movement := not player.is_action_locked() and (player.ultimate_time <= 0.0 or is_guan_yu or is_zhang_fei)
+	var can_render_standard_movement := not player.is_action_locked() and (player.ultimate_time <= 0.0 or is_guan_yu or is_zhang_fei or player.presentation_id() == "ma_chao")
 	# Use Guan Yu's actual hold state rather than the transient action label.  Trial-mode
 	# upgrade transitions may reset action labels while the held-input state is still active.
 	var can_render_drag_movement := is_guan_yu and player.is_drag_charging()
@@ -2304,22 +2445,32 @@ func _tick_player_animation(delta: float) -> void:
 	var is_attack_01 := player.current_action == "basic" and player.combo_stage == 1
 	if is_attack_01:
 		player_attack_01_time = 0.0 if not player_is_playing_attack_01 else player_attack_01_time + delta
+	if player_is_playing_attack_01 and not is_attack_01:
+		player_attack_01_time = 0.0
 	player_is_playing_attack_01 = is_attack_01
 	var is_attack_02 := player.current_action == "basic" and player.combo_stage == 2
 	if is_attack_02:
 		player_attack_02_time = 0.0 if not player_is_playing_attack_02 else player_attack_02_time + delta
+	if player_is_playing_attack_02 and not is_attack_02:
+		player_attack_02_time = 0.0
 	player_is_playing_attack_02 = is_attack_02
 	var is_attack_03 := player.current_action == "basic" and player.combo_stage == 3
 	if is_attack_03:
 		player_attack_03_time = 0.0 if not player_is_playing_attack_03 else player_attack_03_time + delta
+	if player_is_playing_attack_03 and not is_attack_03:
+		player_attack_03_time = 0.0
 	player_is_playing_attack_03 = is_attack_03
 	var is_attack_04 := player.is_firewheel_active()
 	if is_attack_04:
 		player_attack_04_time = 0.0 if not player_is_playing_attack_04 else player_attack_04_time + delta
+	if player_is_playing_attack_04 and not is_attack_04:
+		player_attack_04_time = 0.0
 	player_is_playing_attack_04 = is_attack_04
 	var is_attack_05 := player.is_firewheel_finisher_active()
 	if is_attack_05:
 		player_attack_05_time = 0.0 if not player_is_playing_attack_05 else player_attack_05_time + delta
+	if player_is_playing_attack_05 and not is_attack_05:
+		player_attack_05_time = 0.0
 	player_is_playing_attack_05 = is_attack_05
 	player_guard_time = player.guard_elapsed() if player.is_guard_active() else 0.0
 	if player_is_moving:
@@ -2334,6 +2485,121 @@ func _tick_player_animation(delta: float) -> void:
 	guan_yu_was_using_drag_motion = uses_drag_motion if is_guan_yu else false
 	zhang_fei_was_moving = player_is_moving if is_zhang_fei else false
 	player_last_position = player.position
+
+func add_ma_chao_fourth_quake(at: Vector2, direction: Vector2 = Vector2.RIGHT, geometry_scale: float = 1.0) -> void:
+	ma_chao_fourth_quake_marks.append({"position": at, "direction": direction.normalized(), "geometry_scale": geometry_scale, "remaining": MA_CHAO_FOURTH_QUAKE_FRAME_DURATION * float(MA_CHAO_FOURTH_QUAKE_TEXTURES.size())})
+
+func _tick_ma_chao_fourth_quake(delta: float) -> void:
+	for index in range(ma_chao_fourth_quake_marks.size() - 1, -1, -1):
+		ma_chao_fourth_quake_marks[index]["remaining"] = maxf(0.0, float(ma_chao_fourth_quake_marks[index].get("remaining", 0.0)) - delta)
+		if float(ma_chao_fourth_quake_marks[index].get("remaining", 0.0)) <= 0.0:
+			ma_chao_fourth_quake_marks.remove_at(index)
+
+func _draw_ma_chao_fourth_quake(fallback_at: Vector2 = Vector2.ZERO) -> void:
+	for mark in ma_chao_fourth_quake_marks:
+		var elapsed := MA_CHAO_FOURTH_QUAKE_FRAME_DURATION * float(MA_CHAO_FOURTH_QUAKE_TEXTURES.size()) - float(mark.get("remaining", 0.0))
+		var frame := mini(int(elapsed / MA_CHAO_FOURTH_QUAKE_FRAME_DURATION), MA_CHAO_FOURTH_QUAKE_TEXTURES.size() - 1)
+		var texture: Texture2D = MA_CHAO_FOURTH_QUAKE_TEXTURES[frame]
+		var at: Vector2 = mark.get("position", Vector2.ZERO) + Vector2(0.0, 10.0)
+		var scale := 0.72 * float(mark.get("geometry_scale", 1.0))
+		var direction: Vector2 = mark.get("direction", Vector2.RIGHT)
+		var horizontal := -scale if direction.x < 0.0 else scale
+		draw_set_transform(at, 0.0, Vector2(horizontal, scale))
+		draw_texture(texture, -texture.get_size() * 0.5, Color(1.0, 1.0, 1.0, 0.92))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _tick_gale_afterimages(delta: float) -> void:
+	for index in range(gale_afterimages.size() - 1, -1, -1):
+		gale_afterimages[index]["remaining"] = maxf(0.0, float(gale_afterimages[index].get("remaining", 0.0)) - delta)
+		if float(gale_afterimages[index].get("remaining", 0.0)) <= 0.0:
+			gale_afterimages.remove_at(index)
+	if player == null or not player.has_battle_soul("gale") or not player_is_moving:
+		return
+	gale_afterimage_elapsed += delta
+	if gale_afterimage_elapsed < 0.095:
+		return
+	gale_afterimage_elapsed = 0.0
+	var texture := _current_gale_afterimage_texture()
+	var anchor := _current_gale_afterimage_source_foot_anchor()
+	gale_afterimages.append({"texture": texture, "anchor": anchor, "position": player.position, "left": player_faces_left, "remaining": 0.24, "duration": 0.24})
+	if gale_afterimages.size() > 3:
+		gale_afterimages.pop_front()
+
+func _current_gale_afterimage_texture() -> Texture2D:
+	match player.presentation_id():
+		"zhang_fei":
+			return _current_zhang_fei_texture()
+		"ma_chao":
+			return _current_ma_chao_texture()
+		"guan_yu":
+			return _current_guan_yu_texture()
+		_:
+			return _current_player_texture()
+
+func _current_gale_afterimage_source_foot_anchor() -> Vector2:
+	match player.presentation_id():
+		"zhang_fei":
+			return _current_zhang_fei_source_foot_anchor()
+		"ma_chao":
+			return _current_ma_chao_source_foot_anchor()
+		"guan_yu":
+			return _current_guan_yu_source_foot_anchor()
+		_:
+			return _current_player_source_foot_anchor()
+
+func _tick_cavalry_gale_trails(delta: float) -> void:
+	for index in range(cavalry_gale_trails.size() - 1, -1, -1):
+		cavalry_gale_trails[index]["remaining"] = maxf(0.0, float(cavalry_gale_trails[index].get("remaining", 0.0)) - delta)
+		if float(cavalry_gale_trails[index].get("remaining", 0.0)) <= 0.0:
+			cavalry_gale_trails.remove_at(index)
+	if ma_chao_ultimate_system == null or not ma_chao_ultimate_system.is_active():
+		cavalry_gale_trails.clear()
+		cavalry_gale_trail_elapsed = 0.0
+		return
+	if cavalry_gale_trail_elapsed < MA_CAVALRY_GALE_TRAIL_INTERVAL:
+		return
+	cavalry_gale_trail_elapsed = 0.0
+	for ally in ma_chao_ultimate_system.active_allies():
+		if not bool(ally.get("gale_active", false)) or str(ally.get("state", "")) != "ATTACK_DASH":
+			continue
+		var ally_id := int(ally.get("id", -1))
+		var ally_trail_count := 0
+		for trail in cavalry_gale_trails:
+			if int(trail.get("ally_id", -2)) == ally_id:
+				ally_trail_count += 1
+		if ally_trail_count >= MA_CAVALRY_GALE_TRAIL_PER_ALLY:
+			continue
+		var facing: Vector2 = ally.get("facing", Vector2.RIGHT)
+		var horizontal := -1.0 if facing.x < 0.0 else 1.0
+		var animation_offset := float(ally_id) * 0.045
+		var horse := MA_CHAO_HORSE_MOVE_TEXTURES[int((visual_time * 1.65 + animation_offset) / 0.075) % MA_CHAO_HORSE_MOVE_TEXTURES.size()]
+		var rider := MA_CHAO_COMPANION_ATTACK_TEXTURES[mini(int((visual_time / 0.075) + animation_offset), MA_CHAO_COMPANION_ATTACK_TEXTURES.size() - 1)]
+		cavalry_gale_trails.append({"ally_id": ally_id, "position": ally.get("position", Vector2.ZERO), "horizontal": horizontal, "horse": horse, "rider": rider, "remaining": MA_CAVALRY_GALE_TRAIL_LIFETIME, "duration": MA_CAVALRY_GALE_TRAIL_LIFETIME})
+		if cavalry_gale_trails.size() > MA_CAVALRY_GALE_TRAIL_LIMIT:
+			cavalry_gale_trails.pop_front()
+
+func _draw_cavalry_gale_trails() -> void:
+	for trail in cavalry_gale_trails:
+		var alpha := clampf(float(trail.get("remaining", 0.0)) / float(trail.get("duration", MA_CAVALRY_GALE_TRAIL_LIFETIME)), 0.0, 1.0) * 0.34
+		var scale := 0.984
+		draw_set_transform(trail.get("position", Vector2.ZERO), 0.0, Vector2(float(trail.get("horizontal", 1.0)) * scale, scale))
+		draw_texture(trail.get("horse", null), -trail.get("horse").get_size() * 0.5, Color(0.88, 0.94, 1.0, alpha))
+		draw_set_transform(trail.get("position", Vector2.ZERO) + Vector2(0, -2), 0.0, Vector2(float(trail.get("horizontal", 1.0)) * scale, scale))
+		draw_texture(trail.get("rider", null), -trail.get("rider").get_size() * 0.5, Color(0.92, 0.96, 1.0, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_gale_afterimages() -> void:
+	for ghost in gale_afterimages:
+		var duration := maxf(0.01, float(ghost.get("duration", 0.24)))
+		var alpha := clampf(float(ghost.get("remaining", 0.0)) / duration, 0.0, 1.0) * 0.24
+		var texture: Texture2D = ghost.get("texture", null)
+		if texture == null:
+			continue
+		var scale := 1.0
+		var horizontal := -scale if bool(ghost.get("left", false)) else scale
+		draw_set_transform(ghost.get("position", Vector2.ZERO), 0.0, Vector2(horizontal, scale))
+		draw_texture(texture, -ghost.get("anchor", Vector2.ZERO), Color(0.35, 0.95, 0.78, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _tick_enemy_animation(delta: float) -> void:
 	if enemies == null:
@@ -2353,6 +2619,7 @@ func _draw() -> void:
 	_draw_trial_atmosphere()
 	_draw_weather_back()
 	_draw_duel_formation()
+	_draw_ma_chao_ultimate()
 	_draw_telegraphs()
 	_draw_tianji_marks()
 	_draw_tianji_wind_marks()
@@ -2366,6 +2633,9 @@ func _draw() -> void:
 	_draw_ultimate_waves()
 	_draw_boss()
 	_draw_player()
+	_draw_cavalry_gale_trails()
+	_draw_shenji_crossbow()
+	_draw_gale_afterimages()
 	_draw_damage_numbers()
 	_draw_battle_soul_feedback()
 	_draw_zhao_yun_ultimate_effects()
@@ -2763,6 +3033,18 @@ func _draw_enemies() -> void:
 		var ground_at := enemies.positions[id]
 		if not draw_region.has_point(ground_at):
 			continue
+		if enemies.is_ma_chao_airborne(id):
+			var airborne_at := ground_at + enemies.launch_visual_offset(id)
+			var airborne_type := enemies.get_type(id)
+			var airborne_facing := enemies.get_facing_direction(id)
+			var airborne_crowd_dim := _named_target_crowd_dim(airborne_at)
+			var airborne_size := 19.0 if airborne_type == EnemySimulation.EnemyType.CAVALRY else 12.0
+			var airborne_sprite := airborne_type == EnemySimulation.EnemyType.SWORD or airborne_type == EnemySimulation.EnemyType.SHIELD or airborne_type == EnemySimulation.EnemyType.ARCHER or airborne_type == EnemySimulation.EnemyType.HALBERD or airborne_type == EnemySimulation.EnemyType.SPEAR or airborne_type == EnemySimulation.EnemyType.CROSSBOW or airborne_type == EnemySimulation.EnemyType.CAVALRY
+			var airborne_shadow_h := 35.0 if airborne_type == EnemySimulation.EnemyType.CAVALRY else (22.0 if airborne_sprite else airborne_size * 1.05)
+			var airborne_shadow_v := 8.0 if airborne_type == EnemySimulation.EnemyType.CAVALRY else (6.5 if airborne_sprite else airborne_size * 0.34)
+			_draw_ground_shadow(ground_at + Vector2(0, airborne_size * 0.55), airborne_shadow_h, airborne_shadow_v, Color(0.0, 0.0, 0.0, 0.28))
+			_draw_ma_chao_airborne_enemy(airborne_at, airborne_type, airborne_facing, airborne_crowd_dim)
+			continue
 		if enemies.is_dying(id):
 			_draw_enemy_death(id)
 			continue
@@ -2786,6 +3068,9 @@ func _draw_enemies() -> void:
 		var shadow_horizontal := 35.0 if enemy_type == EnemySimulation.EnemyType.CAVALRY else (22.0 if uses_enemy_sprite else size * 1.05)
 		var shadow_vertical := 8.0 if enemy_type == EnemySimulation.EnemyType.CAVALRY else (6.5 if uses_enemy_sprite else size * 0.34)
 		_draw_ground_shadow(ground_at + Vector2(0, size * 0.55), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, 0.28))
+		if enemies.is_ma_chao_airborne(id):
+				_draw_ma_chao_airborne_enemy(at, enemy_type, facing, crowd_dim, enemies.get_airborne_tilt(id))
+				continue
 		if is_launched:
 			_draw_death_launch_trail(at, facing, 0.86)
 		if is_being_displaced:
@@ -2824,6 +3109,36 @@ func _draw_enemies() -> void:
 		var command_ratio := enemies.command_aura_ratio(id)
 		if command_ratio > 0.0 and enemy_type != EnemySimulation.EnemyType.BANNER:
 			_draw_banner_commanded_marker(at, command_ratio)
+
+func _draw_ma_chao_airborne_enemy(at: Vector2, enemy_type: int, facing: Vector2, crowd_dim: float, tilt: float = 0.0) -> void:
+	var alpha := clampf(0.92 - crowd_dim * 0.25, 0.58, 0.92)
+	draw_set_transform(at, tilt, Vector2.ONE)
+	var horizontal := -1.0 if facing.x < -0.05 else 1.0
+	match enemy_type:
+		EnemySimulation.EnemyType.SWORD:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_SWORD_SPRITE_SCALE, ENEMY_SWORD_SPRITE_SCALE))
+			draw_texture(ENEMY_SWORD_DEATH_TEXTURES[0], -ENEMY_SWORD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.SHIELD:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_SHIELD_SPRITE_SCALE, ENEMY_SHIELD_SPRITE_SCALE))
+			draw_texture(ENEMY_SHIELD_DEATH_TEXTURES[0], -ENEMY_SHIELD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.ARCHER:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_ARCHER_SPRITE_SCALE, ENEMY_ARCHER_SPRITE_SCALE))
+			draw_texture(ENEMY_ARCHER_DEATH_TEXTURES[0], -ENEMY_ARCHER_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.HALBERD:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_HALBERD_SPRITE_SCALE, ENEMY_HALBERD_SPRITE_SCALE))
+			draw_texture(ENEMY_HALBERD_DEATH_TEXTURES[0], -ENEMY_HALBERD_SOURCE_FOOT_ANCHOR, Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.SPEAR:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_SPEAR_SPRITE_SCALE, ENEMY_SPEAR_SPRITE_SCALE))
+			draw_texture(ENEMY_SPEAR_DEATH_TEXTURES[0], -ENEMY_SPEAR_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.CROSSBOW:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_CROSSBOW_SPRITE_SCALE, ENEMY_CROSSBOW_SPRITE_SCALE))
+			draw_texture(ENEMY_CROSSBOW_DEATH_TEXTURES[0], -ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		EnemySimulation.EnemyType.CAVALRY:
+			draw_set_transform(at + Vector2(0, 14), tilt, Vector2(horizontal * ENEMY_CAVALRY_SPRITE_SCALE, ENEMY_CAVALRY_SPRITE_SCALE))
+			draw_texture(ENEMY_CAVALRY_DEATH_TEXTURES[0], -ENEMY_CAVALRY_DEATH_FOOT_ANCHORS[0], Color(1.0, 1.0, 1.0, alpha))
+		_:
+			draw_circle(at, 12.0, Color(0.82, 0.86, 0.88, alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_tianji_lifted_enemy(id: int, at: Vector2, enemy_type: int, facing: Vector2, crowd_dim: float) -> void:
 	var alpha := clampf(0.92 - crowd_dim * 0.25, 0.58, 0.92)
@@ -2936,6 +3251,20 @@ func _draw_enemy_death(id: int) -> void:
 func _draw_enemy_death_record(record: Dictionary) -> void:
 	var ground_at: Vector2 = record.get("ground_position", Vector2.ZERO)
 	var at: Vector2 = record.get("position", ground_at)
+	if bool(record.get("ma_chao_airborne", false)):
+		if not bool(record.get("airborne_landed", false)):
+			var duration := maxf(0.01, float(record.get("airborne_duration", 0.72)))
+			var airborne_progress := clampf(float(record.get("airborne_elapsed", 0.0)) / duration, 0.0, 1.0)
+			at = ground_at + Vector2.UP * (4.0 * float(record.get("airborne_height", 110.0)) * airborne_progress * (1.0 - airborne_progress))
+			_draw_ground_shadow(ground_at + Vector2(0, 15), 22.0, 6.5, Color(0.0, 0.0, 0.0, 0.28))
+			_draw_ma_chao_airborne_enemy(at, int(record.get("type", EnemySimulation.EnemyType.SWORD)), record.get("facing", Vector2.RIGHT), 0.0, float(record.get("airborne_tilt", 0.0)))
+			return
+		var landed_remaining := float(record.get("remaining", 0.0))
+		var landed_elapsed: float = EnemySimulation.DEATH_ANIMATION_DURATION + 0.18 - landed_remaining
+		var landed_progress := clampf(landed_elapsed / EnemySimulation.DEATH_ANIMATION_DURATION, 0.0, 1.0)
+		var landed_fade := clampf((landed_elapsed - EnemySimulation.DEATH_FADE_DELAY) / (EnemySimulation.DEATH_DISPLAY_DURATION - EnemySimulation.DEATH_FADE_DELAY), 0.0, 1.0)
+		_draw_enemy_death_visual(ground_at, ground_at, int(record.get("type", EnemySimulation.EnemyType.SWORD)), landed_progress, landed_fade, record.get("facing", Vector2.DOWN), false)
+		return
 	var remaining := float(record.get("remaining", 0.0))
 	var progress := clampf(1.0 - remaining / EnemySimulation.DEATH_DISPLAY_DURATION, 0.0, 1.0)
 	var animation_progress := clampf((EnemySimulation.DEATH_DISPLAY_DURATION - remaining) / EnemySimulation.DEATH_ANIMATION_DURATION, 0.0, 1.0)
@@ -2950,6 +3279,15 @@ func _draw_enemy_death_record(record: Dictionary) -> void:
 		int(record.get("state", EnemySimulation.DeathState.FALLING)) == EnemySimulation.DeathState.LAUNCHED
 	)
 
+func _death_frame_index(progress: float, frame_count: int) -> int:
+	if frame_count <= 1:
+		return 0
+	# 首帧只保留极短起势，快速进入倒地动作；最后一帧仍由尾部停留和淡出控制。
+	var first_frame_end := 0.08
+	if progress < first_frame_end:
+		return 0
+	return mini(1 + int((progress - first_frame_end) / (1.0 - first_frame_end) * float(frame_count - 1)), frame_count - 1)
+
 func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, progress: float, fade_progress: float, facing: Vector2, launched: bool) -> void:
 	var alpha := clampf(1.0 - fade_progress, 0.0, 1.0)
 	var tilt := lerpf(0.10, 0.62, progress) * (-1.0 if facing.x < 0.0 else 1.0)
@@ -2958,7 +3296,7 @@ func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, 
 	if launched:
 		_draw_death_launch_trail(at, facing, alpha)
 	if enemy_type == EnemySimulation.EnemyType.SWORD:
-		var death_frame := mini(int(progress * ENEMY_SWORD_DEATH_TEXTURES.size()), ENEMY_SWORD_DEATH_TEXTURES.size() - 1)
+		var death_frame := _death_frame_index(progress, ENEMY_SWORD_DEATH_TEXTURES.size())
 		var sprite_scale := ENEMY_SWORD_SPRITE_SCALE
 		var horizontal_scale := -sprite_scale if facing.x < -0.05 else sprite_scale
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal_scale, sprite_scale))
@@ -2966,7 +3304,7 @@ func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, 
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.SHIELD:
-		var death_frame := mini(int(progress * ENEMY_SHIELD_DEATH_TEXTURES.size()), ENEMY_SHIELD_DEATH_TEXTURES.size() - 1)
+		var death_frame := _death_frame_index(progress, ENEMY_SHIELD_DEATH_TEXTURES.size())
 		var sprite_scale := ENEMY_SHIELD_SPRITE_SCALE
 		var horizontal_scale := -sprite_scale if facing.x < -0.05 else sprite_scale
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal_scale, sprite_scale))
@@ -2974,7 +3312,7 @@ func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, 
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.ARCHER:
-		var death_frame := mini(int(progress * ENEMY_ARCHER_DEATH_TEXTURES.size()), ENEMY_ARCHER_DEATH_TEXTURES.size() - 1)
+		var death_frame := _death_frame_index(progress, ENEMY_ARCHER_DEATH_TEXTURES.size())
 		var sprite_scale := ENEMY_ARCHER_SPRITE_SCALE
 		var horizontal_scale := -sprite_scale if facing.x < -0.05 else sprite_scale
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal_scale, sprite_scale))
@@ -2982,7 +3320,7 @@ func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, 
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.HALBERD:
-		var death_frame := mini(int(progress * ENEMY_HALBERD_DEATH_TEXTURES.size()), ENEMY_HALBERD_DEATH_TEXTURES.size() - 1)
+		var death_frame := _death_frame_index(progress, ENEMY_HALBERD_DEATH_TEXTURES.size())
 		var sprite_scale := ENEMY_HALBERD_SPRITE_SCALE
 		var horizontal_scale := -sprite_scale if facing.x < -0.05 else sprite_scale
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(horizontal_scale, sprite_scale))
@@ -2990,21 +3328,21 @@ func _draw_enemy_death_visual(ground_at: Vector2, at: Vector2, enemy_type: int, 
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.SPEAR:
-		var spear_death_frame := mini(int(progress * ENEMY_SPEAR_DEATH_TEXTURES.size()), ENEMY_SPEAR_DEATH_TEXTURES.size() - 1)
+		var spear_death_frame := _death_frame_index(progress, ENEMY_SPEAR_DEATH_TEXTURES.size())
 		var spear_horizontal_scale := -ENEMY_SPEAR_SPRITE_SCALE if facing.x < -0.05 else ENEMY_SPEAR_SPRITE_SCALE
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(spear_horizontal_scale, ENEMY_SPEAR_SPRITE_SCALE))
 		draw_texture(ENEMY_SPEAR_DEATH_TEXTURES[spear_death_frame], -ENEMY_SPEAR_DEATH_FOOT_ANCHORS[spear_death_frame], Color(0.76, 0.80, 0.82, alpha))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.CROSSBOW:
-		var crossbow_death_frame := mini(int(progress * ENEMY_CROSSBOW_DEATH_TEXTURES.size()), ENEMY_CROSSBOW_DEATH_TEXTURES.size() - 1)
+		var crossbow_death_frame := _death_frame_index(progress, ENEMY_CROSSBOW_DEATH_TEXTURES.size())
 		var crossbow_horizontal_scale := -ENEMY_CROSSBOW_SPRITE_SCALE if facing.x < -0.05 else ENEMY_CROSSBOW_SPRITE_SCALE
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(crossbow_horizontal_scale, ENEMY_CROSSBOW_SPRITE_SCALE))
 		draw_texture(ENEMY_CROSSBOW_DEATH_TEXTURES[crossbow_death_frame], -ENEMY_CROSSBOW_DEATH_FOOT_ANCHORS[crossbow_death_frame], Color(0.76, 0.80, 0.82, alpha))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	if enemy_type == EnemySimulation.EnemyType.CAVALRY:
-		var cavalry_death_frame := mini(int(progress * ENEMY_CAVALRY_DEATH_TEXTURES.size()), ENEMY_CAVALRY_DEATH_TEXTURES.size() - 1)
+		var cavalry_death_frame := _death_frame_index(progress, ENEMY_CAVALRY_DEATH_TEXTURES.size())
 		var cavalry_horizontal_scale := -ENEMY_CAVALRY_SPRITE_SCALE if facing.x < -0.05 else ENEMY_CAVALRY_SPRITE_SCALE
 		draw_set_transform(at + Vector2(0, 14), 0.0, Vector2(cavalry_horizontal_scale, ENEMY_CAVALRY_SPRITE_SCALE))
 		draw_texture(ENEMY_CAVALRY_DEATH_TEXTURES[cavalry_death_frame], -ENEMY_CAVALRY_DEATH_FOOT_ANCHORS[cavalry_death_frame], Color(0.76, 0.80, 0.82, alpha))
@@ -3033,6 +3371,63 @@ func _draw_death_launch_trail(at: Vector2, direction: Vector2, alpha: float) -> 
 			center + perpendicular * 3.0,
 		])
 		draw_colored_polygon(shard, Color(0.82, 0.92, 0.94, alpha * (0.24 - float(index) * 0.06)))
+
+func _tick_shenji_visuals(delta: float) -> void:
+	if player != null and player.has_battle_soul("machine"):
+		shenji_bow_position = player.position + SHENJI_BOW_OFFSET
+	shenji_bow_flash_remaining = maxf(0.0, shenji_bow_flash_remaining - delta)
+	for index in range(shenji_arrows.size() - 1, -1, -1):
+		shenji_arrows[index]["age"] = float(shenji_arrows[index].get("age", 0.0)) + delta
+		shenji_arrows[index]["position"] = (shenji_arrows[index].get("position", Vector2.ZERO) as Vector2) + (shenji_arrows[index].get("direction", Vector2.RIGHT) as Vector2) * 720.0 * delta
+		shenji_arrows[index]["remaining"] = float(shenji_arrows[index].get("remaining", 0.0)) - delta
+		if float(shenji_arrows[index].get("remaining", 0.0)) <= 0.0:
+			shenji_arrows.remove_at(index)
+	for index in range(shenji_impact_marks.size() - 1, -1, -1):
+		shenji_impact_marks[index]["remaining"] = float(shenji_impact_marks[index].get("remaining", 0.0)) - delta
+		if float(shenji_impact_marks[index].get("remaining", 0.0)) <= 0.0:
+			shenji_impact_marks.remove_at(index)
+
+func _draw_shenji_crossbow() -> void:
+	if player != null and player.has_battle_soul("machine"):
+		var at := player.position + SHENJI_BOW_OFFSET
+		var direction := shenji_bow_direction.normalized()
+		var flash := clampf(shenji_bow_flash_remaining / SHENJI_FLASH_DURATION, 0.0, 1.0)
+		# Immediate six-pixel kick, then a smooth return over 0.16 seconds.
+		var bow_at := at - direction * (6.0 * flash * flash)
+		draw_set_transform(bow_at, direction.angle() - SHENJI_CROSSBOW_SOURCE_ANGLE, Vector2.ONE * SHENJI_CROSSBOW_SCALE)
+		draw_texture(SHENJI_CROSSBOW_TEXTURE, -SHENJI_CROSSBOW_ANCHOR)
+		draw_set_transform(bow_at, direction.angle(), Vector2.ONE)
+		if flash > 0.0:
+			var muzzle := Vector2(SHENJI_MUZZLE_DISTANCE, 0)
+			draw_line(Vector2(-6, -16), Vector2(-10 - 4 * flash, 0), Color(1.0, 0.90, 0.48, flash), 2.5, true)
+			draw_line(Vector2(-10 - 4 * flash, 0), Vector2(-6, 16), Color(1.0, 0.90, 0.48, flash), 2.5, true)
+			draw_circle(muzzle, 12.0 + 4.0 * flash, Color(1.0, 0.70, 0.16, flash * 0.48))
+			draw_circle(muzzle, 6.0 + 3.0 * flash, Color(1.0, 0.97, 0.77, flash * 0.95))
+			for spark in [Vector2(1, 0), Vector2(0.7, -0.7), Vector2(0.7, 0.7)]:
+				draw_line(muzzle + spark * 8.0, muzzle + spark * 22.0, Color(1.0, 0.87, 0.40, flash), 2.5, true)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for arrow in shenji_arrows:
+		var arrow_position: Vector2 = arrow.get("position", Vector2.ZERO)
+		var arrow_direction: Vector2 = arrow.get("direction", Vector2.RIGHT)
+		draw_line(arrow_position - arrow_direction * 76.0, arrow_position - arrow_direction * 38.0, Color(1.0, 0.72, 0.18, 0.55), 3.0, true)
+		draw_line(arrow_position - arrow_direction * 38.0, arrow_position - arrow_direction * 5.0, Color(1.0, 0.88, 0.42, 0.95), 4.0, true)
+		draw_set_transform(arrow_position, arrow_direction.angle(), Vector2.ONE * SHENJI_ARROW_SCALE)
+		draw_texture(ARCHER_PROJECTILE_TEXTURE, -ARCHER_PROJECTILE_SOURCE_ANCHOR)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		var highlight := clampf(1.0 - float(arrow.get("age", 0.0)) / 0.18, 0.0, 1.0)
+		if highlight > 0.0:
+			var tip := arrow_position + arrow_direction * 30.0
+			var side := arrow_direction.orthogonal()
+			draw_line(tip - arrow_direction * 7.0, tip + arrow_direction * 7.0, Color(1.0, 0.98, 0.81, highlight), 3.0, true)
+			draw_line(tip - side * 4.0, tip + side * 4.0, Color(1.0, 0.87, 0.36, highlight), 2.0, true)
+	for mark in shenji_impact_marks:
+		var alpha := clampf(float(mark.get("remaining", 0.0)) / SHENJI_IMPACT_DURATION, 0.0, 1.0)
+		var at: Vector2 = mark.get("position", Vector2.ZERO)
+		draw_circle(at, 5.0 * alpha, Color(1.0, 0.96, 0.73, alpha))
+		var radius := 10.0 + 12.0 * (1.0 - alpha)
+		draw_arc(at, radius, 0.0, TAU, 32, Color(1.0, 0.76, 0.24, alpha), 2.5, true)
+		for ray in [Vector2.RIGHT, Vector2.DOWN]:
+			draw_line(at - ray * (radius + 5.0), at + ray * (radius + 5.0), Color(1.0, 0.91, 0.51, alpha), 2.5, true)
 
 func _draw_archer_projectiles() -> void:
 	for projectile in archer_projectiles:
@@ -3238,6 +3633,20 @@ func _draw_prototype_hero(at: Vector2) -> void:
 		shadow_horizontal = lerpf(28.0, 18.0, lift_ratio)
 		shadow_vertical = lerpf(8.0, 4.5, lift_ratio)
 		shadow_alpha = lerpf(0.36, 0.20, lift_ratio)
+	elif player.presentation_id() == "ma_chao" and player.has_method("ma_fourth_strike_height"):
+		var jump_height := float(player.call("ma_fourth_strike_height"))
+		var ground_offset: Vector2 = player.call("ma_fourth_strike_ground_offset") if player.has_method("ma_fourth_strike_ground_offset") else Vector2.ZERO
+		var lift_ratio := clampf(jump_height / 75.0, 0.0, 1.0)
+		body_at += ground_offset
+		body_at -= Vector2(0.0, jump_height)
+		if player.has_method("ma_fourth_strike_phase_value") and int(player.call("ma_fourth_strike_phase_value")) == 1:
+			var launch_progress := float(player.call("ma_fourth_strike_progress"))
+			shadow_horizontal = lerpf(30.0, 19.0, launch_progress)
+			shadow_vertical = lerpf(5.0, 3.5, launch_progress)
+			shadow_alpha = lerpf(0.22, 0.16, launch_progress)
+		shadow_horizontal = lerpf(28.0, 17.0, lift_ratio)
+		shadow_vertical = lerpf(8.0, 4.0, lift_ratio)
+		shadow_alpha = lerpf(0.36, 0.18, lift_ratio)
 	_draw_ground_shadow(at + Vector2(0, 15), shadow_horizontal, shadow_vertical, Color(0.0, 0.0, 0.0, shadow_alpha))
 	if player.presentation_id() == "zhang_fei" and player.is_zhang_fei_ultimate_active():
 		_draw_zhang_fei_ultimate_aura(body_at)
@@ -3249,8 +3658,15 @@ func _draw_prototype_hero(at: Vector2) -> void:
 			if player.has_breakout_guard():
 				_draw_zhang_fei_guard(body_at)
 		"ma_chao":
+			var quake_at := at
+			if player.has_method("ma_fourth_strike_ground_offset"):
+				quake_at += player.call("ma_fourth_strike_ground_offset")
+			_draw_ma_chao_fourth_quake(quake_at)
 			_draw_ma_chao_afterimages(at)
-			_draw_ma_chao_body(at, 1.0)
+			_draw_ma_chao_third_strike_effect(body_at)
+			_draw_ma_chao_body(body_at, 1.0)
+			_draw_ma_chao_charge_effect(body_at)
+			_draw_ma_chao_active_effect(body_at)
 		"huang_zhong":
 			_draw_huang_zhong_body(at)
 	if player.is_ultimate_ready():
@@ -3336,19 +3752,19 @@ func _draw_zhang_fei_ultimate_aura(at: Vector2) -> void:
 	_draw_wushuang_ground_effect(at + ZHANG_FEI_WORLD_FOOT_OFFSET + HERO_WUSHUANG_GROUND_EFFECT_WORLD_OFFSET, ZHANG_FEI_WUSHUANG_GROUND_EFFECT_TEXTURES, ZHANG_FEI_WUSHUANG_GROUND_EFFECT_SCALE)
 
 func _draw_ma_chao_afterimages(at: Vector2) -> void:
-	var momentum := player.momentum_ratio()
-	if momentum < 0.16 and not player.is_path_dashing() and not player.is_ultimate_dashing():
+	var iron_stacks: int = int(player.iron_cavalry_stack_count()) if player.has_method("iron_cavalry_stack_count") else 0
+	if iron_stacks <= 0 and not player.is_path_dashing() and not player.is_ultimate_dashing():
 		return
 	var direction := _prototype_facing_direction()
-	var count := 4 if player.is_ultimate_dashing() else 3
+	var count := mini(4, 2 + iron_stacks / 2)
 	for index in range(count, 0, -1):
 		var progress := float(index) / float(count)
-		var offset := direction * -(18.0 + progress * (42.0 + momentum * 42.0)) + Vector2(0, sin(visual_time * 15.0 + float(index)) * 1.5)
-		_draw_ma_chao_body(at + offset, 0.08 + (1.0 - progress) * 0.11)
+		var offset := direction * -(18.0 + progress * (34.0 + float(iron_stacks) * 6.0)) + Vector2(0, sin(visual_time * 15.0 + float(index)) * 1.5)
+		_draw_ma_chao_body(at + offset, 0.06 + (1.0 - progress) * 0.10)
 	var dust_center := at - direction * 17.0 + Vector2(0, 16)
-	for index in range(4):
+	for index in range(2 + iron_stacks / 2):
 		var dust := dust_center - direction * float(index) * 12.0 + Vector2(0, float(index % 2) * 3.0)
-		draw_circle(dust, 4.0 + float(index), Color(0.72, 0.74, 0.70, 0.10 + momentum * 0.12))
+		draw_circle(dust, 4.0 + float(index), Color(0.86, 0.68, 0.24, 0.10 + float(iron_stacks) * 0.018))
 
 func _draw_ma_chao_body(at: Vector2, alpha: float) -> void:
 	var texture := _current_ma_chao_texture()
@@ -3356,7 +3772,19 @@ func _draw_ma_chao_body(at: Vector2, alpha: float) -> void:
 		return
 	var source_anchor := _current_ma_chao_source_foot_anchor()
 	var horizontal_scale := -MA_CHAO_SPRITE_SCALE if player_faces_left else MA_CHAO_SPRITE_SCALE
-	draw_set_transform(at + MA_CHAO_WORLD_FOOT_OFFSET, 0.0, Vector2(horizontal_scale, MA_CHAO_SPRITE_SCALE))
+	var vertical_scale := MA_CHAO_SPRITE_SCALE
+	var rotation := 0.0
+	if player.has_method("ma_fourth_strike_phase_value") and int(player.call("ma_fourth_strike_phase_value")) == 1:
+		var launch_progress := float(player.call("ma_fourth_strike_progress"))
+		var squash := lerpf(0.58, 1.0, launch_progress)
+		horizontal_scale *= squash
+		vertical_scale /= squash
+	if player.has_method("ma_fourth_strike_phase_value") and int(player.call("ma_fourth_strike_phase_value")) == 3:
+		var direction: Vector2 = player.ma_fourth_strike_direction_value() if player.has_method("ma_fourth_strike_direction_value") else _prototype_facing_direction()
+		var horizontal := -1.0 if direction.x < 0.0 else 1.0
+		horizontal_scale = horizontal * MA_CHAO_SPRITE_SCALE
+		rotation = deg_to_rad(20.0) * horizontal
+	draw_set_transform(at + MA_CHAO_WORLD_FOOT_OFFSET, rotation, Vector2(horizontal_scale, vertical_scale))
 	draw_texture(texture, -source_anchor, Color(1.0, 1.0, 1.0, alpha))
 	if player_hit_flash_remaining > 0.0 and alpha > 0.99:
 		var flash_texture := _player_white_flash_texture(texture)
@@ -3364,8 +3792,86 @@ func _draw_ma_chao_body(at: Vector2, alpha: float) -> void:
 		draw_texture(flash_texture, -source_anchor, Color(1.0, 1.0, 1.0, flash_ratio))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
+func _draw_ma_chao_charge_effect(at: Vector2) -> void:
+	if not player.has_method("ma_chao_active_phase") or int(player.call("ma_chao_active_phase")) != 3:
+		return
+	var progress := clampf(1.0 - float(player.ma_active_phase_remaining) / 0.50, 0.0, 1.0)
+	var radius := lerpf(48.0, 4.0, progress)
+	var alpha := (1.0 - progress) * 0.78
+	var center := at + Vector2(0.0, -34.0)
+	draw_arc(center, radius, 0.0, TAU, 32, Color(0.55, 0.90, 1.0, alpha), 3.0)
+	draw_arc(center, radius * 0.72, visual_time * 2.0, visual_time * 2.0 + TAU * 0.72, 20, Color(0.82, 0.98, 1.0, alpha * 0.86), 2.0)
+	for index in range(6):
+		var angle := visual_time * 2.5 + TAU * float(index) / 6.0
+		var point := center + Vector2.from_angle(angle) * radius
+		draw_circle(point, 2.5, Color(0.78, 0.96, 1.0, alpha))
+
+func _draw_ma_chao_third_strike_effect(at: Vector2) -> void:
+	var effect_active := false
+	var elapsed := 0.0
+	var direction := _prototype_facing_direction()
+	if player.current_action == "basic" and player.combo_stage == 3:
+		effect_active = true
+		elapsed = float(player.call("visual_action_progress")) * MA_CHAO_THIRD_EFFECT_FRAME_DURATION * float(MA_CHAO_THIRD_EFFECT_TEXTURES.size()) if player.has_method("visual_action_progress") else 0.0
+	elif player.current_action == "active" and player.has_method("ma_chao_active_phase") and int(player.call("ma_chao_active_phase")) == 3:
+		effect_active = true
+		var phase_remaining := float(player.ma_active_phase_remaining)
+		var phase_duration := 0.50
+		var phase_elapsed := phase_duration - phase_remaining
+		if phase_elapsed < MA_CHAO_THIRD_EFFECT_FRAME_DURATION:
+			return
+		elapsed = (phase_elapsed - MA_CHAO_THIRD_EFFECT_FRAME_DURATION) * float(MA_CHAO_THIRD_EFFECT_TEXTURES.size()) / phase_duration
+		direction = player.call("ma_chao_active_direction")
+	if not effect_active:
+		return
+	var frame := mini(int(elapsed / MA_CHAO_THIRD_EFFECT_FRAME_DURATION), MA_CHAO_THIRD_EFFECT_TEXTURES.size() - 1)
+	var texture: Texture2D = MA_CHAO_THIRD_EFFECT_TEXTURES[frame]
+	var side_sign := -1.0 if direction.x < -0.05 else 1.0
+	var horizontal := side_sign * MA_CHAO_THIRD_EFFECT_SCALE
+	var effect_at := at + Vector2(side_sign * MA_CHAO_THIRD_EFFECT_SIDE_OFFSET, MA_CHAO_THIRD_EFFECT_VERTICAL_OFFSET)
+	draw_set_transform(effect_at, 0.0, Vector2(horizontal, MA_CHAO_THIRD_EFFECT_SCALE))
+	draw_texture(texture, -texture.get_size() * 0.5, Color(1.0, 0.84, 0.48, 0.92))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_ma_chao_active_effect(at: Vector2) -> void:
+	if not player.has_method("ma_chao_active_phase"):
+		return
+	var phase := int(player.call("ma_chao_active_phase"))
+	if phase not in [1, 2]:
+		return
+	var direction: Vector2 = player.call("ma_chao_active_direction")
+	var frame_index := 2 if phase <= 2 else 3
+	var texture: Texture2D = MA_CHAO_ACTIVE_EFFECT_TEXTURES[frame_index]
+	var anchor := at + MA_CHAO_ACTIVE_EFFECT_GUN_TIP_OFFSET + Vector2(14.0, 10.0) + direction * 72.0
+	draw_set_transform(anchor, direction.angle(), Vector2(MA_CHAO_ACTIVE_EFFECT_SCALE, MA_CHAO_ACTIVE_EFFECT_SCALE))
+	draw_texture(texture, -MA_CHAO_ACTIVE_EFFECT_SOURCE_ANCHOR, Color(1.0, 1.0, 1.0, 0.58))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func reset_player_action_animation_state() -> void:
+	player_attack_01_time = 0.0
+	player_attack_02_time = 0.0
+	player_attack_03_time = 0.0
+	player_attack_04_time = 0.0
+	player_attack_05_time = 0.0
+	player_is_playing_attack_01 = false
+	player_is_playing_attack_02 = false
+	player_is_playing_attack_03 = false
+	player_is_playing_attack_04 = false
+	player_is_playing_attack_05 = false
+	player_walk_time = 0.0
+	player_idle_time = 0.0
+
 func _current_ma_chao_texture() -> Texture2D:
+	if player.is_guard_active():
+		var guard_index := mini(int(player.guard_elapsed() / MA_CHAO_GUARD_FRAME_DURATION), MA_CHAO_GUARD_FRAME_INDICES.size() - 1)
+		return MA_CHAO_ATTACK_03_TEXTURES[MA_CHAO_GUARD_FRAME_INDICES[guard_index]]
 	if player.current_action == "basic":
+		if player.has_method("ma_fourth_strike_phase_value"):
+			var fourth_phase := int(player.call("ma_fourth_strike_phase_value"))
+			if fourth_phase in [1, 2]:
+				return MA_CHAO_ATTACK_03_TEXTURES[0]
+			if fourth_phase == 3:
+				return MA_CHAO_ATTACK_02_TEXTURES[2]
 		var action_textures: Array[Texture2D]
 		match player.combo_stage:
 			1:
@@ -3375,12 +3881,28 @@ func _current_ma_chao_texture() -> Texture2D:
 			_:
 				action_textures = MA_CHAO_ATTACK_03_TEXTURES
 		return action_textures[_ma_chao_action_frame_index(action_textures.size())]
-	if player.current_action in ["active", "ultimate"]:
+	if player.current_action == "active" and player.has_method("ma_chao_active_phase"):
+		var phase := int(player.call("ma_chao_active_phase"))
+		if phase in [1, 2]:
+			return MA_CHAO_ATTACK_02_TEXTURES[2]
+		if phase == 3:
+			return MA_CHAO_ATTACK_03_TEXTURES[0]
+		if phase == 6:
+			var finish_progress := float(player.call("ma_chao_active_finish_progress")) if player.has_method("ma_chao_active_finish_progress") else 1.0
+			var frame_index := _ma_chao_active_finish_frame_index(finish_progress)
+			return MA_CHAO_ATTACK_03_TEXTURES[frame_index]
+	if player.current_action == "active":
 		return MA_CHAO_ATTACK_03_TEXTURES[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
 	if player_is_moving:
 		return MA_CHAO_WALK_TEXTURES[int(player_walk_time / MA_CHAO_WALK_FRAME_DURATION) % MA_CHAO_WALK_TEXTURES.size()]
 	var idle_index := int(player_idle_time / MA_CHAO_IDLE_FRAME_DURATION) % MA_CHAO_IDLE_TEXTURES.size()
 	return MA_CHAO_IDLE_TEXTURES[idle_index]
+
+func _ma_chao_active_finish_frame_index(progress: float) -> int:
+	var clamped := clampf(progress, 0.0, 1.0)
+	if clamped >= 0.80:
+		return 6
+	return clampi(1 + int(clamped / 0.80 * 5.0), 1, 5)
 
 func _ma_chao_action_frame_index(frame_count: int) -> int:
 	var progress := float(player.call("visual_action_progress")) if player.has_method("visual_action_progress") else 0.0
@@ -3395,8 +3917,20 @@ func _ma_chao_action_frame_index(frame_count: int) -> int:
 	return mini(int(progress * float(frame_count)), frame_count - 1)
 
 func _current_ma_chao_source_foot_anchor() -> Vector2:
+	if player.is_guard_active():
+		var guard_index := mini(int(player.guard_elapsed() / MA_CHAO_GUARD_FRAME_DURATION), MA_CHAO_GUARD_FRAME_INDICES.size() - 1)
+		return MA_CHAO_ATTACK_03_FOOT_ANCHORS[MA_CHAO_GUARD_FRAME_INDICES[guard_index]]
 	if player.current_action == "basic" and player.combo_stage == 3:
 		return MA_CHAO_ATTACK_03_FOOT_ANCHORS[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
+	if player.current_action == "active" and player.has_method("ma_chao_active_phase"):
+		var phase := int(player.call("ma_chao_active_phase"))
+		if phase in [1, 2]:
+			return Vector2(64, 84)
+		if phase == 3:
+			return MA_CHAO_ATTACK_03_FOOT_ANCHORS[0]
+		if phase == 6:
+			var finish_progress := float(player.call("ma_chao_active_finish_progress")) if player.has_method("ma_chao_active_finish_progress") else 1.0
+			return MA_CHAO_ATTACK_03_FOOT_ANCHORS[_ma_chao_active_finish_frame_index(finish_progress)]
 	if player.current_action in ["active", "ultimate"]:
 		return MA_CHAO_ATTACK_03_FOOT_ANCHORS[_ma_chao_action_frame_index(MA_CHAO_ATTACK_03_TEXTURES.size())]
 	return MA_CHAO_SOURCE_FOOT_ANCHOR
@@ -4430,9 +4964,10 @@ func _draw_elites() -> void:
 			_draw_elite_death_sprite(elite, at, direction)
 			continue
 		_draw_elite_aura(elite, at, direction)
-		if elite.is_cast_invulnerable():
+		var chunyu_invulnerable := elite.archetype == EliteActor.Archetype.CHUNYU_DAO and elite.is_cast_invulnerable()
+		if elite.is_cast_invulnerable() and not chunyu_invulnerable:
 			_draw_cast_invulnerability_marker(at, direction, 0.82, elite.current_action)
-		if elite.is_knockback_visual_active():
+		if elite.is_knockback_visual_active() and not chunyu_invulnerable:
 			_draw_elite_knockback_pose(elite, at, direction)
 		else:
 			match elite.archetype:
@@ -4550,7 +5085,20 @@ func _draw_chunyu_dao_sprite(elite: EliteActor, at: Vector2, direction: Vector2)
 	var hurt_ratio := clampf(elite.hurt_remaining / 0.14, 0.0, 1.0)
 	var facing_scale := -ELITE_CHUNYU_DAO_SPRITE_SCALE if direction.x < -0.05 else ELITE_CHUNYU_DAO_SPRITE_SCALE
 	var hurt_color := Color.WHITE.lerp(Color(0.98, 0.78, 0.58), hurt_ratio * 0.72)
+	var feedback := chunyu_invulnerability_feedback(elite, at + Vector2(0, 14) + sprite_offset, foot_anchor, ELITE_CHUNYU_DAO_SPRITE_SCALE * frame_scale)
+	if bool(feedback.get("active", false)):
+		hurt_color = feedback["modulate"]
 	_draw_named_sprite(texture, foot_anchor, at + Vector2(0, 14) + sprite_offset, facing_scale * frame_scale * (1.0 + hurt_ratio * 0.08), ELITE_CHUNYU_DAO_SPRITE_SCALE * frame_scale * (1.0 - hurt_ratio * 0.05), hurt_color, Color("4c3717", 0.90), 1.35)
+	if bool(feedback.get("active", false)):
+		var label_at: Vector2 = feedback["label_position"]
+		draw_string_outline(ThemeDB.fallback_font, label_at, "无敌", HORIZONTAL_ALIGNMENT_CENTER, 48.0, 18, 4, Color("30250c"))
+		draw_string(ThemeDB.fallback_font, label_at, "无敌", HORIZONTAL_ALIGNMENT_CENTER, 48.0, 18, Color("ffe77c"))
+
+func chunyu_invulnerability_feedback(elite: EliteActor, model_anchor: Vector2, source_anchor: Vector2, scale: float) -> Dictionary:
+	if not is_instance_valid(elite) or elite.archetype != EliteActor.Archetype.CHUNYU_DAO or elite.is_dying() or not elite.is_cast_invulnerable():
+		return {"active": false}
+	var pulse := 0.5 + 0.5 * sin(visual_time * 18.0)
+	return {"active": true, "modulate": Color(1.55 + pulse * 0.55, 1.15 + pulse * 0.30, 0.36 + pulse * 0.18), "label_position": model_anchor + Vector2(-24.0, -maxf(116.0, source_anchor.y * scale + 24.0))}
 
 func _weighted_frame_index(progress: float, frame_durations: Array) -> int:
 	if frame_durations.is_empty():
@@ -5458,7 +6006,7 @@ func _draw_flashes() -> void:
 			"银枪点阵", "踏阵突刺", "西凉破阵", "银枪奔雷":
 				_draw_thrust_flash(request, alpha, progress, variant, 6.0, Color(0.74, 0.90, 1.0, 0.66))
 			"银枪突刺":
-				_draw_thrust_flash(request, alpha, progress, variant, 8.0, Color(0.74, 0.90, 1.0, 0.70), Vector2(0.0, -16.0), 1.55)
+				_draw_thrust_flash(request, alpha, progress, variant, request.width * 0.30, Color(0.74, 0.90, 1.0, 0.70), Vector2.ZERO, 1.0)
 			"流星横挑":
 				_draw_sweep_flash(request, alpha, progress, variant, Color(0.72, 0.90, 1.0, 0.90))
 			"连珠箭", "蓄力穿云", "贯星矢", "定军连珠":
@@ -5953,9 +6501,14 @@ func _draw_battle_soul_drops() -> void:
 		var beam_height := 30.0 + pulse * 7.0
 		draw_line(at + Vector2(0.0, 3.0), at - Vector2(0.0, beam_height), Color(color.r, color.g, color.b, alpha * 0.22), 2.0, true)
 		draw_circle(at - Vector2(0.0, 8.0), 11.0 + pulse * 2.0, Color(color.r, color.g, color.b, alpha * 0.28))
-		draw_circle(at - Vector2(0.0, 8.0), 8.0, Color(0.08, 0.10, 0.14, alpha * 0.90))
-		draw_arc(at - Vector2(0.0, 8.0), 9.5, 0.0, TAU, 18, Color(color.r, color.g, color.b, alpha * 0.92), 1.6, true)
-		draw_string(ThemeDB.fallback_font, at + Vector2(-8.0, -3.0), _battle_soul_icon(soul_id), HORIZONTAL_ALIGNMENT_CENTER, 16.0, 13, Color(1.0, 0.94, 0.72, alpha))
+		draw_circle(at - Vector2(0.0, 8.0), 11.0 + pulse * 2.0, Color(color.r, color.g, color.b, alpha * 0.28))
+		var logo: Texture2D = BATTLE_SOUL_LOGO_TEXTURES.get(soul_id, null)
+		if logo != null:
+			draw_texture_rect(logo, Rect2(at - Vector2(16.0, 24.0), Vector2(32.0, 32.0)), false, Color(1.0, 1.0, 1.0, alpha))
+		else:
+			draw_circle(at - Vector2(0.0, 8.0), 8.0, Color(0.08, 0.10, 0.14, alpha * 0.90))
+			draw_arc(at - Vector2(0.0, 8.0), 9.5, 0.0, TAU, 18, Color(color.r, color.g, color.b, alpha * 0.92), 1.6, true)
+			draw_string(ThemeDB.fallback_font, at + Vector2(-8.0, -3.0), _battle_soul_icon(soul_id), HORIZONTAL_ALIGNMENT_CENTER, 16.0, 13, Color(1.0, 0.94, 0.72, alpha))
 
 func _draw_damage_numbers() -> void:
 	if not damage_numbers_enabled:
@@ -5975,23 +6528,110 @@ func _draw_damage_numbers() -> void:
 		draw_string(ThemeDB.fallback_font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_CENTER, 46.0, 16, shadow_color)
 		draw_string(ThemeDB.fallback_font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 46.0, 16, Color(color.r, color.g, color.b, alpha))
 
+func _draw_ma_chao_ultimate() -> void:
+	if ma_chao_ultimate_system == null or not ma_chao_ultimate_system.is_active():
+		return
+	var horse_time := visual_time
+	var companion_scale := 0.984
+	for ally in ma_chao_ultimate_system.active_allies():
+		if str(ally.get("state", "")) == "HIDDEN":
+			continue
+		var batch_phase := int(ally.get("batch_phase", 0))
+		var batch_is_charging := batch_phase == 1 or batch_phase == 3
+		if not batch_is_charging and not bool(ally.get("is_battle_ally", false)):
+			continue
+		var at: Vector2 = ally.get("position", Vector2.ZERO)
+		var facing: Vector2 = ally.get("facing", Vector2.RIGHT)
+		var horizontal := -1.0 if facing.x < 0.0 else 1.0
+		var animation_offset := float(ally.get("id", 0)) * 0.045
+		var dash_remaining := float(ally.get("dash_remaining", 0.0))
+		var dashing := str(ally.get("state", "")) == "ATTACK_DASH"
+		var horse_time_scale := 1.65 if dashing else 1.0
+		var horse := MA_CHAO_HORSE_MOVE_TEXTURES[int((horse_time * horse_time_scale + animation_offset) / (0.10 if not dashing else 0.075)) % MA_CHAO_HORSE_MOVE_TEXTURES.size()]
+		var rider := MA_CHAO_COMPANION_STAY_TEXTURE
+		var attacking := dashing or float(ally.get("attack_visual", 0.0)) > 0.0
+		if dashing:
+			var dash_progress := clampf(1.0 - dash_remaining / 0.20, 0.0, 1.0)
+			rider = MA_CHAO_COMPANION_ATTACK_TEXTURES[mini(int(dash_progress * MA_CHAO_COMPANION_ATTACK_TEXTURES.size()), MA_CHAO_COMPANION_ATTACK_TEXTURES.size() - 1)]
+		elif attacking:
+			var attack_progress := clampf(1.0 - float(ally.get("attack_visual", 0.0)) / 0.32, 0.0, 1.0)
+			rider = MA_CHAO_COMPANION_ATTACK_TEXTURES[mini(int(attack_progress * MA_CHAO_COMPANION_ATTACK_TEXTURES.size()), MA_CHAO_COMPANION_ATTACK_TEXTURES.size() - 1)]
+		_draw_ground_shadow(at + Vector2(0, 13), 21.0 if not dashing else 24.0, 6.0 if not dashing else 7.0, Color(0.0, 0.0, 0.0, 0.28 if not dashing else 0.34))
+		if dashing:
+			var dash_direction: Vector2 = ally.get("dash_direction", facing).normalized()
+			var side := Vector2(-dash_direction.y, dash_direction.x)
+			var trail_origin := at - dash_direction * 22.0
+			for trail_index in range(3):
+				var trail_progress := float(trail_index) / 2.0
+				var trail_alpha := 0.22 * (1.0 - trail_progress * 0.65)
+				var trail_center := trail_origin - dash_direction * trail_progress * 26.0 + side * sin(visual_time * 18.0 + float(trail_index)) * 3.0
+				draw_line(trail_center - dash_direction * 15.0, trail_center + dash_direction * 15.0, Color(0.94, 0.77, 0.38, trail_alpha), 2.0)
+			var lance_origin := at + dash_direction * 18.0 + Vector2(0.0, -17.0)
+			draw_line(lance_origin, lance_origin + dash_direction * 44.0, Color(1.0, 0.91, 0.63, 0.78), 2.5)
+			draw_line(lance_origin + side * 2.0, lance_origin + dash_direction * 44.0 + side * 2.0, Color(0.77, 0.88, 0.91, 0.55), 1.0)
+		draw_set_transform(at + Vector2(0, 0), 0.0, Vector2(horizontal * companion_scale, companion_scale))
+		draw_texture(horse, -horse.get_size() * 0.5)
+		draw_set_transform(at + Vector2(0, -2), 0.0, Vector2(horizontal * companion_scale, companion_scale))
+		draw_texture(rider, -rider.get_size() * 0.5)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func _draw_battle_soul_feedback() -> void:
 	for mark in battle_soul_proc_marks:
-		var duration := maxf(0.01, float(mark.get("duration", 0.36)))
+		var duration := maxf(0.01, float(mark.get("duration", 0.42)))
 		var remaining := maxf(0.0, float(mark.get("remaining", 0.0)))
 		var progress := clampf(1.0 - remaining / duration, 0.0, 1.0)
 		var fade := 1.0 - progress
 		var at: Vector2 = mark.get("position", Vector2.ZERO)
 		var soul_id := str(mark.get("id", "gale"))
-		var color := _battle_soul_color(soul_id)
-		var radius := 8.0 + progress * 31.0
-		draw_circle(at, radius * 0.28, Color(color.r, color.g, color.b, fade * 0.20))
-		draw_arc(at, radius, 0.0, TAU, 24, Color(color.r, color.g, color.b, fade * 0.84), 2.6, true)
-		draw_arc(at, radius * 0.62, visual_time * 2.2, visual_time * 2.2 + TAU * 0.70, 16, Color(1.0, 0.94, 0.72, fade * 0.72), 1.5, true)
-		for shard_index in range(4):
-			var angle := TAU * float(shard_index) / 4.0 + float(mark.get("seed", 0)) * 0.01
-			var direction := Vector2.from_angle(angle)
-			draw_line(at + direction * (radius * 0.42), at + direction * (radius + 7.0), Color(color.r, color.g, color.b, fade * 0.72), 2.2, true)
+		if soul_id == "thunder":
+			var points: Array = mark.get("chain_points", [])
+			var origin: Vector2 = mark.get("origin", player.position if player != null else at)
+			var lightning_points: Array[Vector2] = [origin]
+			for point in points:
+				if not bool(mark.get("cavalry", false)) or point != lightning_points[-1]:
+					lightning_points.append(point)
+			if lightning_points.size() < 2:
+				lightning_points.append(at)
+			for segment in range(lightning_points.size() - 1):
+				var start: Vector2 = lightning_points[segment]
+				var finish: Vector2 = lightning_points[segment + 1]
+				var delta_line := finish - start
+				var perpendicular := Vector2(-delta_line.y, delta_line.x).normalized()
+				var seed := float(mark.get("seed", 0)) + float(segment) * 19.7
+				var bolt := PackedVector2Array([start])
+				for step in range(1, 7):
+					var ratio := float(step) / 7.0
+					var jitter := sin(seed + float(step) * 8.37 + floor(visual_time * 34.0) * 1.71) * 13.0
+					bolt.append(start.lerp(finish, ratio) + perpendicular * jitter)
+				bolt.append(finish)
+				var segment_fade := clampf(1.0 - float(segment) * 0.12, 0.45, 1.0) * fade
+				draw_polyline(bolt, Color(0.30, 0.60, 1.0, segment_fade * 0.52), 9.0, true)
+				draw_polyline(bolt, Color(0.60, 0.84, 1.0, segment_fade * 0.88), 4.0, true)
+				draw_polyline(bolt, Color(0.96, 1.0, 1.0, segment_fade), 1.6, true)
+				var hit: Vector2 = finish
+				draw_circle(hit, 7.0 + sin(visual_time * 45.0 + seed) * 1.5, Color(0.78, 0.94, 1.0, segment_fade * 0.55))
+				if segment % 2 == 0:
+					var branch := PackedVector2Array([bolt[3], bolt[3] + perpendicular * 13.0 + delta_line.normalized() * 10.0, bolt[3] + perpendicular * 24.0])
+					draw_polyline(branch, Color(0.75, 0.91, 1.0, segment_fade * 0.74), 2.0, true)
+		elif soul_id == "flame":
+			var frame_index := mini(int(progress * float(BATTLE_SOUL_BOOM_TEXTURES.size())), BATTLE_SOUL_BOOM_TEXTURES.size() - 1)
+			var texture: Texture2D = BATTLE_SOUL_BOOM_TEXTURES[frame_index]
+			var radius: float = float(mark.get("radius", 78.0))
+			var scale := clampf(radius / 180.0, 0.38, 1.15) * 0.5
+			draw_set_transform(at + Vector2(0.0, -12.0), 0.0, Vector2(scale, scale))
+			draw_texture(texture, -texture.get_size() * 0.5, Color(1.0, 1.0, 1.0, fade))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			var color := _battle_soul_color(soul_id)
+			var radius := 8.0 + progress * 31.0
+			draw_circle(at, radius * 0.28, Color(color.r, color.g, color.b, fade * 0.20))
+			draw_arc(at, radius, 0.0, TAU, 24, Color(color.r, color.g, color.b, fade * 0.84), 2.6, true)
+			draw_arc(at, radius * 0.62, visual_time * 2.2, visual_time * 2.2 + TAU * 0.70, 16, Color(1.0, 0.94, 0.72, fade * 0.72), 1.5, true)
+			for shard_index in range(4):
+				var angle := TAU * float(shard_index) / 4.0 + float(mark.get("seed", 0)) * 0.01
+				var direction := Vector2.from_angle(angle)
+				draw_line(at + direction * (radius * 0.42), at + direction * (radius + 7.0), Color(color.r, color.g, color.b, fade * 0.72), 2.2, true)
 
 	for mark in battle_soul_pickup_marks:
 		var duration := maxf(0.01, float(mark.get("duration", 0.52)))
